@@ -5,6 +5,13 @@
 # BTC data pack — never commit (phòng khi ai đó copy data/ ra ngoài brief/)
 /data/
 
+# Nguồn grounding nạp về máy từ data pack — chỉ commit README hướng dẫn
+/knowledge/*
+!/knowledge/README.md
+
+# Log phiên + checkpoint sinh ra lúc chạy
+codebase/backend/var/
+
 # secrets
 .env
 .env.*

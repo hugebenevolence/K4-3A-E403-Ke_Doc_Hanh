@@ -1,15 +1,18 @@
-fastapi==0.115.0
-uvicorn[standard]==0.32.0
-python-dotenv==1.0.1
-websockets==13.1
-pydantic==2.9.2
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+websockets==16.1.1
+pydantic==2.13.5
+pydantic-settings==2.15.0
 
-# STT/TTS — chọn provider theo research (xem hồ sơ baseline), bỏ comment dòng cần dùng:
-# openai-whisper           # STT offline, không hợp giọng địa phương tốt bằng PhoWhisper
-# transformers             # để chạy PhoWhisper (vinai/PhoWhisper-*) local
-# elevenlabs               # STT (Scribe) + TTS (Flash v2.5), latency thấp, có SDK Python
-# deepgram-sdk             # STT streaming latency thấp
+# Orchestration — workflow tất định (node + conditional edge), KHÔNG phải vòng lặp ReAct.
+langgraph==1.2.11
+langgraph-checkpoint-sqlite==3.1.1
 
-# LLM — chọn 1
-# openai
-# anthropic
+# test
+pytest==9.1.1
+httpx==0.28.1
+
+# Provider thật — bỏ comment khi viết adapter tương ứng trong app/adapters/.
+# openai              # LLM: gpt-5-nano (talker) / gpt-5-mini (chấm) / gpt-5 (judge offline)
+# speechmatics-python  # STT realtime, có partial <500ms, hỗ trợ tiếng Việt
+# pymupdf             # giai đoạn PDF: parse slide ra span + bbox

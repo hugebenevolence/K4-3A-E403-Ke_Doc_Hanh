@@ -43,11 +43,41 @@ button {
   cursor: not-allowed;
 }
 
+.brief {
+  padding: 12px 16px;
+  border-left: 3px solid var(--accent);
+  background: rgba(185, 135, 31, 0.08);
+}
+
+.brief p {
+  margin: 4px 0;
+}
+
+.rules {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
 #transcript {
   margin-top: 24px;
   padding: 16px;
   border: 1px solid #ddd;
   border-radius: 8px;
   min-height: 120px;
-  white-space: pre-wrap;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.line {
+  margin: 0 0 10px;
+}
+
+.line.student {
+  font-weight: 600;
+}
+
+/* Câu đệm lúc chờ chấm — làm mờ để phân biệt với câu hỏi thật của agent. */
+.line.filler {
+  opacity: 0.6;
+  font-style: italic;
 }
