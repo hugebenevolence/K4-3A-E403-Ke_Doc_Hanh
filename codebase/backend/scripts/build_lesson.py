@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.adapters.knowledge.pdf import parse_slide
+from app.adapters.knowledge.pdf import deck_terms, parse_slide
 from app.config import settings
 
 
@@ -57,6 +57,9 @@ def main() -> int:
             {
                 "concept": args.concept,
                 "source": f"{args.pdf.name} trang {args.page}",
+                # Rút từ CẢ bộ slide, không chỉ trang đang học: học viên hay
+                # nhắc thuật ngữ ở trang khác khi giải thích.
+                "vocabulary": list(deck_terms(args.pdf)),
                 "spans": [
                     {"span_id": s.span_id, "text": s.text, "page": s.page, "bbox": list(s.bbox)}
                     for s in spans

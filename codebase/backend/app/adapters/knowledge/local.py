@@ -52,5 +52,6 @@ def load_lesson(path: Path) -> tuple[Lesson, InMemorySpanStore]:
     lesson = Lesson(
         concept=raw["concept"],
         source_span_ids=tuple(s.span_id for s in spans),
+        vocabulary=tuple(raw.get("vocabulary", ())),
     )
     return lesson, InMemorySpanStore(spans)

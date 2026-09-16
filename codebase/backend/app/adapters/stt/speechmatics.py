@@ -22,6 +22,7 @@ from collections.abc import AsyncIterator
 import websockets
 
 from app.config import settings
+from app.domain.terms import vocab_entries
 from app.ports.stt import SpeechToText, Transcript
 
 log = logging.getLogger(__name__)
@@ -30,7 +31,22 @@ ENDPOINT = "wss://eu2.rt.speechmatics.com/v2"
 IDLE_TIMEOUT_S = 30.0
 
 
-def _start_message(sample_rate: int) -> str:
+def _start_message(sample_rate: int, vocabulary: tuple[str, ...]) -> str:
+    config: dict = {
+        "language": "vi",
+        # Sai dấu là sai nghĩa, và bộ chấm ở sau sẽ phạt oan học viên vì lỗi
+        # của máy nghe — nên trả thêm tiền cho "enhanced".
+        "operating_point": "enhanced",
+        "enable_partials": True,
+        "max_delay": 2.0,
+    }
+    if vocabulary:
+        # Thuật ngữ tiếng Anh giữa câu tiếng Việt là chỗ nhận dạng yếu nhất, mà
+        # lại đúng là những từ quyết định chấm đúng hay sai. Đo thật trước khi
+        # có danh sách này: "temperature" -> "template" rồi "computer cô ta",
+        # "LLM" -> "Em".
+        config["additional_vocab"] = vocab_entries(vocabulary)
+
     return json.dumps(
         {
             "message": "StartRecognition",
@@ -39,22 +55,21 @@ def _start_message(sample_rate: int) -> str:
                 "encoding": "pcm_s16le",
                 "sample_rate": sample_rate,
             },
-            "transcription_config": {
-                "language": "vi",
-                # Sai dấu là sai nghĩa, và bộ chấm ở sau sẽ phạt oan học viên
-                # vì lỗi của máy nghe — nên trả thêm tiền cho "enhanced".
-                "operating_point": "enhanced",
-                "enable_partials": True,
-                "max_delay": 2.0,
-            },
+            "transcription_config": config,
         }
     )
 
 
 class SpeechmaticsRealtimeSTT(SpeechToText):
-    def __init__(self, api_key: str | None = None, sample_rate: int = 16000):
+    def __init__(
+        self,
+        api_key: str | None = None,
+        sample_rate: int = 16000,
+        vocabulary: tuple[str, ...] = (),
+    ):
         self._key = api_key or settings.speechmatics_api_key
         self._sample_rate = sample_rate
+        self._vocabulary = vocabulary
 
     async def stream(self, audio: AsyncIterator[bytes]) -> AsyncIterator[Transcript]:
         """Nuôi audio vào và nhả transcript ra — partial trước, final sau."""
@@ -63,7 +78,7 @@ class SpeechmaticsRealtimeSTT(SpeechToText):
         async with websockets.connect(
             ENDPOINT, additional_headers={"Authorization": f"Bearer {self._key}"}
         ) as sock:
-            await sock.send(_start_message(self._sample_rate))
+            await sock.send(_start_message(self._sample_rate, self._vocabulary))
             feeder = asyncio.create_task(self._feed(sock, audio))
             reader = asyncio.create_task(self._read(sock, out))
             try:

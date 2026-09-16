@@ -67,22 +67,34 @@ def _build_deps() -> tuple[
         settings.lesson_file if settings.lesson_file.is_file() else settings.demo_lesson_file
     )
     lesson, spans = load_lesson(lesson_file)
-    llm, stt, tts = _shared_providers()
-    return lesson, spans, llm, stt, tts, session_log, profiles
+    llm, tts = _shared_providers()
+    return lesson, spans, llm, _speech_to_text(lesson), tts, session_log, profiles
+
+
+def _speech_to_text(lesson: Lesson) -> SpeechToText:
+    """STT tạo theo từng bài vì nó mang từ điển thuật ngữ của chính bài đó.
+
+    Không tốn gì: object chỉ giữ key + danh sách từ, kết nối chỉ mở khi có
+    người nói. Khác với LLM/TTS — hai cái đó giữ connection pool nên phải dùng
+    chung cả tiến trình.
+    """
+    if not settings.speechmatics_api_key:
+        log.warning("Chưa có SPEECHMATICS_API_KEY — đường nói dùng mock, hãy gõ chữ để thử")
+        return MockSTT()
+
+    from app.adapters.stt.speechmatics import SpeechmaticsRealtimeSTT
+
+    return SpeechmaticsRealtimeSTT(vocabulary=lesson.vocabulary)
 
 
 @lru_cache(maxsize=1)
-def _shared_providers() -> tuple[LLMClient, SpeechToText, TextToSpeech]:
+def _shared_providers() -> tuple[LLMClient, TextToSpeech]:
     """Dùng chung cho cả tiến trình: mỗi lần tạo mới là một connection pool mới,
     mở theo từng phiên sẽ sớm cạn socket."""
     from app.adapters.llm.openai import OpenAILLM
-    from app.adapters.stt.speechmatics import SpeechmaticsRealtimeSTT
     from app.adapters.tts.openai import OpenAITTS
 
-    stt = SpeechmaticsRealtimeSTT() if settings.speechmatics_api_key else MockSTT()
-    if not settings.speechmatics_api_key:
-        log.warning("Chưa có SPEECHMATICS_API_KEY — đường nói dùng mock, hãy gõ chữ để thử")
-    return OpenAILLM(), stt, OpenAITTS()
+    return OpenAILLM(), OpenAITTS()
 
 
 @app.get("/lesson")

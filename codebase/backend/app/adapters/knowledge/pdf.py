@@ -27,6 +27,7 @@ from pathlib import Path
 import pymupdf
 
 from app.domain.span import Span
+from app.domain.terms import extract_terms
 
 BOILERPLATE_PAGE_RATIO = 0.5
 """Chữ xuất hiện ở quá nửa số trang là watermark/header, không phải nội dung."""
@@ -94,6 +95,24 @@ def _merge(blocks: list[tuple]) -> list[tuple[str, tuple[float, float, float, fl
         )
         merged.append((text, bbox))
     return merged
+
+
+def deck_terms(path: Path) -> tuple[str, ...]:
+    """Thuật ngữ của CẢ bộ slide, để mớm cho bộ nhận dạng giọng nói.
+
+    Lấy toàn bộ chứ không chỉ trang đang học: học viên hay nhắc tới thuật ngữ
+    ở trang khác khi giải thích. Bỏ watermark/header trước khi rút, không thì
+    "ACTION" và "HACKATHON" lọt vào từ điển.
+    """
+    with pymupdf.open(path) as doc:
+        skip = _boilerplate(doc)
+        content = [
+            _norm(b[4])
+            for page in doc
+            for b in page.get_text("blocks")
+            if b[6] == 0 and b[4].strip() and _norm(b[4]) not in skip
+        ]
+    return extract_terms(*content)
 
 
 def parse_slide(path: Path, page_number: int, *, min_words: int = 4) -> list[Span]:
