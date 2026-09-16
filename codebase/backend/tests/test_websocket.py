@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.domain.session import MAX_FOLLOWUPS
+from app.graph.nodes import GRADER_VERSION
 from app.main import app
 
 DONE = json.dumps({"type": "explanation_done"})
@@ -21,6 +22,9 @@ DONE = json.dumps({"type": "explanation_done"})
 def client(tmp_path, monkeypatch):
     from app.config import settings
 
+    # Ép mock bất kể .env của máy đang để gì — test không được phụ thuộc vào
+    # cấu hình cá nhân, và tuyệt đối không được tự gọi API mất tiền.
+    monkeypatch.setattr(settings, "use_mocks", True)
     monkeypatch.setattr(settings, "session_log_file", tmp_path / "s.jsonl")
     monkeypatch.setattr(settings, "profile_file", tmp_path / "p.json")
     return TestClient(app)
@@ -32,8 +36,8 @@ def _one_turn(ws) -> list:
     return [ws.receive() for _ in range(7)]
 
 
-def test_health():
-    assert TestClient(app).get("/health").json()["status"] == "ok"
+def test_health(client):
+    assert client.get("/health").json()["status"] == "ok"
 
 
 def test_mot_luot_day_đay_du(client):
@@ -61,7 +65,7 @@ def test_ngat_ket_noi_giua_chung_khong_lam_server_no(client):
         assert ws.receive_json()["state"] == "STUDENT_TEACHING"
 
 
-def test_bai_hoc_lay_tu_file_chu_khong_hardcode(client):
+def test_lesson_lay_tu_file_chu_khong_hardcode(client):
     body = client.get("/lesson").json()
     assert body["concept"] and body["source_span_ids"]
     assert all(s.startswith("[") for s in body["source_span_ids"])
@@ -125,6 +129,6 @@ def test_moi_luot_deu_duoc_ghi_log_replay_duoc(client, tmp_path):
         if line.strip()
     ]
     assert [r["turn_index"] for r in rows] == [0, 1]
-    assert rows[0]["prompt_versions"]["grader"] == "v1"
+    assert rows[0]["prompt_versions"]["grader"] == GRADER_VERSION
     assert rows[0]["grade"]["verdict"] == "incomplete"
     assert "first_audio" in rows[0]["latency_ms"]

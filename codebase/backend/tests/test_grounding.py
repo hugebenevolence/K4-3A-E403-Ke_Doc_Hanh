@@ -40,7 +40,7 @@ class HallucinatingLLM(LLMClient):
                     {"span_id": "[T06-999]", "quote": "bịa", "covered_by_student": False},
                 ],
                 gap_summary="thiếu nguyên nhân",
-                verdict="incomplete",
+                contradiction="",
             )
         return FollowupOutput(question="Sao lại thế bạn?", cites_span_id="[KHONG-CO-THAT]")
 
