@@ -6,6 +6,8 @@ trực tiếp, để test node mà không cần provider thật.
 
 from __future__ import annotations
 
+import logging
+
 from app.domain.session import TeachBackSession, TurnState
 from app.domain.verbatim import is_verbatim_paste
 from app.domain.verdict import Evidence, GradeResult, Verdict
@@ -14,6 +16,8 @@ from app.ports.knowledge import SpanStore
 from app.ports.llm import LLMClient, ModelTier
 from app.prompts import registry
 from app.prompts.schemas import FollowupOutput, GradeOutput
+
+log = logging.getLogger(__name__)
 
 GRADER_VERSION = "v1"
 PERSONA_VERSION = "v1"
@@ -45,10 +49,19 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
         if verbatim and verdict is Verdict.SUFFICIENT:
             verdict = Verdict.INCOMPLETE
 
+        # Model có thể bịa ra mã đoạn không tồn tại. Không lọc thì mã bịa đó
+        # chui vào log, vào hồ sơ học viên, rồi hiện lên màn hình dưới dạng
+        # "xem lại đoạn [T06-999]" — học viên đi tìm một đoạn không có thật.
+        # Đây là chỗ chặn được bằng luật tất định, không cần hỏi lại model.
+        known = {s.span_id for s in source}
+        cited = tuple(e for e in out.evidence if e.span_id in known)
+        if bogus := [e.span_id for e in out.evidence if e.span_id not in known]:
+            log.warning("Bỏ %d mã đoạn không có thật do model bịa: %s", len(bogus), bogus)
+
         grade_result = GradeResult(
             verdict=verdict,
             evidence=tuple(
-                Evidence(e.span_id, e.quote, e.covered_by_student) for e in out.evidence
+                Evidence(e.span_id, e.quote, e.covered_by_student) for e in cited
             ),
             gap_summary=(
                 "học viên đang đọc lại gần nguyên văn tài liệu, chưa diễn đạt bằng lời mình"
@@ -89,6 +102,15 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
             else ""
         )
 
+        # Chỗ học viên đã vấp ở buổi trước: nói ra được thì câu hỏi bớt máy móc
+        # và học viên thấy agent thật sự đang theo mình qua nhiều buổi.
+        gaps = state.get("recurring_gaps") or {}
+        if repeated := [sid for sid in (state.get("source_span_ids") or []) if gaps.get(sid)]:
+            history += (
+                f"\n\nBuổi trước bạn ấy cũng chưa thông chỗ {', '.join(repeated)} — "
+                "có thể nhắc nhẹ điều đó, nhưng đừng làm bạn ấy thấy bị chấm điểm."
+            )
+
         out = await llm.structured(
             system=registry.compose_system("student_persona", PERSONA_VERSION, source),
             user=(
@@ -98,9 +120,16 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
             schema=FollowupOutput,
             tier=ModelTier.STANDARD,
         )
+        # Trích dẫn bịa còn tệ hơn không trích: frontend sẽ dùng mã này để
+        # highlight vùng trên slide, trỏ sai là học viên mất niềm tin ngay.
+        cites = out.cites_span_id
+        if cites and cites not in {s.span_id for s in source}:
+            log.warning("Bỏ trích dẫn bịa trong câu hỏi ngược: %s", cites)
+            cites = None
+
         return {
             "agent_says": out.question,
-            "cites_span_id": out.cites_span_id,
+            "cites_span_id": cites,
             "asked_questions": [out.question],
             "turn_state": TurnState.STUDENT_RESPONDING.name,
         }

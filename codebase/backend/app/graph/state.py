@@ -24,6 +24,10 @@ class TeachBackState(TypedDict, total=False):
     # sau agent không biết mình đã hỏi gì và hỏi lại y câu cũ.
     asked_questions: Annotated[list[str], operator.add]
 
+    # Nạp từ hồ sơ học viên lúc mở phiên: span_id -> số buổi trước đã vấp.
+    # Cho phép agent nhận ra "chỗ này lần trước cũng chưa thông".
+    recurring_gaps: dict[str, int]
+
     evidence: list[dict[str, Any]]
     gap_summary: str
     verdict: str

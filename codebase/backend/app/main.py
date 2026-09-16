@@ -14,7 +14,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from app.adapters.knowledge.local import InMemorySpanStore
 from app.adapters.llm.mock import MockLLM
-from app.adapters.store.jsonl import JsonlSessionLog
+from app.adapters.store.jsonl import JsonlSessionLog, JsonProfileStore
 from app.adapters.stt.mock import MockSTT
 from app.adapters.tts.mock import MockTTS
 from app.api.session import TALKER_VERSION, run_turn
@@ -27,22 +27,26 @@ from app.graph.build import build_graph
 from app.graph.nodes import GRADER_VERSION, PERSONA_VERSION
 from app.ports.knowledge import SpanStore
 from app.ports.llm import LLMClient
-from app.ports.store import SessionLog
+from app.ports.store import ProfileStore, SessionLog
 from app.ports.stt import SpeechToText
 from app.ports.tts import TextToSpeech
 
 app = FastAPI(title="Ke Doc Hanh — Track D3 teach-back")
 
+CONCEPT = "vì sao LLM bịa"
 DEMO_SPAN = Span(
     span_id="[T06-138]",
     text="(chưa nạp knowledge/spans.json — xem knowledge/README.md)",
 )
 
 
-def _build_deps() -> tuple[SpanStore, LLMClient, SpeechToText, TextToSpeech, SessionLog]:
+def _build_deps() -> tuple[
+    SpanStore, LLMClient, SpeechToText, TextToSpeech, SessionLog, ProfileStore
+]:
     log = JsonlSessionLog(settings.session_log_file)
+    profiles = JsonProfileStore(settings.profile_file)
     if settings.use_mocks:
-        return InMemorySpanStore([DEMO_SPAN]), MockLLM(), MockSTT(), MockTTS(), log
+        return InMemorySpanStore([DEMO_SPAN]), MockLLM(), MockSTT(), MockTTS(), log, profiles
     raise NotImplementedError(
         "Chưa gắn provider thật. Viết adapter theo port trong app/ports/ rồi "
         "wire vào đây — không sửa call site ở chỗ khác."
@@ -63,10 +67,15 @@ async def teach_back_session(ws: WebSocket):
     nếu không mic sẽ bắt lại chính giọng agent qua loa.
     """
     await ws.accept()
-    spans, llm, stt, tts, session_log = _build_deps()
+    spans, llm, stt, tts, session_log, profiles = _build_deps()
     graph = build_graph(llm, spans, checkpointer=InMemorySaver())
 
     session_id = str(uuid.uuid4())
+    # Hồ sơ theo học viên chứ không theo phiên — đó là điểm của trí nhớ xuyên
+    # buổi. Không có student_id thì mọi người dùng chung một hồ sơ và nó vô nghĩa.
+    student_id = ws.query_params.get("student_id", "demo")
+    profile = await profiles.load(student_id)
+
     audio_buffer: list[bytes] = []
     first_turn = True
     turn_index = 0
@@ -103,10 +112,11 @@ async def teach_back_session(ws: WebSocket):
             if first_turn:
                 turn_input |= {
                     "session_id": session_id,
-                    "student_id": "demo",
-                    "concept": "vì sao LLM bịa",
+                    "student_id": student_id,
+                    "concept": CONCEPT,
                     "source_span_ids": [DEMO_SPAN.span_id],
                     "followups_asked": 0,
+                    "recurring_gaps": dict(profile.recurring_gaps),
                 }
                 first_turn = False
 
@@ -120,7 +130,11 @@ async def teach_back_session(ws: WebSocket):
                     turn_state = event.payload["turn_state"]
                     await ws.send_json({"type": "state", "state": turn_state})
                 elif event.kind == "turn_done":
-                    await _log_turn(session_log, session_id, turn_index, student_text, event)
+                    grade = await _log_turn(
+                        session_log, session_id, turn_index, student_text, event
+                    )
+                    profile.absorb(CONCEPT, grade)
+                    await profiles.save(profile)
                     turn_index += 1
                 else:
                     await ws.send_json({"type": "transcript", **event.payload})
@@ -139,7 +153,9 @@ async def teach_back_session(ws: WebSocket):
         pass
 
 
-async def _log_turn(session_log, session_id: str, index: int, student_text: str, event) -> None:
+async def _log_turn(
+    session_log, session_id: str, index: int, student_text: str, event
+) -> GradeResult:
     """Ghi lượt ở dạng replay được.
 
     Giữ prompt version để sau khi sửa prompt vẫn dựng lại được lượt cũ — golden
@@ -168,6 +184,7 @@ async def _log_turn(session_log, session_id: str, index: int, student_text: str,
             latency_ms=event.payload["latency_ms"],
         )
     )
+    return grade
 
 
 async def _transcribe(stt, chunks: list[bytes]) -> str:
