@@ -31,9 +31,24 @@ def client(tmp_path, monkeypatch):
 
 
 def _one_turn(ws) -> list:
+    """Chạy một lượt nói và thu hết message tới khi agent chốt câu trả lời.
+
+    Đọc theo NỘI DUNG chứ không đếm số message: số partial thay đổi theo lời
+    nói, đếm cứng là test vỡ mỗi lần đổi nhịp nhận dạng.
+    """
     ws.send_bytes(b"\x00" * 100)
     ws.send_text(DONE)
-    return [ws.receive() for _ in range(7)]
+    msgs = []
+    while True:
+        msgs.append(m := ws.receive())
+        if not m.get("text"):
+            continue
+        body = json.loads(m["text"])
+        if body["type"] == "transcript" and body.get("filler") is False:
+            msgs.append(ws.receive())  # gói audio của câu chốt
+            return msgs
+        if body["type"] in ("session_end", "error"):
+            return msgs
 
 
 def test_health(client):
@@ -95,19 +110,12 @@ def test_ket_phien_goi_y_dung_doan_co_that(client):
                     break
 
 
-def test_bam_chot_luot_ma_chua_noi_gi_thi_khong_bi_tinh_mot_luot(client, monkeypatch, tmp_path):
+def test_bam_chot_luot_ma_chua_noi_gi_thi_khong_bi_tinh_mot_luot(client, tmp_path):
     """Bấm nhầm hai lần, hoặc bấm trước khi kịp nói. Chạy tiếp là tiêu mất một
     lượt hỏi ngược vì lời rỗng chắc chắn bị chấm chưa đủ — phạt oan học viên."""
-    from app import main
-
-    async def _im_lang(stt, chunks):
-        return "   "
-
-    monkeypatch.setattr(main, "_transcribe", _im_lang)
-
     with client.websocket_connect("/ws/session") as ws:
         ws.receive_json()
-        ws.send_text(DONE)
+        ws.send_text(DONE)  # chốt lượt mà chưa gửi byte audio nào
         assert ws.receive_json()["state"] == "CHECKING"
         err = ws.receive_json()
         assert err["type"] == "error"
