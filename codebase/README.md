@@ -1,6 +1,6 @@
-# Codebase — Kẻ Độc Hành · Track D1
+# Codebase — Kẻ Độc Hành · Track D3
 
-Prototype cho lát cắt: một học viên ôn khái niệm bằng giọng nói · AI đóng vai bạn học nêu một cách hiểu sai · học viên ngắt lời để sửa · AI đối chiếu với nguồn transcript và xác nhận trước khi kết thúc phiên.
+Prototype cho lát cắt: một học viên dạy lại một khái niệm bằng giọng nói cho AI đóng vai "học trò" · AI hỏi ngược đúng chỗ giải thích hổng/mơ hồ/sai (đối chiếu với nguồn transcript) · chỉ "hiểu" và kết thúc phiên khi lời giải thích đủ đúng.
 
 ## Cấu trúc
 
@@ -10,7 +10,7 @@ codebase/
 │   └── app/
 │       ├── main.py         # entrypoint + WebSocket /ws/session
 │       ├── voice/          # STT/TTS adapter — đổi provider ở đây
-│       ├── agents/         # persona "bạn học", prompt + logic chọn misconception
+│       ├── agents/         # persona "học trò", state machine + đối chiếu nguồn
 │       └── prompts/        # prompt templates, tách khỏi code
 └── frontend/       ← thuần HTML/CSS/JS, không cần build step
     ├── index.html
