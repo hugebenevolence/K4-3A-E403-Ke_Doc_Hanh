@@ -67,16 +67,22 @@ def _build_deps() -> tuple[
         settings.lesson_file if settings.lesson_file.is_file() else settings.demo_lesson_file
     )
     lesson, spans = load_lesson(lesson_file)
-
-    # STT/TTS chưa có adapter thật; LLM đã có nên chạy được bằng text trước.
-    return lesson, spans, _shared_llm(), MockSTT(), MockTTS(), session_log, profiles
+    llm, stt, tts = _shared_providers()
+    return lesson, spans, llm, stt, tts, session_log, profiles
 
 
 @lru_cache(maxsize=1)
-def _shared_llm() -> LLMClient:
+def _shared_providers() -> tuple[LLMClient, SpeechToText, TextToSpeech]:
+    """Dùng chung cho cả tiến trình: mỗi lần tạo mới là một connection pool mới,
+    mở theo từng phiên sẽ sớm cạn socket."""
     from app.adapters.llm.openai import OpenAILLM
+    from app.adapters.stt.speechmatics import SpeechmaticsSTT
+    from app.adapters.tts.openai import OpenAITTS
 
-    return OpenAILLM()
+    stt = SpeechmaticsSTT() if settings.speechmatics_api_key else MockSTT()
+    if not settings.speechmatics_api_key:
+        log.warning("Chưa có SPEECHMATICS_API_KEY — đường nói dùng mock, hãy gõ chữ để thử")
+    return OpenAILLM(), stt, OpenAITTS()
 
 
 @app.get("/lesson")

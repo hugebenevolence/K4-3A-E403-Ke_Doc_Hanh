@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     model_fast: str = "gpt-5-nano"
     model_standard: str = "gpt-5-mini"
     model_judge: str = "gpt-5"
+    model_tts: str = "gpt-4o-mini-tts"  # tts-1 đo được 44s/câu, không dùng được
 
     # Bài thật nằm ngoài repo (data pack không commit được). Khi USE_MOCKS=true
     # thì dùng bài demo tự bịa trong fixtures/ để repo chạy được ngay.
