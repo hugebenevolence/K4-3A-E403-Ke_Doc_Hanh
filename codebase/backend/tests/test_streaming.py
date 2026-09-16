@@ -15,6 +15,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from app.adapters.knowledge.local import InMemorySpanStore
 from app.adapters.llm.mock import MockLLM
 from app.api.session import run_turn
+from app.config import settings
 from app.domain.span import Span
 from app.graph.build import build_graph
 from app.ports.tts import TextToSpeech
@@ -46,7 +47,7 @@ def _graph():
     return build_graph(MockLLM(), InMemorySpanStore([SPAN]), checkpointer=InMemorySaver())
 
 
-def test_audio_phai_chay_ra_ngay_chu_khong_gom_het_ca_cau():
+def test_audio_phai_chay_ra_ngay_chu_khong_gom_het_ca_cau(talker_on):
     """Gom hết chunk của một câu rồi mới gửi là cộng dồn latency đúng bằng
     thời gian tổng hợp cả câu — mất ý nghĩa của việc cắt câu cho TTS."""
 
@@ -75,7 +76,14 @@ class ChattyLLM(MockLLM):
         yield "Bạn có muốn mình gợi ý cách diễn đạt lại cho dễ học thuộc không?"
 
 
-def test_talker_chi_duoc_noi_dung_mot_cau():
+@pytest.fixture
+def talker_on(monkeypatch):
+    """Câu đệm mặc định TẮT (đo được nó chậm hơn khoảng nó định lấp).
+    Test nào kiểm chính talker thì phải bật rõ ràng."""
+    monkeypatch.setattr(settings, "enable_talker", True)
+
+
+def test_talker_chi_duoc_noi_dung_mot_cau(talker_on):
     """Prompt quy định một câu nhưng model không nghe. Quan sát thật: nó nói ba
     câu, và câu thứ ba là 'Bạn có muốn mình gợi ý... để học thuộc không?' — vừa
     phá vai học trò (đang đề nghị dạy lại học viên) vừa phá tiền đề của track."""
@@ -99,8 +107,9 @@ def test_provider_treo_thi_bo_luot_chu_khong_treo_vo_han():
     tải lại trang. Thà mất một lượt."""
 
     class SlowGraph:
-        async def ainvoke(self, state, config=None):
+        async def astream(self, state, config=None, stream_mode=None):
             await asyncio.sleep(30)
+            yield {}
 
     async def main():
         with pytest.raises(asyncio.TimeoutError):

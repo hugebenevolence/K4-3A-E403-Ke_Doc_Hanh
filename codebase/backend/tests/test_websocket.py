@@ -65,10 +65,15 @@ def test_mot_luot_day_đay_du(client):
     assert kinds.count("state") == 2  # CHECKING roi den ket qua cham
     assert any(m.get("bytes") for m in msgs), "khong co audio nao duoc gui"
 
-    # Cau dem phai den TRUOC ket qua cham, neu khong thi mat y nghia lap cho.
-    filler = next(i for i, t in enumerate(texts) if t.get("filler") is True)
-    verdict = next(i for i, t in enumerate(texts) if t.get("type") == "state" and i > 0)
-    assert filler < verdict
+    # Tien trinh that cua agent phai den TRUOC cau tra loi, de hoc vien thay no
+    # dang doi chieu voi slide chu khong phai ngoi cho mot hop den.
+    activity = next(i for i, t in enumerate(texts) if t["type"] == "activity")
+    answer = next(
+        i
+        for i, t in enumerate(texts)
+        if t["type"] == "transcript" and t["role"] == "agent" and t.get("filler") is False
+    )
+    assert activity < answer
 
 
 def test_ngat_ket_noi_giua_chung_khong_lam_server_no(client):

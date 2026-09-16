@@ -10,6 +10,7 @@ from app.adapters.knowledge.local import InMemorySpanStore
 from app.adapters.llm.mock import MockLLM
 from app.adapters.tts.mock import MockTTS
 from app.api.session import run_turn, sentence_chunks
+from app.config import settings
 from app.domain.session import MAX_FOLLOWUPS, TeachBackSession, TurnState
 from app.domain.span import Span
 from app.domain.verbatim import is_verbatim_paste
@@ -75,7 +76,9 @@ def test_cau_ngan_ma_dung_khong_bi_vu_la_doc_lai_sach():
         assert not is_verbatim_paste(ngan_va_dung, SOURCE.text), ngan_va_dung
 
 
-def test_graph_chay_het_luot_va_talker_noi_truoc_ket_qua_cham():
+def test_graph_chay_het_luot_va_talker_noi_truoc_ket_qua_cham(monkeypatch):
+    # Câu đệm mặc định TẮT; test này kiểm chính thứ tự của nó nên bật lại.
+    monkeypatch.setattr(settings, "enable_talker", True)
     async def main():
         graph = build_graph(
             MockLLM(), InMemorySpanStore([SOURCE]), checkpointer=InMemorySaver()
