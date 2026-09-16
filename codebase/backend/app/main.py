@@ -12,16 +12,24 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from langgraph.checkpoint.memory import InMemorySaver
 
-from app.adapters.knowledge.local import InMemorySpanStore, LocalSpanStore
+from app.adapters.knowledge.local import InMemorySpanStore
 from app.adapters.llm.mock import MockLLM
+from app.adapters.store.jsonl import JsonlSessionLog
 from app.adapters.stt.mock import MockSTT
 from app.adapters.tts.mock import MockTTS
-from app.api.session import run_turn
+from app.api.session import TALKER_VERSION, run_turn
 from app.config import settings
+from app.domain.log import TurnLog
 from app.domain.session import TurnState
 from app.domain.span import Span
+from app.domain.verdict import Evidence, GradeResult, Verdict
 from app.graph.build import build_graph
+from app.graph.nodes import GRADER_VERSION, PERSONA_VERSION
 from app.ports.knowledge import SpanStore
+from app.ports.llm import LLMClient
+from app.ports.store import SessionLog
+from app.ports.stt import SpeechToText
+from app.ports.tts import TextToSpeech
 
 app = FastAPI(title="Ke Doc Hanh — Track D3 teach-back")
 
@@ -31,9 +39,10 @@ DEMO_SPAN = Span(
 )
 
 
-def _build_deps() -> tuple[SpanStore, object, object, object]:
+def _build_deps() -> tuple[SpanStore, LLMClient, SpeechToText, TextToSpeech, SessionLog]:
+    log = JsonlSessionLog(settings.session_log_file)
     if settings.use_mocks:
-        return InMemorySpanStore([DEMO_SPAN]), MockLLM(), MockSTT(), MockTTS()
+        return InMemorySpanStore([DEMO_SPAN]), MockLLM(), MockSTT(), MockTTS(), log
     raise NotImplementedError(
         "Chưa gắn provider thật. Viết adapter theo port trong app/ports/ rồi "
         "wire vào đây — không sửa call site ở chỗ khác."
@@ -54,12 +63,13 @@ async def teach_back_session(ws: WebSocket):
     nếu không mic sẽ bắt lại chính giọng agent qua loa.
     """
     await ws.accept()
-    spans, llm, stt, tts = _build_deps()
+    spans, llm, stt, tts, session_log = _build_deps()
     graph = build_graph(llm, spans, checkpointer=InMemorySaver())
 
     session_id = str(uuid.uuid4())
     audio_buffer: list[bytes] = []
-    followups_asked = 0
+    first_turn = True
+    turn_index = 0
 
     await ws.send_json({"type": "state", "state": TurnState.STUDENT_TEACHING.name})
 
@@ -85,26 +95,33 @@ async def teach_back_session(ws: WebSocket):
                 {"type": "transcript", "role": "student", "text": student_text}
             )
 
-            turn_state = TurnState.CHECKING.name
-            async for event in run_turn(
-                {
+            # Chỉ lượt đầu mới gửi thông tin phiên. Các lượt sau chỉ gửi lời học
+            # viên, phần còn lại (followups_asked, asked_questions) do
+            # checkpointer giữ. Gửi lại followups_asked từ đây là tạo ra hai
+            # nguồn sự thật cho cùng một con số, sớm muộn cũng lệch nhau.
+            turn_input: dict = {"student_text": student_text}
+            if first_turn:
+                turn_input |= {
                     "session_id": session_id,
                     "student_id": "demo",
                     "concept": "vì sao LLM bịa",
                     "source_span_ids": [DEMO_SPAN.span_id],
-                    "student_text": student_text,
-                    "followups_asked": followups_asked,
-                },
-                graph=graph,
-                llm=llm,
-                tts=tts,
-                thread_id=session_id,
+                    "followups_asked": 0,
+                }
+                first_turn = False
+
+            turn_state = TurnState.CHECKING.name
+            async for event in run_turn(
+                turn_input, graph=graph, llm=llm, tts=tts, thread_id=session_id
             ):
                 if event.kind == "audio":
                     await ws.send_bytes(event.payload)
                 elif event.kind == "state":
                     turn_state = event.payload["turn_state"]
                     await ws.send_json({"type": "state", "state": turn_state})
+                elif event.kind == "turn_done":
+                    await _log_turn(session_log, session_id, turn_index, student_text, event)
+                    turn_index += 1
                 else:
                     await ws.send_json({"type": "transcript", **event.payload})
 
@@ -117,10 +134,40 @@ async def teach_back_session(ws: WebSocket):
                     }
                 )
                 break
-            followups_asked += 1
 
     except WebSocketDisconnect:
         pass
+
+
+async def _log_turn(session_log, session_id: str, index: int, student_text: str, event) -> None:
+    """Ghi lượt ở dạng replay được.
+
+    Giữ prompt version để sau khi sửa prompt vẫn dựng lại được lượt cũ — golden
+    set sẽ lắp từ phiên thật thay vì bịa case. Quality bar khoá ở CP4, sau đó
+    không thu thêm được nữa.
+    """
+    result = event.payload["result"]
+    grade = GradeResult(
+        verdict=Verdict(result["verdict"]),
+        evidence=tuple(Evidence(**e) for e in result.get("evidence", [])),
+        gap_summary=result.get("gap_summary", ""),
+    )
+    await session_log.append(
+        TurnLog(
+            session_id=session_id,
+            turn_index=index,
+            student_text=student_text,
+            source_span_id=result["source_span_ids"][0],
+            prompt_versions={
+                "grader": GRADER_VERSION,
+                "student_persona": PERSONA_VERSION,
+                "talker": TALKER_VERSION,
+            },
+            grade=grade,
+            agent_said=event.payload["said"],
+            latency_ms=event.payload["latency_ms"],
+        )
+    )
 
 
 async def _transcribe(stt, chunks: list[bytes]) -> str:

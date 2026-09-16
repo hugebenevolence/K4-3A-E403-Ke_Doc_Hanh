@@ -2,7 +2,7 @@
 
 Đây là một hard test của D3. Làm bằng luật tất định thay vì hỏi LLM: rẻ hơn,
 không dao động giữa các lượt chạy, và chấm được ngay cả khi LLM lỗi.
-Kết quả dùng để hạ "day_duoc" xuống "ho" — không bao giờ để tự nó kết tội học viên.
+Kết quả dùng để hạ SUFFICIENT xuống INCOMPLETE — không bao giờ để tự nó kết tội học viên.
 """
 
 from __future__ import annotations

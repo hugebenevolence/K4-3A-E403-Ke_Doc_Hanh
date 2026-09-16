@@ -12,14 +12,19 @@ khoảng chờ. Nhét vào graph sẽ buộc phải chờ nó xong mới chạy 
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from time import perf_counter
 from typing import Any, Literal
 
+from app.domain.sanitize import sanitize_spoken
 from app.ports.llm import LLMClient, ModelTier
 from app.ports.tts import TextToSpeech
 from app.prompts import registry
+
+log = logging.getLogger(__name__)
 
 TALKER_VERSION = "v1"
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
@@ -27,7 +32,7 @@ _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 
 @dataclass(frozen=True)
 class Event:
-    kind: Literal["state", "transcript", "audio"]
+    kind: Literal["state", "transcript", "audio", "turn_done"]
     payload: Any
 
 
@@ -47,10 +52,6 @@ async def sentence_chunks(tokens: AsyncIterator[str]) -> AsyncIterator[str]:
         yield buffer.strip()
 
 
-async def _speak(tts: TextToSpeech, sentence: str) -> list[bytes]:
-    return [chunk async for chunk in tts.synthesize(sentence)]
-
-
 async def run_turn(
     state: dict[str, Any],
     *,
@@ -60,25 +61,63 @@ async def run_turn(
     thread_id: str,
 ) -> AsyncIterator[Event]:
     """Chạy một lượt, phát event theo đúng thứ tự client cần nghe."""
+    started = perf_counter()
     reasoner = asyncio.create_task(
         graph.ainvoke(state, config={"configurable": {"thread_id": thread_id}})
     )
+    first_audio_ms: int | None = None
 
-    # Talker: chỉ được nhắc lại lời học viên, tuyệt đối không chốt đúng/sai —
-    # lúc nó nói thì reasoner còn chưa có kết quả. Luật này nằm trong prompt
-    # talker/v1.md và phải có case eval riêng canh chừng.
-    talker_tokens = llm.stream(
-        system=registry.compose_system("talker", TALKER_VERSION),
-        user=f"Học viên vừa nói:\n{state['student_text']}",
-        tier=ModelTier.FAST,
-    )
-    async for sentence in sentence_chunks(talker_tokens):
-        yield Event("transcript", {"role": "agent", "text": sentence, "filler": True})
-        for chunk in await _speak(tts, sentence):
+    try:
+        # Talker: chỉ được nhắc lại lời học viên, tuyệt đối không chốt đúng/sai —
+        # lúc nó nói thì reasoner còn chưa có kết quả. Luật này nằm trong prompt
+        # talker/v1.md và phải có case eval riêng canh chừng.
+        talker_tokens = llm.stream(
+            system=registry.compose_system("talker", TALKER_VERSION),
+            user=f"Học viên vừa nói:\n{state['student_text']}",
+            tier=ModelTier.FAST,
+        )
+        async for raw in sentence_chunks(talker_tokens):
+            if not (sentence := sanitize_spoken(raw)):
+                continue
+            yield Event("transcript", {"role": "agent", "text": sentence, "filler": True})
+            # Đẩy từng chunk ra ngay. Gom đủ cả câu rồi mới gửi là cộng dồn
+            # latency đúng bằng thời gian tổng hợp cả câu.
+            async for chunk in tts.synthesize(sentence):
+                if first_audio_ms is None:
+                    first_audio_ms = int((perf_counter() - started) * 1000)
+                yield Event("audio", chunk)
+
+        result = await reasoner
+        said = sanitize_spoken(result["agent_says"])
+        yield Event(
+            "state", {"turn_state": result["turn_state"], "verdict": result.get("verdict")}
+        )
+        yield Event("transcript", {"role": "agent", "text": said, "filler": False})
+        async for chunk in tts.synthesize(said):
             yield Event("audio", chunk)
 
-    result = await reasoner
-    yield Event("state", {"turn_state": result["turn_state"], "verdict": result.get("verdict")})
-    yield Event("transcript", {"role": "agent", "text": result["agent_says"], "filler": False})
-    for chunk in await _speak(tts, result["agent_says"]):
-        yield Event("audio", chunk)
+        yield Event(
+            "turn_done",
+            {
+                "result": result,
+                "said": said,
+                # Hai số cần theo dõi: bao lâu thì học viên nghe thấy tiếng đầu
+                # tiên, và bao lâu thì có kết quả chấm.
+                "latency_ms": {
+                    "first_audio": first_audio_ms or 0,
+                    "total": int((perf_counter() - started) * 1000),
+                },
+            },
+        )
+    finally:
+        # Học viên ngắt kết nối giữa lượt là chuyện thường; không dọn thì task
+        # chấm chạy mồ côi và lỗi của nó không ai nhận.
+        reasoner.cancel()
+        try:
+            await reasoner
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            # Lỗi ở đây thường đã được nêu lại ở thân hàm; nhưng nếu generator
+            # bị bỏ dở TRƯỚC khi await thì đây là chỗ duy nhất còn thấy nó.
+            log.exception("Node chấm hỏng ở phiên %s", thread_id)

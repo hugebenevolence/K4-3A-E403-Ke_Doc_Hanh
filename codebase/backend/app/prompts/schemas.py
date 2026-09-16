@@ -25,7 +25,7 @@ class GradeOutput(BaseModel):
     gap_summary: str = Field(
         description="Chỗ hổng lớn nhất, một câu. Mô tả chỗ thiếu — KHÔNG viết lời giải đúng vào đây."
     )
-    verdict: Literal["day_duoc", "ho", "sai"]
+    verdict: Literal["sufficient", "incomplete", "incorrect"]
 
 
 class FollowupOutput(BaseModel):

@@ -21,7 +21,13 @@ PERSONA_VERSION = "v1"
 
 def make_grade_node(llm: LLMClient, spans: SpanStore):
     async def grade(state: TeachBackState) -> TeachBackState:
-        source = await spans.get_many(state["source_span_ids"])
+        span_ids = state.get("source_span_ids") or []
+        if not span_ids:
+            # Chấm mà không có nguồn thì chỉ còn kiến thức chung của model —
+            # đúng cái mà thiết kế grounding cấm. Thà hỏng to còn hơn chấm bịa.
+            raise ValueError("Phiên không có source_span_ids; không thể chấm có căn cứ")
+
+        source = await spans.get_many(span_ids)
         student_text = state["student_text"]
 
         # Tiền kiểm tất định trước khi tốn một lượt gọi LLM: đọc lại nguyên văn
@@ -36,8 +42,8 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
         )
 
         verdict = Verdict(out.verdict)
-        if verbatim and verdict is Verdict.DAY_DUOC:
-            verdict = Verdict.HO
+        if verbatim and verdict is Verdict.SUFFICIENT:
+            verdict = Verdict.INCOMPLETE
 
         grade_result = GradeResult(
             verdict=verdict,
@@ -52,7 +58,7 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
         )
 
         session = TeachBackSession(
-            source_span_id=state["source_span_ids"][0],
+            source_span_id=span_ids[0],
             concept=state["concept"],
             followups_asked=state.get("followups_asked", 0),
         )
@@ -74,11 +80,20 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
 def make_followup_node(llm: LLMClient, spans: SpanStore):
     async def ask_followup(state: TeachBackState) -> TeachBackState:
         source = await spans.get_many(state["source_span_ids"])
+
+        asked = state.get("asked_questions") or []
+        history = (
+            "\n\nMình đã hỏi những câu này rồi, đừng hỏi lại theo cùng một kiểu:\n"
+            + "\n".join(f"- {q}" for q in asked)
+            if asked
+            else ""
+        )
+
         out = await llm.structured(
             system=registry.compose_system("student_persona", PERSONA_VERSION, source),
             user=(
                 f"Học viên vừa nói:\n{state['student_text']}\n\n"
-                f"Chỗ hổng cần hỏi vào:\n{state['gap_summary']}"
+                f"Chỗ hổng cần hỏi vào:\n{state['gap_summary']}{history}"
             ),
             schema=FollowupOutput,
             tier=ModelTier.STANDARD,
@@ -86,6 +101,7 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
         return {
             "agent_says": out.question,
             "cites_span_id": out.cites_span_id,
+            "asked_questions": [out.question],
             "turn_state": TurnState.STUDENT_RESPONDING.name,
         }
 

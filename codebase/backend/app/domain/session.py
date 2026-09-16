@@ -54,7 +54,7 @@ class TeachBackSession:
         """Ghi nhận kết quả chấm và chuyển state. Trả về state mới."""
         self.grades.append(grade)
 
-        if grade.verdict is Verdict.DAY_DUOC:
+        if grade.verdict is Verdict.SUFFICIENT:
             self.state = TurnState.TAUGHT
         elif self.followups_asked >= MAX_FOLLOWUPS:
             self.state = TurnState.SUGGEST_REVIEW

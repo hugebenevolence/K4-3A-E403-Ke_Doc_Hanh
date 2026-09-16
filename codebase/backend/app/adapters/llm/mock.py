@@ -1,7 +1,7 @@
 """LLM giả — chạy được toàn bộ luồng mà không tốn credit, không cần key.
 
 Verdict quyết định theo độ dài lời giải thích, nên gõ dài dần là thấy được máy
-trạng thái đi từ `ho` sang `day_duoc`. Dùng để debug luồng, KHÔNG dùng để chấm.
+trạng thái đi từ INCOMPLETE sang SUFFICIENT. Dùng để debug luồng, KHÔNG dùng để chấm.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ class MockLLM(LLMClient):
                     }
                 ],
                 gap_summary="" if covered else "chưa nói tới nguồn gốc của vấn đề",
-                verdict="day_duoc" if covered else "ho",
+                verdict="sufficient" if covered else "incomplete",
             )
         if schema is FollowupOutput:
             return schema(question="Chỗ đó thì vì sao lại xảy ra vậy bạn?", cites_span_id=None)

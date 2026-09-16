@@ -10,9 +10,12 @@ from enum import Enum
 
 
 class Verdict(str, Enum):
-    DAY_DUOC = "day_duoc"  # đủ đúng, bằng lời học viên → agent "hiểu", kết phiên
-    HO = "ho"  # đúng hướng nhưng thiếu/mơ hồ → hỏi ngược đúng chỗ hổng
-    SAI = "sai"  # có phần sai → hỏi gợi mở, không sửa hộ
+    """Định danh tiếng Anh cho đồng nhất với TurnState và khoá JSON; phần văn
+    xuôi hướng dẫn model vẫn là tiếng Việt."""
+
+    SUFFICIENT = "sufficient"  # đủ đúng, bằng lời học viên → agent "hiểu", kết phiên
+    INCOMPLETE = "incomplete"  # đúng hướng nhưng thiếu/mơ hồ → hỏi ngược đúng chỗ hổng
+    INCORRECT = "incorrect"  # có phần trái nguồn → hỏi gợi mở, không sửa hộ
 
 
 @dataclass(frozen=True)

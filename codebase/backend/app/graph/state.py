@@ -7,7 +7,8 @@ Chỉ chứa field có cấu trúc, không chứa chain-of-thought thô của mo
 
 from __future__ import annotations
 
-from typing import Any, TypedDict
+import operator
+from typing import Annotated, Any, TypedDict
 
 
 class TeachBackState(TypedDict, total=False):
@@ -18,6 +19,10 @@ class TeachBackState(TypedDict, total=False):
 
     student_text: str  # lời học viên vừa nói (đã STT final)
     followups_asked: int
+
+    # Cộng dồn qua các lượt (reducer của LangGraph). Không có cái này thì lượt
+    # sau agent không biết mình đã hỏi gì và hỏi lại y câu cũ.
+    asked_questions: Annotated[list[str], operator.add]
 
     evidence: list[dict[str, Any]]
     gap_summary: str

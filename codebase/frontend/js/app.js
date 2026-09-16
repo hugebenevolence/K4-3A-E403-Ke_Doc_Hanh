@@ -32,6 +32,9 @@ function enqueueAudio(blob) {
 }
 
 function playNext() {
+  // Thu hồi URL của clip vừa phát, nếu không một phiên dài sẽ rò bộ nhớ dần.
+  if (audioEl.src.startsWith("blob:")) URL.revokeObjectURL(audioEl.src);
+
   const blob = audioQueue.shift();
   if (!blob) {
     isPlaying = false;
@@ -99,12 +102,26 @@ startBtn.addEventListener("click", async () => {
   };
 });
 
+function sendDone() {
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "explanation_done" }));
+  }
+}
+
 doneBtn.addEventListener("click", () => {
   // Chốt hết lượt bằng nút bấm tường minh thay cho VAD tự động: học viên hay
   // dừng giữa chừng để nghĩ cách diễn đạt, endpointing tự động sẽ cắt sớm.
   if (ws?.readyState !== WebSocket.OPEN) return;
-  mediaRecorder?.stop();
-  ws.send(JSON.stringify({ type: "explanation_done" }));
   doneBtn.disabled = true;
   statusEl.textContent = "Học trò AI đang nghĩ…";
+
+  if (mediaRecorder?.state === "recording") {
+    // stop() đẩy nốt chunk audio cuối qua ondataavailable RỒI mới bắn sự kiện
+    // "stop". Gửi explanation_done ngay ở đây là chunk cuối về sau tín hiệu
+    // chốt lượt, và bị tính sang lượt kế tiếp — mất đoạn cuối câu học viên nói.
+    mediaRecorder.addEventListener("stop", sendDone, { once: true });
+    mediaRecorder.stop();
+  } else {
+    sendDone();
+  }
 });
