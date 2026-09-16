@@ -9,8 +9,9 @@ from __future__ import annotations
 import logging
 
 from app.domain.session import TeachBackSession, TurnState
+from app.domain.span import normalize_span_id
 from app.domain.verbatim import is_verbatim_paste
-from app.domain.verdict import Evidence, GradeResult, Verdict
+from app.domain.verdict import Evidence, GradeResult, decide
 from app.graph.state import TeachBackState
 from app.ports.knowledge import SpanStore
 from app.ports.llm import LLMClient, ModelTier
@@ -19,7 +20,7 @@ from app.prompts.schemas import FollowupOutput, GradeOutput
 
 log = logging.getLogger(__name__)
 
-GRADER_VERSION = "v1"
+GRADER_VERSION = "v2"
 PERSONA_VERSION = "v1"
 
 
@@ -45,28 +46,31 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
             tier=ModelTier.STANDARD,
         )
 
-        verdict = Verdict(out.verdict)
-        if verbatim and verdict is Verdict.SUFFICIENT:
-            verdict = Verdict.INCOMPLETE
-
         # Model có thể bịa ra mã đoạn không tồn tại. Không lọc thì mã bịa đó
         # chui vào log, vào hồ sơ học viên, rồi hiện lên màn hình dưới dạng
         # "xem lại đoạn [T06-999]" — học viên đi tìm một đoạn không có thật.
         # Đây là chỗ chặn được bằng luật tất định, không cần hỏi lại model.
-        known = {s.span_id for s in source}
-        cited = tuple(e for e in out.evidence if e.span_id in known)
-        if bogus := [e.span_id for e in out.evidence if e.span_id not in known]:
+        # Khớp nới theo dạng chuẩn hoá rồi trả về mã CANONICAL, để mọi thứ ghi
+        # xuống log/hồ sơ đều cùng một dạng dù model viết kiểu gì.
+        known = {normalize_span_id(s.span_id): s.span_id for s in source}
+        cited = tuple(
+            Evidence(known[key], e.quote, e.covered_by_student)
+            for e in out.evidence
+            if (key := normalize_span_id(e.span_id)) in known
+        )
+        if bogus := [
+            e.span_id for e in out.evidence if normalize_span_id(e.span_id) not in known
+        ]:
             log.warning("Bỏ %d mã đoạn không có thật do model bịa: %s", len(bogus), bogus)
 
+        verdict = decide(cited, out.contradiction, verbatim=verbatim)
         grade_result = GradeResult(
             verdict=verdict,
-            evidence=tuple(
-                Evidence(e.span_id, e.quote, e.covered_by_student) for e in cited
-            ),
+            evidence=cited,
             gap_summary=(
                 "học viên đang đọc lại gần nguyên văn tài liệu, chưa diễn đạt bằng lời mình"
                 if verbatim
-                else out.gap_summary
+                else (out.gap_summary or out.contradiction)
             ),
         )
 
@@ -122,10 +126,10 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
         )
         # Trích dẫn bịa còn tệ hơn không trích: frontend sẽ dùng mã này để
         # highlight vùng trên slide, trỏ sai là học viên mất niềm tin ngay.
-        cites = out.cites_span_id
-        if cites and cites not in {s.span_id for s in source}:
-            log.warning("Bỏ trích dẫn bịa trong câu hỏi ngược: %s", cites)
-            cites = None
+        canonical = {normalize_span_id(s.span_id): s.span_id for s in source}
+        cites = canonical.get(normalize_span_id(out.cites_span_id or ""))
+        if out.cites_span_id and not cites:
+            log.warning("Bỏ trích dẫn bịa trong câu hỏi ngược: %s", out.cites_span_id)
 
         return {
             "agent_says": out.question,

@@ -9,6 +9,7 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
+from functools import lru_cache
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -60,11 +61,22 @@ def _build_deps() -> tuple[
         lesson, spans = load_lesson(settings.demo_lesson_file)
         return lesson, spans, MockLLM(), MockSTT(), MockTTS(), session_log, profiles
 
-    raise NotImplementedError(
-        "Chưa gắn provider thật. Viết adapter theo port trong app/ports/ rồi "
-        "wire vào đây — không sửa call site ở chỗ khác. "
-        f"Bài học thật nạp từ {settings.lesson_file}."
+    # Bài thật nếu đã nạp, không thì vẫn dùng bài demo — để chạy LLM thật được
+    # ngay mà chưa cần đụng tới data pack.
+    lesson_file = (
+        settings.lesson_file if settings.lesson_file.is_file() else settings.demo_lesson_file
     )
+    lesson, spans = load_lesson(lesson_file)
+
+    # STT/TTS chưa có adapter thật; LLM đã có nên chạy được bằng text trước.
+    return lesson, spans, _shared_llm(), MockSTT(), MockTTS(), session_log, profiles
+
+
+@lru_cache(maxsize=1)
+def _shared_llm() -> LLMClient:
+    from app.adapters.llm.openai import OpenAILLM
+
+    return OpenAILLM()
 
 
 @app.get("/lesson")

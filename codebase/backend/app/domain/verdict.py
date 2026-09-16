@@ -40,3 +40,25 @@ class GradeResult:
     @property
     def uncovered(self) -> tuple[Evidence, ...]:
         return tuple(e for e in self.evidence if not e.covered_by_student)
+
+
+def decide(
+    evidence: tuple[Evidence, ...], contradiction: str, *, verbatim: bool
+) -> Verdict:
+    """Suy ra verdict từ các nhận định cụ thể của model.
+
+    Cố ý KHÔNG để model tự chốt: đo thực tế cho thấy khi được tự quyết, nó
+    không bao giờ trả `sufficient` — viết ra chỗ hổng xong là đã tự cam kết
+    "còn thiếu", kể cả khi chính nó ghi "không có chỗ thiếu lớn".
+
+    Thứ tự ưu tiên: nói trái nguồn > đọc lại nguyên văn > còn ý chưa chạm tới.
+    """
+    if contradiction.strip():
+        return Verdict.INCORRECT
+    if not evidence:
+        # Không trích được ý nào từ nguồn nghĩa là chưa chấm được gì, không
+        # phải là học viên đã nói đủ.
+        return Verdict.INCOMPLETE
+    if verbatim or any(not e.covered_by_student for e in evidence):
+        return Verdict.INCOMPLETE
+    return Verdict.SUFFICIENT

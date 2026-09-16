@@ -42,7 +42,7 @@ class MockLLM(LLMClient):
                     for span in spans
                 ],
                 gap_summary="" if covered else "chưa nói tới nguyên nhân nằm ở đâu",
-                verdict="sufficient" if covered else "incomplete",
+                contradiction="",
             )
         if schema is FollowupOutput:
             return schema(question="Chỗ đó thì vì sao lại xảy ra vậy bạn?", cites_span_id=None)

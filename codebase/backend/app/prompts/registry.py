@@ -47,7 +47,10 @@ def compose_system(name: str, version: str, spans: tuple[Span, ...] = ()) -> str
     parts = [load("_base", layer) for layer in BASE_LAYERS[name]]
     parts.append(load(name, version))
     if spans:
-        source = "\n\n".join(f"[{s.span_id}] {s.text}" for s in spans)
+        # span_id đã chứa sẵn ngoặc vuông ("[T06-138]"). Bọc thêm lần nữa thành
+        # "[[T06-138]]" và model sẽ echo lại đúng dạng đó, rồi bộ lọc mã bịa
+        # ném sạch evidence — chấm sai mà không ai thấy lỗi ở đâu.
+        source = "\n\n".join(f"{s.span_id} {s.text}" for s in spans)
         parts.append(f"# ĐOẠN NGUỒN\n\n{source}")
 
     return "\n\n---\n\n".join(parts)

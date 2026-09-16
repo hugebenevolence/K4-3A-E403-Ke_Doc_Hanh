@@ -16,3 +16,14 @@ class Span:
     text: str
     page: int | None = None
     bbox: tuple[float, float, float, float] | None = None  # toạ độ PyMuPDF (gốc trên-trái)
+
+
+def normalize_span_id(raw: str) -> str:
+    """Dạng so khớp: bỏ ngoặc, khoảng trắng, hoa thường.
+
+    Model trả mã đoạn với đủ kiểu biến thể — "[T06-138]", "T06-138",
+    "[[T06-138]]". Khớp cứng từng ký tự thì evidence đúng cũng bị ném đi và
+    verdict tụt oan; khớp nới thế này chỉ chấp nhận khác biệt về hình thức, mã
+    không có thật vẫn bị loại.
+    """
+    return raw.strip().strip("[]").strip().upper()
