@@ -1,4 +1,8 @@
-# BTC data pack — never commit (bảo mật dữ liệu, xem README gốc của đề bài)
+# Tài liệu đề bài BTC copy về để tiện đọc — không phải của repo nộp bài, không commit
+# (bao gồm cả data/ bên trong — bảo mật dữ liệu, xem brief/README-goc-btc.md)
+/brief/
+
+# BTC data pack — never commit (phòng khi ai đó copy data/ ra ngoài brief/)
 /data/
 
 # secrets
