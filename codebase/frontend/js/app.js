@@ -8,7 +8,14 @@
 // xong. Thiếu vế sau thì mic bắt lại chính giọng agent qua loa, STT sẽ nghe
 // agent nói và tưởng là học viên.
 
-import { clearEvidence, indexSpans, renderEvidence } from "./evidence.js";
+import {
+  citationBox,
+  clearEvidence,
+  indexSpans,
+  renderEvidence,
+  resetReveal,
+  revealEverything,
+} from "./evidence.js";
 import { loadSlides, show, sourcePage, step } from "./slides.js";
 
 const API = `http://${location.hostname}:8000`;
@@ -47,17 +54,28 @@ let audioCtx = null;
 let micNode = null;
 let recording = false;
 let turnState = null;
+let lastEvidence = [];
 const audioQueue = [];
 let isPlaying = false;
 
 const live = () => ws?.readyState === WebSocket.OPEN;
 const myTurn = () => MIC_STATES.has(turnState) && !isPlaying;
 
-function log(role, text, filler) {
-  const line = document.createElement("p");
-  line.className = `line ${role}${filler ? " filler" : ""}`;
-  line.textContent = `${role === "student" ? "Bạn" : "Học trò AI"}: ${text}`;
-  transcriptEl.append(line);
+function log(role, text, filler, citesSpanId) {
+  const turn = document.createElement("div");
+  turn.className = `line ${role}${filler ? " filler" : ""}`;
+
+  const who = document.createElement("span");
+  who.className = "who";
+  who.textContent = role === "student" ? "Bạn" : "Học trò AI";
+  turn.append(who, document.createTextNode(text));
+
+  // Agent trích slide thì hiện luôn nguyên văn chỗ đó — học viên thấy nó đang
+  // dựa vào đúng chữ nào, không phải nói vu vơ.
+  const cite = citesSpanId && citationBox(citesSpanId);
+  if (cite) turn.append(cite);
+
+  transcriptEl.append(turn);
   transcriptEl.scrollTop = transcriptEl.scrollHeight;
 }
 
@@ -187,6 +205,10 @@ document.addEventListener("keydown", (e) => {
 });
 
 startBtn.addEventListener("click", () => {
+  resetReveal();
+  lastEvidence = [];
+  clearEvidence();
+  transcriptEl.replaceChildren();
   ws = new WebSocket(`${API.replace("http", "ws")}/ws/session`);
   ws.binaryType = "blob";
   startBtn.disabled = true;
@@ -199,7 +221,10 @@ startBtn.addEventListener("click", () => {
     const msg = JSON.parse(event.data);
     if (msg.type === "state") {
       turnState = msg.state;
-      if (msg.evidence?.length) renderEvidence(msg.evidence);
+      if (msg.evidence?.length) {
+        lastEvidence = msg.evidence;
+        renderEvidence(msg.evidence);
+      }
       applyTurnPolicy();
     } else if (msg.type === "activity") {
       // Tiến trình THẬT của agent (tên node trong graph), không phải vòng xoay
@@ -212,19 +237,23 @@ startBtn.addEventListener("click", () => {
       partialEl.textContent = msg.text;
     } else if (msg.type === "transcript") {
       partialEl.hidden = true;
-      // Lời học viên gõ đã hiện lúc gửi rồi, khỏi hiện lại.
-      if (msg.role !== "student") log(msg.role, msg.text, msg.filler);
-      else log("student", msg.text, false);
+      log(msg.role, msg.text, msg.filler, msg.cites_span_id);
     } else if (msg.type === "error") {
       statusEl.textContent = msg.message;
     } else if (msg.type === "session_end") {
       turnState = null;
-      document.body.classList.remove("focus");
+      // Hết phiên mới mở hết nguyên văn: giữa phiên mà in ra ý học viên chưa
+      // nói thì họ chỉ việc đọc, mất sạch ý nghĩa của việc hỏi ngược. Hết
+      // phiên thì trỏ đúng chỗ cần xem lại lại chính là việc D3 yêu cầu.
+      revealEverything();
+      if (lastEvidence.length) renderEvidence(lastEvidence);
       applyTurnPolicy();
-      statusEl.textContent =
+      setLive(
+        "idle",
         msg.outcome === "TAUGHT"
-          ? "🎉 Học trò AI đã hiểu. Xong phiên!"
-          : `Kết phiên — nên xem lại ${msg.review_spans.join(", ")}.`;
+          ? "Học trò AI đã hiểu — xong phiên"
+          : "Kết phiên — còn một chỗ nên xem lại",
+      );
     }
   };
 

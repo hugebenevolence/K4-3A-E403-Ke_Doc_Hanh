@@ -156,7 +156,18 @@ async def run_turn(
                 "evidence": result.get("evidence") or [],
             },
         )
-        yield Event("transcript", {"role": "agent", "text": said, "filler": False})
+        yield Event(
+            "transcript",
+            {
+                "role": "agent",
+                "text": said,
+                "filler": False,
+                # Span agent tự trích trong câu nói. An toàn để hiện nguyên văn:
+                # persona bị cấm trích đúng ý học viên đang thiếu, nên cái nó
+                # trích là chỗ học viên đã chạm tới hoặc chỗ nó thấy lấn cấn.
+                "cites_span_id": result.get("cites_span_id"),
+            },
+        )
         async for chunk in tts.synthesize(said):
             # Cũng phải chấm mốc ở đây: talker có thể không ra tiếng nào (stream
             # hỏng, hoặc bị bộ lọc cắt sạch). Chỉ chấm trong vòng lặp talker thì

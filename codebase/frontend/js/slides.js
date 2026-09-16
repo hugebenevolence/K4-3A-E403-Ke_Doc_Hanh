@@ -74,6 +74,16 @@ export async function show(n) {
   );
 }
 
+let focused = null;
+
+/** Tô đậm một span cụ thể — dùng khi học viên bấm "Xem trên slide". */
+export function focusSpan(spanId) {
+  focused = spanId;
+  for (const box of marks.children) {
+    box.classList.toggle("focused", box.dataset.span === spanId);
+  }
+}
+
 function drawMarks(scale, pageHeight) {
   marks.replaceChildren();
   marks.style.width = `${canvas.clientWidth}px`;
@@ -87,11 +97,12 @@ function drawMarks(scale, pageHeight) {
     const [x0, y0, x1, y1] = span.bbox;
     const box = document.createElement("div");
     box.className = "mark";
+    box.dataset.span = span.span_id;
+    if (span.span_id === focused) box.classList.add("focused");
     box.style.left = `${x0 * scale}px`;
     box.style.top = `${y0 * scale}px`;
     box.style.width = `${(x1 - x0) * scale}px`;
     box.style.height = `${(y1 - y0) * scale}px`;
-    box.title = span.span_id;
     marks.append(box);
   }
 }

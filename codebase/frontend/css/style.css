@@ -181,9 +181,57 @@ h1, h2 { margin: 0; font-weight: 600; }
   border-radius: var(--radius);
 }
 
-.line { margin: 0 0 12px; }
+.line { margin: 0 0 14px; }
 .line.student { font-weight: 600; }
 .line.filler { color: var(--ink-3); font-style: italic; }
+
+.who {
+  display: block;
+  font-size: var(--caption);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+/* Box trích dẫn gắn dưới câu của agent: cho thấy nó dựa vào đúng chữ nào. */
+.citation {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(120, 120, 128, 0.08);
+  border-left: 3px solid var(--tint);
+}
+
+.citation figcaption {
+  font-size: var(--caption);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  font-weight: 600;
+}
+
+.citation blockquote {
+  margin: 4px 0 0;
+  font-size: var(--footnote);
+  color: var(--ink-2);
+}
+
+/* Ý học viên chưa nói tới: cố ý KHÔNG in nguyên văn giữa phiên. */
+.withheld {
+  margin: 6px 0 0;
+  font-size: var(--footnote);
+  font-style: italic;
+  color: var(--ink-3);
+}
+
+/* Vùng được trỏ tới khi bấm "Xem trên slide". */
+.mark.focused {
+  border-color: var(--tint);
+  background: rgba(10, 99, 201, 0.16);
+  box-shadow: 0 0 0 4px rgba(10, 99, 201, 0.14);
+}
 
 .partial {
   margin: 0;

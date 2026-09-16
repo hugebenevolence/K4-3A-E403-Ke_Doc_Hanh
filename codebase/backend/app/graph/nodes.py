@@ -207,8 +207,13 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
 
 
 async def close_taught(state: TeachBackState) -> TeachBackState:
+    # Trích lại chính ý học viên vừa dạy được: đây là lúc trích dẫn có giá trị
+    # nhất và an toàn tuyệt đối — họ đã tự nói ra ý đó rồi, không lộ gì cả, mà
+    # lại thấy công mình vừa bỏ ra ứng với đúng chỗ nào trên slide.
+    covered = [e["span_id"] for e in (state.get("evidence") or []) if e.get("covered_by_student")]
     return {
         "agent_says": "À mình hiểu rồi! Cảm ơn bạn, giờ mình thấy rõ chỗ đó rồi.",
+        "cites_span_id": covered[0] if covered else None,
         "turn_state": TurnState.TAUGHT.name,
     }
 
@@ -217,10 +222,15 @@ async def close_review(state: TeachBackState) -> TeachBackState:
     # Hết lượt hỏi mà chưa đủ: KHÔNG nói đáp án, không phán học viên sai — chỉ
     # trỏ về chỗ nên xem lại. Đây là ràng buộc đạo đức của track, không phải
     # lựa chọn về giọng điệu.
+    # Hết phiên rồi thì trỏ thẳng vào chỗ cần xem lại — đây đúng là việc track
+    # D3 yêu cầu ("gợi ý học viên xem lại đoạn nào"), và không còn là lộ đáp án
+    # vì không còn lượt nào để họ tự tìm nữa.
+    review = state.get("review_span_ids") or []
     return {
         "agent_says": (
             "Cảm ơn bạn đã giảng cho mình. Mình vẫn còn lấn cấn một chỗ — "
             "bạn xem lại giúp mình đoạn được đánh dấu rồi mình học lại nhé."
         ),
+        "cites_span_id": review[0] if review else None,
         "turn_state": TurnState.SUGGEST_REVIEW.name,
     }
