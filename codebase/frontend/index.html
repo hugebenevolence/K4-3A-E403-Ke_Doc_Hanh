@@ -26,10 +26,22 @@
 
     <main class="stage">
       <div class="slide-bar">
-        <button id="prev-page">Trước</button>
+        <button id="prev-page" title="Trang trước (←)">Trước</button>
         <span class="counter">Slide <b id="page-now">–</b> / <span id="page-total">–</span></span>
-        <button id="next-page">Sau</button>
-        <button id="goto-source" class="quiet">Về trang đang dạy</button>
+        <button id="next-page" title="Trang sau (→)">Sau</button>
+
+        <span class="sep" aria-hidden="true"></span>
+
+        <button id="zoom-out" title="Thu nhỏ">Thu nhỏ</button>
+        <span id="zoom-level" class="counter">100%</span>
+        <button id="zoom-in" title="Phóng to">Phóng to</button>
+
+        <span class="sep" aria-hidden="true"></span>
+
+        <button id="focus-btn" aria-pressed="false" title="Chỉ xem vùng đang dạy (F)">
+          Vùng đang dạy
+        </button>
+        <button id="goto-source" class="quiet" title="Về trang đang dạy (G)">Về trang đang dạy</button>
       </div>
       <div id="slide-wrap" class="slide-wrap">
         <canvas id="slide"></canvas>

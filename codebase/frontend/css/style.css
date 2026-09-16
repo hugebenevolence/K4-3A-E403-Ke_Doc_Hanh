@@ -136,8 +136,41 @@ h1, h2 { margin: 0; font-weight: 600; }
 /* ---------- slide ---------- */
 .stage { display: flex; flex-direction: column; min-width: 0; padding: 16px; gap: 12px; }
 
-.slide-bar { display: flex; align-items: center; gap: 10px; flex: none; }
-.counter { font-size: var(--footnote); color: var(--ink-2); }
+/* Thanh công cụ: gom theo nhóm việc, ngăn bằng vạch mảnh như thanh công cụ
+   của macOS — mắt tìm nhanh hơn một hàng nút dàn đều. */
+.slide-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 6px 8px;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 10px;
+  overflow-x: auto;
+}
+
+.slide-bar button { padding: 5px 10px; }
+.counter { font-size: var(--footnote); color: var(--ink-2); white-space: nowrap; }
+.sep { width: 1px; height: 18px; background: var(--hair); flex: none; }
+
+/* Nút bật/tắt: trạng thái bật phải nhìn ra ngay, và báo cả bằng aria-pressed. */
+button[aria-pressed="true"] {
+  background: var(--tint);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* Chế độ vùng đang dạy: làm mờ phần còn lại để học viên và agent cùng bàn về
+   đúng một chỗ. Slide dày chữ thì ý cốt lõi rất dễ trôi giữa thứ xung quanh. */
+body.spotlight #slide { filter: grayscale(0.6) contrast(0.82) opacity(0.5); }
+
+body.spotlight .mark {
+  border-width: 3px;
+  background: transparent;
+  /* Khoét một "lỗ sáng": phần trong khung giữ nguyên, ngoài khung bị phủ. */
+  box-shadow: 0 0 0 9999px rgba(255, 255, 255, 0.55);
+}
 
 .slide-wrap {
   position: relative;

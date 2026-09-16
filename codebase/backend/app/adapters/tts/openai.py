@@ -36,6 +36,7 @@ class OpenAITTS(TextToSpeech):
             voice=self._voice,
             input=sentence,
             response_format="mp3",
+            speed=settings.tts_speed,
         )
         # Đúng MỘT lần yield, cả câu trong một file mp3 trọn vẹn: frontend nạp
         # thẳng từng frame vào thẻ <audio>, mảnh byte dở dang sẽ không giải mã

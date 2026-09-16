@@ -16,7 +16,7 @@ import {
   resetReveal,
   revealEverything,
 } from "./evidence.js";
-import { loadSlides, show, sourcePage, step } from "./slides.js";
+import { loadSlides, setZoom, show, sourcePage, step } from "./slides.js";
 
 const API = `http://${location.hostname}:8000`;
 const MIC_STATES = new Set(["STUDENT_TEACHING", "STUDENT_RESPONDING"]);
@@ -196,10 +196,23 @@ doneBtn.addEventListener("click", () => {
 });
 
 document.addEventListener("keydown", (e) => {
-  if (!document.body.classList.contains("focus") || !isTalkKey(e) || e.repeat) return;
-  if (document.activeElement === textInput) return; // đang gõ chữ thì Space là dấu cách
-  e.preventDefault();
+  // Đang gõ chữ thì bàn phím thuộc về ô nhập, không phải phím tắt.
+  if (document.activeElement === textInput || e.repeat) return;
 
+  // Phím tắt điều hướng slide, dùng được cả khi chưa mở phiên.
+  const shortcuts = {
+    ArrowLeft: () => step(-1),
+    ArrowRight: () => step(1),
+    KeyF: () => toggleFocus(),
+    KeyG: () => show(sourcePage()),
+  };
+  if (!e.ctrlKey && !e.metaKey && !e.altKey && shortcuts[e.code]) {
+    e.preventDefault();
+    return shortcuts[e.code]();
+  }
+
+  if (!document.body.classList.contains("focus") || !isTalkKey(e)) return;
+  e.preventDefault();
   if (isPlaying) skipAgentAudio();
   else finishSpeaking();
 });
@@ -266,8 +279,28 @@ startBtn.addEventListener("click", () => {
   };
 });
 
+const focusBtn = $("focus-btn");
+
+/** Chế độ vùng đang dạy: làm mờ phần còn lại của slide.
+ *
+ * Mục đích là để học viên và agent cùng bàn về ĐÚNG một chỗ. Slide 44 trang
+ * với chữ dày đặc thì "ý cốt lõi" dễ trôi mất giữa những thứ xung quanh. */
+function toggleFocus(on) {
+  const next = on ?? !document.body.classList.contains("spotlight");
+  document.body.classList.toggle("spotlight", next);
+  focusBtn.setAttribute("aria-pressed", String(next));
+  if (next) show(sourcePage());
+}
+
+focusBtn.addEventListener("click", () => {
+  focusBtn.blur();
+  toggleFocus();
+});
+
 document.getElementById("prev-page").addEventListener("click", () => step(-1));
 document.getElementById("next-page").addEventListener("click", () => step(1));
+document.getElementById("zoom-in").addEventListener("click", () => setZoom(1));
+document.getElementById("zoom-out").addEventListener("click", () => setZoom(-1));
 document
   .getElementById("goto-source")
   .addEventListener("click", () => show(sourcePage()));

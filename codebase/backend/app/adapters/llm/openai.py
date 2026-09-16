@@ -58,6 +58,7 @@ class OpenAILLM(LLMClient):
             input=user,
             text_format=schema,
             reasoning={"effort": _EFFORT[tier]},
+            service_tier=settings.openai_service_tier,
         )
         parsed = response.output_parsed
         if parsed is None:
@@ -74,6 +75,7 @@ class OpenAILLM(LLMClient):
             instructions=system,
             input=user,
             reasoning={"effort": _EFFORT[tier]},
+            service_tier=settings.openai_service_tier,
             stream=True,
         )
         async for event in events:

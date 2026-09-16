@@ -29,6 +29,19 @@ class Settings(BaseSettings):
     model_judge: str = "gpt-5"
     model_tts: str = "gpt-4o-mini-tts"  # tts-1 đo được 44s/câu, không dùng được
 
+    # Đo thật trên node chấm: default 5249ms -> priority 1689ms, nhanh gấp 3.1
+    # lần chỉ bằng một tham số. Đắt hơn mỗi token nhưng mỗi lượt vẫn ~$0.002,
+    # và độ trễ là điểm yếu lớn nhất của sản phẩm. Đặt "default" để tiết kiệm.
+    openai_service_tier: str = "priority"
+
+    # Giọng đọc nhanh hơn mặc định: cùng thời gian sinh nhưng rút ~20% thời
+    # gian nghe, và học viên đang chờ để tới lượt mình nói.
+    tts_speed: float = 1.5
+
+    # Câu đệm lúc chờ chấm. Tắt vì đo được nó chậm hơn chính khoảng nó định
+    # lấp — xem ghi chú dài trong api/session.py.
+    enable_talker: bool = False
+
     # Bài thật nằm ngoài repo (data pack không commit được). Khi USE_MOCKS=true
     # thì dùng bài demo tự bịa trong fixtures/ để repo chạy được ngay.
     lesson_file: Path = REPO_ROOT / "knowledge" / "lesson.json"

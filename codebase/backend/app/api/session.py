@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from time import perf_counter
 from typing import Any, Literal
 
+from app.config import settings
 from app.domain.sanitize import sanitize_spoken
 from app.ports.llm import LLMClient, ModelTier
 from app.ports.tts import TextToSpeech
@@ -108,32 +109,40 @@ async def run_turn(
         # Talker: chỉ được nhắc lại lời học viên, tuyệt đối không chốt đúng/sai —
         # lúc nó nói thì reasoner còn chưa có kết quả. Luật này nằm trong prompt
         # talker/v1.md và phải có case eval riêng canh chừng.
-        talker_tokens = llm.stream(
-            system=registry.compose_system("talker", TALKER_VERSION),
-            # Không dán nhãn "Học viên" ở đây: model echo lại thành "Ừm, học
-            # viên nói rằng..." — gọi người đối diện ở ngôi thứ ba, nghe như
-            # máy đọc biên bản chứ không phải bạn học đang nghe giảng.
-            user=f"Nội dung vừa nghe được:\n{state['student_text']}",
-            tier=ModelTier.FAST,
-        )
-        async for raw in sentence_chunks(talker_tokens):
-            if not (sentence := sanitize_spoken(raw)):
-                continue
-            yield Event("transcript", {"role": "agent", "text": sentence, "filler": True})
-            # Đẩy từng chunk ra ngay. Gom đủ cả câu rồi mới gửi là cộng dồn
-            # latency đúng bằng thời gian tổng hợp cả câu.
-            async for chunk in tts.synthesize(sentence):
-                first_audio_ms = _mark(first_audio_ms, started)
-                yield Event("audio", chunk)
+        #
+        # MẶC ĐỊNH TẮT, và đây là kết luận từ số đo chứ không phải bỏ cho gọn:
+        # sau khi bật service_tier=priority, node chấm chỉ còn ~1.7s, trong khi
+        # talker cần ~1.8s gọi LLM + ~2.4s TTS = ~4.2s mới ra được câu đệm. Nó
+        # không thể lấp một khoảng ngắn hơn chính nó — bật lên chỉ làm học viên
+        # phải nghe thêm một câu thừa rồi mới tới câu hỏi thật. Phần "agent
+        # đang làm gì" giờ do chỉ báo tiến trình trên màn hình lo, hiện tức thì
+        # và không tốn token. Bật lại nếu đổi sang tier chậm hoặc model chậm.
+        if settings.enable_talker:
+            talker_tokens = llm.stream(
+                system=registry.compose_system("talker", TALKER_VERSION),
+                # Không dán nhãn "Học viên" ở đây: model echo lại thành "Ừm,
+                # học viên nói rằng..." — gọi người đối diện ở ngôi thứ ba,
+                # nghe như máy đọc biên bản chứ không phải bạn học nghe giảng.
+                user=f"Nội dung vừa nghe được:\n{state['student_text']}",
+                tier=ModelTier.FAST,
+            )
+            async for raw in sentence_chunks(talker_tokens):
+                if not (sentence := sanitize_spoken(raw)):
+                    continue
+                yield Event(
+                    "transcript", {"role": "agent", "text": sentence, "filler": True}
+                )
+                async for chunk in tts.synthesize(sentence):
+                    first_audio_ms = _mark(first_audio_ms, started)
+                    yield Event("audio", chunk)
 
-            # ĐÚNG MỘT CÂU, cắt bằng code chứ không tin prompt. Quan sát thật:
-            # talker nói ba câu, và câu thứ ba là "Bạn có muốn mình gợi ý cách
-            # diễn đạt lại ý này ngắn gọn hơn để học thuộc không?" — vừa phá
-            # vai học trò (đang đề nghị dạy lại học viên) vừa phá tiền đề của
-            # cả track (dạy để hiểu, không phải học thuộc). Câu đầu gần như
-            # luôn là câu nhắc lại đúng ý; những câu sau là chỗ model bắt đầu
-            # tự diễn.
-            break
+                # ĐÚNG MỘT CÂU, cắt bằng code chứ không tin prompt. Quan sát
+                # thật: talker nói ba câu, và câu thứ ba là "Bạn có muốn mình
+                # gợi ý cách diễn đạt lại ý này ngắn gọn hơn để học thuộc
+                # không?" — vừa phá vai học trò (đang đề nghị dạy lại học viên)
+                # vừa phá tiền đề của cả track. Câu đầu gần như luôn là câu
+                # nhắc lại đúng ý; những câu sau là chỗ model bắt đầu tự diễn.
+                break
 
         # Báo từng bước agent vừa làm xong, để học viên thấy nó đang đối chiếu
         # với slide thật chứ không phải ngồi chờ một hộp đen.

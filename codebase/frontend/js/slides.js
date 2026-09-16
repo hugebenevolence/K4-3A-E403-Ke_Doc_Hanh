@@ -18,6 +18,18 @@ let doc = null;
 let current = 1;
 let spans = [];
 let rendering = false;
+let zoom = 1;
+
+const ZOOM_STEPS = [0.75, 1, 1.25, 1.5, 2];
+
+export function setZoom(delta) {
+  const now = ZOOM_STEPS.indexOf(zoom);
+  const next = Math.min(Math.max(now + delta, 0), ZOOM_STEPS.length - 1);
+  if (ZOOM_STEPS[next] === zoom) return;
+  zoom = ZOOM_STEPS[next];
+  document.getElementById("zoom-level").textContent = `${Math.round(zoom * 100)}%`;
+  show(current);
+}
 
 export async function loadSlides(url, lessonSpans) {
   spans = lessonSpans.filter((s) => s.page && s.bbox);
@@ -52,7 +64,7 @@ export async function show(n) {
     const page = await doc.getPage(current);
     // Vẽ vừa bề ngang khung, nhưng nhân devicePixelRatio để không bị rỗ trên
     // màn hình retina.
-    const wrapWidth = canvas.parentElement.clientWidth;
+    const wrapWidth = canvas.parentElement.clientWidth * zoom;
     const base = page.getViewport({ scale: 1 });
     const scale = wrapWidth / base.width;
     const viewport = page.getViewport({ scale: scale * devicePixelRatio });
