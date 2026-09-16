@@ -1,0 +1,53 @@
+:root {
+  color-scheme: light dark;
+  --ink: #1a2420;
+  --bg: #f5f7f3;
+  --accent: #b9871f;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 32px 20px;
+}
+
+.controls {
+  display: flex;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+button {
+  font-size: 15px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  cursor: pointer;
+}
+
+#raise-hand-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+}
+
+#raise-hand-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+#transcript {
+  margin-top: 24px;
+  padding: 16px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  min-height: 120px;
+  white-space: pre-wrap;
+}

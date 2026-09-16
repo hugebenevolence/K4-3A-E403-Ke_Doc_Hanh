@@ -1,0 +1,15 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-dotenv==1.0.1
+websockets==13.1
+pydantic==2.9.2
+
+# STT/TTS — chọn provider theo research (xem hồ sơ baseline), bỏ comment dòng cần dùng:
+# openai-whisper           # STT offline, không hợp giọng địa phương tốt bằng PhoWhisper
+# transformers             # để chạy PhoWhisper (vinai/PhoWhisper-*) local
+# elevenlabs               # STT (Scribe) + TTS (Flash v2.5), latency thấp, có SDK Python
+# deepgram-sdk             # STT streaming latency thấp
+
+# LLM — chọn 1
+# openai
+# anthropic

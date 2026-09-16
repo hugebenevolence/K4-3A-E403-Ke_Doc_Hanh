@@ -1,0 +1,26 @@
+# BTC data pack — never commit (bảo mật dữ liệu, xem README gốc của đề bài)
+/data/
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# node
+node_modules/
+dist/
+.vite/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

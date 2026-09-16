@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kẻ Độc Hành — Lớp học mô phỏng</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <main>
+    <h1>Ôn khái niệm cùng bạn học AI</h1>
+    <p id="status">Chưa kết nối</p>
+
+    <div class="controls">
+      <button id="start-btn">Bắt đầu phiên</button>
+      <button id="raise-hand-btn" disabled>🖐️ Giơ tay ngắt lời</button>
+    </div>
+
+    <section id="transcript" aria-live="polite"></section>
+
+    <audio id="ai-audio" autoplay></audio>
+  </main>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
