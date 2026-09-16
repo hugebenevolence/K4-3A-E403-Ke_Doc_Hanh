@@ -1,8 +1,12 @@
 """Điều phối một lượt: talker nói đệm SONG SONG với reasoner chấm.
 
-Đây là chỗ quyết định cảm giác nhanh/chậm của cả sản phẩm. Chạy tuần tự
-(chấm xong mới nói) thì học viên ngồi im 1-2 giây sau mỗi lượt. Chạy song song
-thì tiếng nói đầu tiên ra trong ~400ms, còn kết quả chấm về lúc talker vừa dứt.
+Đây là chỗ quyết định cảm giác nhanh/chậm của cả sản phẩm.
+
+SỐ ĐO THẬT (gpt-5-nano/mini, reasoning effort minimal): talker mất ~1.8s tới
+token đầu, node chấm mất 3.4–6.7s. Chạy song song nên tổng ≈ thời gian chấm chứ
+không phải cộng dồn. Nhưng mục tiêu "tiếng đầu ra trong 400ms" đặt lúc thiết kế
+là KHÔNG đạt được với một lượt gọi LLM — muốn đạt thì phải phát một câu đệm
+dựng sẵn (không qua LLM) ngay khi lượt kết thúc.
 
 Talker cố ý KHÔNG nằm trong graph: nó không tham gia quyết định gì, chỉ lấp
 khoảng chờ. Nhét vào graph sẽ buộc phải chờ nó xong mới chạy tiếp — đúng cái
@@ -34,6 +38,11 @@ _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 class Event:
     kind: Literal["state", "transcript", "audio", "turn_done"]
     payload: Any
+
+
+def _mark(existing: int | None, started: float) -> int:
+    """Chấm mốc lần đầu tiên và giữ nguyên ở các lần sau."""
+    return existing if existing is not None else int((perf_counter() - started) * 1000)
 
 
 async def sentence_chunks(tokens: AsyncIterator[str]) -> AsyncIterator[str]:
@@ -84,8 +93,7 @@ async def run_turn(
             # Đẩy từng chunk ra ngay. Gom đủ cả câu rồi mới gửi là cộng dồn
             # latency đúng bằng thời gian tổng hợp cả câu.
             async for chunk in tts.synthesize(sentence):
-                if first_audio_ms is None:
-                    first_audio_ms = int((perf_counter() - started) * 1000)
+                first_audio_ms = _mark(first_audio_ms, started)
                 yield Event("audio", chunk)
 
         # Không có timeout thì provider treo là học viên ngồi im vô hạn, không
@@ -97,6 +105,11 @@ async def run_turn(
         )
         yield Event("transcript", {"role": "agent", "text": said, "filler": False})
         async for chunk in tts.synthesize(said):
+            # Cũng phải chấm mốc ở đây: talker có thể không ra tiếng nào (stream
+            # hỏng, hoặc bị bộ lọc cắt sạch). Chỉ chấm trong vòng lặp talker thì
+            # những lượt đó báo first_audio=0ms trong khi thực tế chờ vài giây —
+            # mà đây đúng là con số đang dùng để quyết kiến trúc.
+            first_audio_ms = _mark(first_audio_ms, started)
             yield Event("audio", chunk)
 
         yield Event(

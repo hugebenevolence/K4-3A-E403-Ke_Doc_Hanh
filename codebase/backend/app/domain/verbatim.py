@@ -12,10 +12,22 @@ import unicodedata
 from difflib import SequenceMatcher
 
 LONGEST_RUN_WORDS = 12
-"""Chuỗi trùng liên tiếp từ ngần này từ trở lên thì khó là trùng hợp ngẫu nhiên."""
+"""Chuỗi trùng liên tiếp từ ngần này từ trở lên thì khó là trùng hợp ngẫu nhiên.
 
-OVERLAP_RATIO = 0.6
-"""Quá ngần này tỉ lệ lời học viên là chữ của nguồn thì coi như đang đọc lại."""
+Đây là tín hiệu ĐÁNG TIN nhất: chép thì trùng dài liền mạch, tự nói thì không.
+"""
+
+MIN_WORDS_FOR_RATIO = 25
+"""Dưới ngần này từ thì tỉ lệ trùng là nhiễu, không được dùng để kết luận.
+
+Câu ngắn mà đúng thì gần như toàn từ chủ đề lấy từ bài — "áp suất giảm nên nước
+sôi ở nhiệt độ thấp hơn" cho ratio 1.00 dù học viên tự nghĩ ra. Áp luật tỉ lệ ở
+đây là vu cho người trả lời đúng tội đọc lại sách, đúng thứ tệ nhất hệ thống
+này có thể làm.
+"""
+
+OVERLAP_RATIO = 0.8
+"""Với câu đủ dài, quá ngần này là đang ghép chữ của nguồn chứ không tự diễn đạt."""
 
 
 def _words(text: str) -> list[str]:
@@ -37,4 +49,8 @@ def verbatim_overlap(student_text: str, source_text: str) -> tuple[float, int]:
 
 def is_verbatim_paste(student_text: str, source_text: str) -> bool:
     ratio, longest = verbatim_overlap(student_text, source_text)
-    return longest >= LONGEST_RUN_WORDS or ratio >= OVERLAP_RATIO
+    if longest >= LONGEST_RUN_WORDS:
+        return True
+    return (
+        len(_words(student_text)) >= MIN_WORDS_FOR_RATIO and ratio >= OVERLAP_RATIO
+    )
