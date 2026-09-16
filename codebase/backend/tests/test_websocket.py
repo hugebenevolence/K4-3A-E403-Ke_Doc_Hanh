@@ -82,14 +82,14 @@ def test_ngat_ket_noi_giua_chung_khong_lam_server_no(client):
 
 def test_lesson_lay_tu_file_chu_khong_hardcode(client):
     body = client.get("/lesson").json()
-    assert body["concept"] and body["source_span_ids"]
-    assert all(s.startswith("[") for s in body["source_span_ids"])
+    assert body["concept"] and body["spans"]
+    assert all(s["span_id"].startswith("[") for s in body["spans"])
 
 
 def test_ket_phien_goi_y_dung_doan_co_that(client):
     """Hết lượt hỏi thì phải trỏ được về đoạn CÓ THẬT để xem lại — nếu bộ lọc
     mã bịa loại sạch evidence thì tính năng này im lặng chết."""
-    spans = client.get("/lesson").json()["source_span_ids"]
+    spans = [s["span_id"] for s in client.get("/lesson").json()["spans"]]
 
     with client.websocket_connect("/ws/session") as ws:
         ws.receive_json()
