@@ -11,10 +11,10 @@ from app.adapters.llm.mock import MockLLM
 from app.adapters.tts.mock import MockTTS
 from app.api.session import run_turn, sentence_chunks
 from app.domain.session import MAX_FOLLOWUPS, TeachBackSession, TurnState
+from app.domain.span import Span
 from app.domain.verbatim import is_verbatim_paste
 from app.domain.verdict import Evidence, GradeResult, Verdict
 from app.graph.build import build_graph
-from app.domain.span import Span
 
 SOURCE = Span(
     span_id="[T06-138]",
@@ -33,16 +33,16 @@ def _grade(verdict: Verdict, covered: bool = False) -> GradeResult:
     )
 
 
-def test_day_duoc_ket_phien_ngay():
+def test_sufficient_ket_phien_ngay():
     s = TeachBackSession(source_span_id="[T06-138]", concept="hallucination")
-    assert s.record(_grade(Verdict.DAY_DUOC, covered=True)) is TurnState.TAUGHT
+    assert s.record(_grade(Verdict.SUFFICIENT, covered=True)) is TurnState.TAUGHT
 
 
 def test_het_luot_hoi_thi_goi_y_xem_lai_chu_khong_noi_dap_an():
     s = TeachBackSession(source_span_id="[T06-138]", concept="hallucination")
     for _ in range(MAX_FOLLOWUPS):
-        assert s.record(_grade(Verdict.HO)) is TurnState.ASKING_FOLLOWUP
-    assert s.record(_grade(Verdict.HO)) is TurnState.SUGGEST_REVIEW
+        assert s.record(_grade(Verdict.INCOMPLETE)) is TurnState.ASKING_FOLLOWUP
+    assert s.record(_grade(Verdict.INCOMPLETE)) is TurnState.SUGGEST_REVIEW
     assert s.review_span_ids == ("[T06-138]",)
 
 
@@ -94,7 +94,7 @@ def test_graph_chay_het_luot_va_talker_noi_truoc_ket_qua_cham():
 
         final = events[first_state].payload
         assert final["turn_state"] == TurnState.STUDENT_RESPONDING.name
-        assert final["verdict"] == "ho"
+        assert final["verdict"] == "incomplete"
 
     asyncio.run(main())
 
