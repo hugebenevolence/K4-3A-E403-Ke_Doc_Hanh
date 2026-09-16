@@ -28,7 +28,7 @@ from app.domain.log import TurnLog
 from app.domain.session import TurnState
 from app.domain.verdict import Evidence, GradeResult, Verdict
 from app.graph.build import build_graph
-from app.graph.nodes import GRADER_VERSION, PERSONA_VERSION
+from app.graph.nodes import GRADER_VERSION, PERSONA_VERSION, open_session
 from app.ports.knowledge import SpanStore
 from app.ports.llm import LLMClient
 from app.ports.store import ProfileStore, SessionLog
@@ -167,6 +167,21 @@ async def teach_back_session(ws: WebSocket):
         """Chữ chạy lên màn hình khi học viên còn đang nói — không có cái này
         thì họ nói vào khoảng không, không biết mic có ăn hay không."""
         await ws.send_json({"type": "partial", "text": text})
+
+    # Mở bài bằng một câu hỏi cụ thể thay vì để học viên nhìn ô trống tự nghĩ
+    # xem nên nói gì. Hỏng thì vẫn vào phiên được — mất câu mở bài còn hơn mất
+    # cả phiên vì một lượt gọi LLM trục trặc.
+    try:
+        opening = await open_session(
+            llm, spans, list(lesson.source_span_ids), profile.recurring_gaps, lesson.concept
+        )
+        await ws.send_json(
+            {"type": "transcript", "role": "agent", "text": opening, "filler": False}
+        )
+        for chunk in [c async for c in tts.synthesize(opening)]:
+            await ws.send_bytes(chunk)
+    except Exception:
+        log.exception("Mở bài hỏng ở phiên %s", session_id)
 
     await ws.send_json({"type": "state", "state": TurnState.STUDENT_TEACHING.name})
 

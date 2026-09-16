@@ -47,6 +47,21 @@ def verbatim_overlap(student_text: str, source_text: str) -> tuple[float, int]:
     return matched / len(student), longest
 
 
+QUOTE_RUN_WORDS = 6
+"""Ngưỡng cho câu AGENT nói ra, chặt hơn nhiều so với ngưỡng chấm học viên.
+
+Học viên trùng vài từ với bài là bình thường — họ đang nói về đúng chủ đề đó.
+Agent thì khác: một câu hỏi mở bài hay hỏi ngược không có lý do gì trùng liền
+mạch sáu từ với nguồn, trừ khi nó đang chép lại câu mà học viên phải tự nói.
+"""
+
+
+def quotes_source(agent_text: str, source_text: str) -> bool:
+    """Agent có đang trích nguyên văn đoạn nguồn không."""
+    _, longest = verbatim_overlap(agent_text, source_text)
+    return longest >= QUOTE_RUN_WORDS
+
+
 def is_verbatim_paste(student_text: str, source_text: str) -> bool:
     ratio, longest = verbatim_overlap(student_text, source_text)
     if longest >= LONGEST_RUN_WORDS:

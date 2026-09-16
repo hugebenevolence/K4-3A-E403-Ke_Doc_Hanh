@@ -28,6 +28,7 @@ BASE_LAYERS: dict[str, tuple[str, ...]] = {
     "grader": ("guardrails_v1",),  # chấm, không nói với ai → không cần lớp persona
     "talker": ("guardrails_v1", "persona_v1"),
     "student_persona": ("guardrails_v1", "persona_v1"),
+    "opener": ("guardrails_v1", "persona_v1"),
 }
 
 

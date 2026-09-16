@@ -11,7 +11,7 @@ import logging
 from app.domain.leak import leaked_terms, leaks_answer
 from app.domain.session import TeachBackSession, TurnState
 from app.domain.span import normalize_span_id
-from app.domain.verbatim import is_verbatim_paste
+from app.domain.verbatim import is_verbatim_paste, quotes_source
 from app.domain.verdict import Evidence, GradeResult, decide
 from app.graph.state import TeachBackState
 from app.ports.knowledge import SpanStore
@@ -23,6 +23,57 @@ log = logging.getLogger(__name__)
 
 GRADER_VERSION = "v2"
 PERSONA_VERSION = "v1"
+OPENER_VERSION = "v1"
+
+
+async def open_session(
+    llm: LLMClient,
+    spans: SpanStore,
+    lesson_span_ids: list[str],
+    recurring_gaps: dict,
+    concept: str = "khái niệm này",
+) -> str:
+    """Câu mở bài: mời học viên dạy, neo vào một chỗ cụ thể trong nguồn.
+
+    Không có bước này thì học viên bấm "Bắt đầu phiên" xong nhìn một ô trống và
+    phải tự nghĩ ra nên nói gì — đó là lúc hầu hết người ta bỏ cuộc, hoặc đọc
+    lại slide cho xong. Một câu hỏi cụ thể buộc người ta phải dừng lại nghĩ,
+    và đó mới là điểm của cả bài tập này.
+    """
+    source = await spans.get_many(lesson_span_ids)
+    hint = (
+        "\n\nBuổi trước bạn ấy cũng chưa thông đúng chỗ này — có thể nhắc nhẹ, "
+        "nhưng vẫn phải là câu hỏi mở, không phải câu dò bài."
+        if any(recurring_gaps.get(s) for s in lesson_span_ids)
+        else ""
+    )
+    system = registry.compose_system("opener", OPENER_VERSION, source)
+    body = "\n".join(s.text for s in source)
+
+    for attempt in range(2):
+        out = await llm.structured(
+            system=system,
+            user=f"Hãy mở đầu buổi học.{hint}",
+            schema=FollowupOutput,
+            tier=ModelTier.STANDARD,
+        )
+        # Model rất hay mở bài bằng cách TRÍCH THẲNG nguồn ("mình thấy nguồn
+        # nói ... — giải thích chỗ đó nhé?"), tức là đọc hộ đúng câu học viên
+        # phải tự nói ra. Prompt cấm nhưng không giữ được, nên chặn bằng luật:
+        # một câu hỏi mở bài không có lý do gì trùng liền mạch với nguồn.
+        if quotes_source(out.question, body):
+            log.warning("Câu mở bài trích nguyên văn nguồn, viết lại (lần %d)", attempt + 1)
+            hint += (
+                "\n\nCÂU BẠN VỪA VIẾT ĐÃ TRÍCH NGUYÊN VĂN ĐOẠN NGUỒN. Viết lại, "
+                "chỉ nêu HIỆN TƯỢNG bằng lời của bạn, tuyệt đối không chép chữ "
+                "nào liền mạch từ nguồn."
+            )
+            continue
+        return out.question
+
+    # Viết lại vẫn trích thì thà mở bài nhạt còn hơn đọc hộ bài.
+    log.warning("Mở bài vẫn trích nguồn sau khi viết lại, dùng câu an toàn")
+    return f"Bạn giảng cho mình nghe về {concept} đi, mình chưa nắm được chỗ này."
 
 
 def make_grade_node(llm: LLMClient, spans: SpanStore):
