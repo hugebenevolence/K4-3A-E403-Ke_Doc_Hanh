@@ -8,6 +8,9 @@
 // xong. Thiếu vế sau thì mic bắt lại chính giọng agent qua loa, STT sẽ nghe
 // agent nói và tưởng là học viên.
 
+import { loadSlides, show, sourcePage, step } from "./slides.js";
+
+const API = `http://${location.hostname}:8000`;
 const MIC_STATES = new Set(["STUDENT_TEACHING", "STUDENT_RESPONDING"]);
 
 // Phím chốt lượt. Space vì đây là quy ước sẵn có cho thoại (push-to-talk),
@@ -175,7 +178,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 startBtn.addEventListener("click", () => {
-  ws = new WebSocket(`ws://${location.hostname}:8000/ws/session`);
+  ws = new WebSocket(`${API.replace("http", "ws")}/ws/session`);
   ws.binaryType = "blob";
   startBtn.disabled = true;
   startBtn.blur();
@@ -220,9 +223,25 @@ startBtn.addEventListener("click", () => {
   };
 });
 
-// Khái niệm cần dạy lấy từ backend, không chép cứng vào HTML — đổi bài là đổi
-// file bài học, không phải sửa hai chỗ.
-fetch(`http://${location.hostname}:8000/lesson`)
+document.getElementById("prev-page").addEventListener("click", () => step(-1));
+document.getElementById("next-page").addEventListener("click", () => step(1));
+document
+  .getElementById("goto-source")
+  .addEventListener("click", () => show(sourcePage()));
+
+// Khái niệm và slide đều lấy từ backend, không chép cứng vào HTML — đổi bài là
+// đổi file bài học, không phải sửa hai chỗ.
+fetch(`${API}/lesson`)
   .then((r) => r.json())
-  .then((l) => (conceptEl.textContent = l.concept))
-  .catch(() => (conceptEl.textContent = "(không kết nối được backend)"));
+  .then(async (lesson) => {
+    conceptEl.textContent = lesson.concept;
+    if (!lesson.has_slides) {
+      document.getElementById("no-slides").hidden = false;
+      return;
+    }
+    await loadSlides(`${API}/slides.pdf`, lesson.spans);
+  })
+  .catch((e) => {
+    conceptEl.textContent = "(không kết nối được backend)";
+    console.error(e);
+  });

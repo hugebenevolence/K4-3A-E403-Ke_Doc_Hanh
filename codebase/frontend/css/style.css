@@ -1,154 +1,237 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --ink: #1a2420;
+  --muted: #667;
   --bg: #f5f7f3;
+  --panel: #fff;
+  --line: #dde1dc;
   --accent: #b9871f;
+  --brand: #16326b;
 }
+
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
   font-family: system-ui, sans-serif;
   background: var(--bg);
   color: var(--ink);
-}
-
-main {
-  max-width: 640px;
-  margin: 0 auto;
-  padding: 32px 20px;
-}
-
-.controls {
+  height: 100vh;
   display: flex;
-  gap: 12px;
-  margin: 20px 0;
+  flex-direction: column;
 }
 
-button {
-  font-size: 15px;
-  padding: 10px 16px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
+/* ---- thanh trên ---- */
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 10px 18px;
+  background: var(--brand);
+  color: #fff;
+  flex: none;
+}
+
+.crumb { font-weight: 600; }
+.concept { opacity: 0.9; font-size: 14px; }
+.status { margin-left: auto; font-size: 14px; opacity: 0.9; }
+
+/* ---- ba cột: mục lục · slide · khung dạy ---- */
+.layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) 380px;
+  min-height: 0;
+}
+
+.sidebar,
+.panel {
+  background: var(--panel);
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.sidebar { border-right: 1px solid var(--line); }
+.panel { border-left: 1px solid var(--line); display: flex; flex-direction: column; }
+
+.sidebar h2 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.page-list { list-style: none; margin: 0; padding: 0; font-size: 14px; }
+
+.page-list li {
+  padding: 6px 8px;
+  border-radius: 6px;
   cursor: pointer;
 }
 
-#done-btn {
-  background: var(--accent);
-  color: white;
-  border: none;
+.page-list li:hover { background: #eef1ee; }
+.page-list li.current { background: var(--brand); color: #fff; }
+
+/* Trang có nội dung đang dạy — để học viên biết nên nhìn đâu. */
+.page-list li.taught::after {
+  content: " ●";
+  color: var(--accent);
+}
+.page-list li.current.taught::after { color: #ffd479; }
+
+/* ---- khu slide ---- */
+.stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px;
+  gap: 10px;
 }
 
-#done-btn:disabled {
-  background: #ccc;
-  cursor: not-allowed;
+.slide-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  flex: none;
 }
 
-.brief {
-  padding: 12px 16px;
+.slide-bar button {
+  min-width: 34px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.linkish {
+  margin-left: auto;
+  border: none !important;
+  background: none !important;
+  color: var(--brand);
+  text-decoration: underline;
+}
+
+.slide-wrap {
+  position: relative;
+  align-self: start;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  line-height: 0;
+}
+
+#slide { display: block; width: 100%; }
+
+#marks { position: absolute; inset: 0; pointer-events: none; }
+
+/* Vùng nội dung đang được dạy trong phiên. */
+.mark {
+  position: absolute;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  background: rgba(185, 135, 31, 0.13);
+}
+
+.empty { color: var(--muted); font-size: 14px; }
+
+/* ---- khung dạy lại ---- */
+.rules {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 10px;
+  padding: 10px 12px;
   border-left: 3px solid var(--accent);
   background: rgba(185, 135, 31, 0.08);
 }
 
-.hint {
-  align-self: center;
-  font-size: 13px;
-  padding: 4px 8px;
-  border: 1px solid #ccc;
-  border-bottom-width: 2px;
-  border-radius: 5px;
-  opacity: 0.65;
-}
-
-/* Focus mode: vào phiên thì bớt thứ gây phân tán, đẩy phần thoại lên trước. */
-body.focus .brief .rules {
-  display: none;
-}
-
-body.focus #start-btn {
-  display: none;
-}
-
-body.focus .hint {
-  opacity: 1;
-  border-color: var(--accent);
-}
-
-body.focus #status {
-  font-size: 17px;
-  font-weight: 600;
-}
-
-.brief p {
-  margin: 4px 0;
-}
-
-.rules {
-  font-size: 14px;
-  opacity: 0.8;
-}
-
-#transcript {
-  margin-top: 24px;
-  padding: 16px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  min-height: 120px;
-  max-height: 340px;
+.transcript {
+  flex: 1;
+  min-height: 140px;
   overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
 }
 
-.line {
-  margin: 0 0 10px;
-}
-
-.line.student {
-  font-weight: 600;
-}
+.line { margin: 0 0 10px; font-size: 14px; }
+.line.student { font-weight: 600; }
 
 /* Câu đệm lúc chờ chấm — làm mờ để phân biệt với câu hỏi thật của agent. */
-.line.filler {
-  opacity: 0.6;
-  font-style: italic;
-}
+.line.filler { opacity: 0.6; font-style: italic; }
 
 /* Chữ chạy theo lời nói, chưa chốt — nhìn phải khác hẳn transcript đã chốt. */
 .partial {
   margin: 8px 0 0;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border: 1px dashed var(--accent);
   border-radius: 8px;
   opacity: 0.75;
   font-style: italic;
-  min-height: 1.4em;
+  font-size: 14px;
 }
 
-.compose {
+.controls {
   display: flex;
   gap: 8px;
-  margin-top: 12px;
+  align-items: center;
+  margin: 12px 0 0;
 }
+
+button {
+  font-size: 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: #fff;
+  cursor: pointer;
+}
+
+#done-btn, #send-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+}
+
+button:disabled {
+  background: #e6e6e6;
+  color: #999;
+  border-color: #ddd;
+  cursor: not-allowed;
+}
+
+.hint {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 3px 7px;
+  border: 1px solid #ccc;
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  color: var(--muted);
+}
+
+.compose { display: flex; gap: 8px; margin-top: 10px; }
 
 .compose textarea {
   flex: 1;
   font: inherit;
-  padding: 10px;
-  border: 1px solid #ccc;
+  font-size: 14px;
+  padding: 8px;
+  border: 1px solid var(--line);
   border-radius: 8px;
   resize: vertical;
 }
 
-.compose textarea:disabled {
-  background: #eee;
-}
+.compose textarea:disabled { background: #f0f0f0; }
 
-#send-btn {
-  background: var(--accent);
-  color: white;
-  border: none;
-  padding-inline: 20px;
-}
-
-#send-btn:disabled {
-  background: #ccc;
-  cursor: not-allowed;
+/* Màn hẹp: xếp dọc, slide lên trước. */
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; }
+  .sidebar { display: none; }
+  .panel { border-left: none; border-top: 1px solid var(--line); }
 }

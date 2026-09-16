@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # thì dùng bài demo tự bịa trong fixtures/ để repo chạy được ngay.
     lesson_file: Path = REPO_ROOT / "knowledge" / "lesson.json"
     demo_lesson_file: Path = BACKEND_DIR / "fixtures" / "demo_lesson.json"
+
+    # File slide để frontend render. Nằm ngoài repo vì thuộc data pack.
+    slides_pdf: Path | None = None
     session_log_file: Path = BACKEND_DIR / "var" / "sessions.jsonl"
     profile_file: Path = BACKEND_DIR / "var" / "profiles.json"
     checkpoint_db: Path = BACKEND_DIR / "var" / "checkpoints.sqlite"

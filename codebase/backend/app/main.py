@@ -10,8 +10,9 @@ import logging
 import uuid
 from functools import lru_cache
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.adapters.knowledge.local import load_lesson
@@ -100,13 +101,36 @@ def _shared_providers() -> tuple[LLMClient, TextToSpeech]:
 @app.get("/lesson")
 async def lesson_info():
     """Frontend hỏi bài học đang chạy để hiện lên màn hình, thay vì chép cứng."""
-    lesson, _, *_ = _build_deps()
-    return {"concept": lesson.concept, "source_span_ids": list(lesson.source_span_ids)}
+    lesson, store, *_ = _build_deps()
+    spans = await store.get_many(lesson.source_span_ids)
+    return {
+        "concept": lesson.concept,
+        "has_slides": bool(settings.slides_pdf and settings.slides_pdf.is_file()),
+        # bbox theo hệ PyMuPDF (gốc trên-trái). Frontend phải đổi sang hệ của
+        # PDF.js trước khi vẽ — xem ghi chú trong js/slides.js.
+        "spans": [
+            {"span_id": s.span_id, "page": s.page, "bbox": list(s.bbox) if s.bbox else None}
+            for s in spans
+        ],
+    }
 
 
 @app.get("/health")
 async def health():
     return {"status": "ok", "mocks": settings.use_mocks}
+
+
+@app.get("/slides.pdf")
+async def slides():
+    """Phục vụ chính file slide của bài đang học, để frontend render bằng PDF.js.
+
+    Học viên nhìn slide và dạy lại ngay tại đó — đúng bối cảnh dùng thật trên
+    VLearn, thay vì một khung chat rời rạc không biết đang nói về cái gì.
+    """
+    path = settings.slides_pdf
+    if not path or not path.is_file():
+        raise HTTPException(404, "Chưa cấu hình SLIDES_PDF trong .env")
+    return FileResponse(path, media_type="application/pdf")
 
 
 @app.websocket("/ws/session")

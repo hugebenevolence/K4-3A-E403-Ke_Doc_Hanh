@@ -5,41 +5,60 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Kẻ Độc Hành — Dạy lại cho AI</title>
   <link rel="stylesheet" href="css/style.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.min.mjs" type="module"></script>
 </head>
 <body>
-  <main>
-    <h1>Dạy lại khái niệm cho AI học trò</h1>
+  <header class="topbar">
+    <span class="crumb">Bài · AI &amp; LLM Foundation</span>
+    <span id="concept" class="concept">đang tải…</span>
+    <span id="status" class="status">Chưa kết nối</span>
+  </header>
 
-    <section class="brief">
-      <p><strong>Khái niệm cần dạy:</strong> <span id="concept">đang tải…</span></p>
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>Nội dung bài học</h2>
+      <ol id="page-list" class="page-list"></ol>
+    </aside>
+
+    <main class="stage">
+      <div class="slide-bar">
+        <button id="prev-page" title="Trang trước">‹</button>
+        <span>Slide <b id="page-now">–</b> / <span id="page-total">–</span></span>
+        <button id="next-page" title="Trang sau">›</button>
+        <button id="goto-source" class="linkish">↦ Về trang đang dạy</button>
+      </div>
+      <div id="slide-wrap" class="slide-wrap">
+        <canvas id="slide"></canvas>
+        <div id="marks"></div>
+      </div>
+      <p id="no-slides" class="empty" hidden>Chưa cấu hình slide (SLIDES_PDF trong .env)</p>
+    </main>
+
+    <section class="panel">
       <p class="rules">
-        Giải thích bằng lời của bạn, đừng đọc lại tài liệu. Học trò AI sẽ hỏi lại
-        chỗ nó chưa hiểu. Đây là buổi luyện tập, không phải bài kiểm tra — không ai chấm điểm bạn.
+        Giải thích bằng lời của bạn, đừng đọc lại slide. Học trò AI sẽ hỏi lại chỗ
+        nó chưa hiểu. Đây là buổi luyện tập — không ai chấm điểm bạn.
       </p>
+
+      <div id="transcript" class="transcript" aria-live="polite"></div>
+      <p id="partial" class="partial" hidden></p>
+
+      <div class="controls">
+        <button id="start-btn">Bắt đầu phiên</button>
+        <button id="mic-btn" disabled>🎤 Bật micro</button>
+        <button id="done-btn" disabled>✅ Xong</button>
+        <kbd class="hint">Space</kbd>
+      </div>
+
+      <form id="text-form" class="compose">
+        <textarea id="text-input" rows="3" disabled
+          placeholder="…hoặc gõ lời giải thích (Ctrl+Enter để gửi)"></textarea>
+        <button id="send-btn" type="submit" disabled>Gửi</button>
+      </form>
     </section>
+  </div>
 
-    <p id="status">Chưa kết nối</p>
-
-    <div class="controls">
-      <button id="start-btn">Bắt đầu phiên</button>
-      <button id="mic-btn" disabled title="Cần cấp quyền micro">🎤 Bật micro</button>
-      <button id="done-btn" disabled>✅ Tôi giải thích xong</button>
-      <kbd class="hint">Space — nói xong / ngắt lời</kbd>
-    </div>
-
-    <section id="transcript" aria-live="polite"></section>
-
-    <p id="partial" class="partial" hidden></p>
-
-    <form id="text-form" class="compose">
-      <textarea id="text-input" rows="3" disabled
-        placeholder="Giải thích bằng lời của bạn… (Ctrl+Enter để gửi)"></textarea>
-      <button id="send-btn" type="submit" disabled>Gửi</button>
-    </form>
-
-    <audio id="ai-audio"></audio>
-  </main>
-
-  <script src="js/app.js"></script>
+  <audio id="ai-audio"></audio>
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>
