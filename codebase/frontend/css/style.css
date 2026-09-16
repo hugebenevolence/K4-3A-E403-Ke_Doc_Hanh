@@ -32,13 +32,13 @@ button {
   cursor: pointer;
 }
 
-#raise-hand-btn {
+#done-btn {
   background: var(--accent);
   color: white;
   border: none;
 }
 
-#raise-hand-btn:disabled {
+#done-btn:disabled {
   background: #ccc;
   cursor: not-allowed;
 }

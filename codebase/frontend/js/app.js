@@ -3,7 +3,7 @@
 
 const statusEl = document.getElementById("status");
 const startBtn = document.getElementById("start-btn");
-const raiseHandBtn = document.getElementById("raise-hand-btn");
+const doneBtn = document.getElementById("done-btn");
 const transcriptEl = document.getElementById("transcript");
 
 let ws = null;
@@ -13,16 +13,19 @@ startBtn.addEventListener("click", async () => {
   ws = new WebSocket(`ws://${location.hostname}:8000/ws/session`);
 
   ws.onopen = async () => {
-    statusEl.textContent = "Đã kết nối — AI đang nói";
-    raiseHandBtn.disabled = false;
+    statusEl.textContent = "Đã kết nối — bạn đang giải thích";
+    doneBtn.disabled = false;
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     mediaRecorder = new MediaRecorder(stream);
     mediaRecorder.ondataavailable = (e) => {
       if (ws.readyState === WebSocket.OPEN) ws.send(e.data);
     };
-    // TODO: chỉ start recorder liên tục khi đã có VAD phía backend để tách
-    // "giơ tay tự nhiên bằng giọng" khỏi ồn nền — MVP dùng nút bấm trước.
+    mediaRecorder.start(250);
+    // TODO: chỉ tự động tách câu bằng VAD phía backend khi đã có; MVP dùng
+    // nút "Tôi giải thích xong" tường minh để báo hết lượt (STUDENT_TEACHING
+    // / STUDENT_RESPONDING -> CHECKING), tránh cắt lượt sớm khi học viên
+    // đang dừng lại suy nghĩ cách diễn đạt.
   };
 
   ws.onmessage = (event) => {
@@ -32,15 +35,15 @@ startBtn.addEventListener("click", async () => {
 
   ws.onclose = () => {
     statusEl.textContent = "Đã ngắt kết nối";
-    raiseHandBtn.disabled = true;
+    doneBtn.disabled = true;
   };
 };
 
-raiseHandBtn.addEventListener("click", () => {
-  // MVP: ngắt lời bằng nút bấm tường minh, thay cho VAD tự động ban đầu.
+doneBtn.addEventListener("click", () => {
+  // MVP: báo hết lượt bằng nút bấm tường minh, thay cho VAD/endpointing tự
+  // động ban đầu — xem TODO ở trên.
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "raise_hand" }));
-    mediaRecorder?.start(250);
-    statusEl.textContent = "Đang nghe bạn nói...";
+    ws.send(JSON.stringify({ type: "explanation_done" }));
+    statusEl.textContent = "Đang chờ AI đối chiếu với nguồn...";
   }
 });
