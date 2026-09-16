@@ -10,28 +10,34 @@ Full rubric/checkpoint rules and reference material (challenge brief, guide, tra
 
 ## Commands
 
-No build/lint/test tooling is set up yet (fresh scaffold). To run what exists:
-
 ```bash
-# backend
+# backend — runs end-to-end on mocks, no API keys, no credit spent
 cd codebase/backend
-pip install -r requirements.txt   # STT/TTS/LLM SDKs are commented out — uncomment the ones chosen first
-cp .env.example .env              # fill in keys for the providers chosen
-uvicorn app.main:app --reload --port 8000
+python -m venv .venv && .venv/Scripts/pip install -r requirements.txt   # Windows
+cp .env.example .env              # USE_MOCKS=true by default
+.venv/Scripts/python -m pytest tests/ -q
+.venv/Scripts/uvicorn app.main:app --reload --port 8000
 
-# frontend — no build step; open codebase/frontend/index.html directly,
-# or serve it (needed for getUserMedia mic access outside localhost):
+# frontend — no build step, but must be served (getUserMedia needs localhost)
 python -m http.server 5500 --directory codebase/frontend
 ```
 
+Console output is Vietnamese; on Windows set `PYTHONIOENCODING=utf-8` or `print` crashes on cp1252.
+
 ## Architecture
 
-**Pipeline**: browser mic (`codebase/frontend/js/app.js`) → WebSocket `/ws/session` (`codebase/backend/app/main.py`) → STT (`app/voice/stt.py`) → LLM decision (`app/agents/student.py`) → TTS (`app/voice/tts.py`) → audio back to the browser. STT/TTS sit behind abstract interfaces (`SpeechToText`, `TextToSpeech`) with `Mock*` implementations wired in by default — swap in a real provider by implementing the interface, not by changing call sites in `main.py`.
+**Ports & adapters** (`app/domain` → `app/ports` → `app/adapters`, composition root in `app/main.py`): `domain/` imports no SDK and is fully testable without keys; swapping a provider means writing one file in `adapters/` and wiring it in `main.py`, never touching call sites. All four ports ship `Mock*` adapters and `USE_MOCKS=true` is the default, so the repo runs end-to-end on a fresh clone.
 
-**Turn-taking state machine** (`StudentAgentSession` / `TurnState` in `app/agents/student.py`) is a load-bearing design constraint, not an implementation detail: the learner is the primary speaker (they're teaching), so silence tolerance must differ by state — short-ish while they're mid-explanation (`STUDENT_TEACHING`) is fine to end-of-turn on, but long (multi-second silence tolerance) right after the AI asks a Socratic follow-up (`STUDENT_RESPONDING`), because silence there means the learner is thinking, not that the turn ended. Collapsing this into one global VAD/endpointing timeout was flagged as the top interruption-handling risk during design research (carried over from the D1 exploration) — don't do that.
+**Workflow, not a ReAct loop** (`app/graph/build.py`): the teach-back flow has stable structure (grade → branch → follow-up or close), so it's a LangGraph state graph with fixed nodes and conditional edges. Adding tools later means adding nodes — do not convert this into an autonomous agent loop. `compile()` takes both a checkpointer (in-session memory) and a store (cross-session student profile); passing only one is the classic LangGraph mistake.
 
-**Grounding is structural, not prompted**: every `StudentAgentSession` carries a `source_span` (a transcript segment code like `[T06-131]`), and `evaluate_explanation()` must resolve to `"day_duoc" | "ho" | "sai"` by comparing the learner's explanation against that span — never let the model answer from its own general knowledge instead of the cited source. `"day_duoc"` ends the session; `"ho"`/`"sai"` trigger exactly one follow-up question at the specific gap, never a spoon-fed correction, and never even when the learner explicitly asks for the answer. `app/prompts/student_persona.py` documents the current worked example and the hard-test rule that a near-verbatim paste of the source doesn't count as `"day_duoc"` — it must come back in the learner's own words.
+**Talker runs parallel to the reasoner, and lives outside the graph** (`app/api/session.py`): a cheap-tier model speaks one sentence paraphrasing the learner within ~400ms while the grading model takes 1–2s. The talker is **forbidden from signalling right/wrong** — nothing is graded yet when it speaks; that rule lives in `prompts/talker/v1.md` and needs its own eval case. Putting the talker inside the graph would force the graph to wait for it, defeating the point.
 
-**MVP simplification, intentional**: the frontend uses an explicit "done explaining" button (`#done-btn` in `index.html`/`app.js`) as the turn-end trigger instead of automatic voice-activity detection. This is a reliability choice for a ~40h build, not a placeholder to rip out first — automatic endpointing is a stretch goal.
+**Turn-taking state machine** (`TurnState` in `app/domain/session.py`) is load-bearing: the learner is the primary speaker, so silence tolerance differs by state — normal mid-explanation (`STUDENT_TEACHING`), but multi-second right after a Socratic follow-up (`STUDENT_RESPONDING`), because silence there means the learner is thinking, not that the turn ended. Never collapse this into one global VAD timeout. The frontend additionally gates mic-open on the agent's audio finishing playback, or the mic captures the agent's own voice through the speaker.
+
+**Grounding is structural, not prompted**: every turn resolves against `source_span_ids`, and grading returns `"day_duoc" | "ho" | "sai"` by comparing the learner's explanation to those spans — never the model's general knowledge. `"day_duoc"` ends the session; otherwise exactly one follow-up at the specific gap, never a spoon-fed correction, and never even when the learner asks for the answer outright. After `MAX_FOLLOWUPS` (3) the session closes by pointing at spans to review — never by revealing the answer. Two reinforcements: `domain/verbatim.py` catches near-verbatim recitation deterministically (string match, not an LLM call) and downgrades it to `"ho"`; and `prompts/schemas.py` orders `verdict` last so structured output must enumerate evidence before committing to a verdict.
+
+**Prompts are versioned `.md` files** under `app/prompts/<name>/<version>.md`, loaded by `registry.py`. The constant part (instructions + source spans) goes in `system` and the variable part (learner's words) in `user` — OpenAI prompt caching only matches on shared prefix, so reversing this silently loses the 90% discount. Budget for the whole project is **$5 of credit**; see the tier table in `codebase/README.md`.
+
+**MVP simplifications, intentional**: the frontend uses an explicit "done explaining" button (`#done-btn`) instead of automatic VAD endpointing, and `_transcribe()` in `main.py` buffers a whole turn before running STT. Both are reliability choices for a ~40h build; the STT port already has the streaming shape so wiring real partials changes one function.
 
 **Repo layout beyond `codebase/`** follows the hackathon's required submission structure, not a normal app convention (see `README.md` "Cấu trúc repo" for the full grading rubric): `spec.md` is the graded AI-spec document (template in place, sections empty), `eval/golden-set/` + `eval/results/` hold test cases and run logs against a quality bar that locks at CP4 and can't change afterward, `validation/` holds outside-user testing logs (optional, but skipping it caps the max score at 92/100), `reflection/` holds one file per member (see `reflection/TEMPLATE.md`).
