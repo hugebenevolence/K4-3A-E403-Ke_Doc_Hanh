@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from collections.abc import AsyncIterator
 from functools import lru_cache
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -20,6 +19,7 @@ from app.adapters.llm.mock import MockLLM
 from app.adapters.store.jsonl import JsonlSessionLog, JsonProfileStore
 from app.adapters.stt.mock import MockSTT
 from app.adapters.tts.mock import MockTTS
+from app.api.live_turn import LiveTurn
 from app.api.session import TALKER_VERSION, run_turn
 from app.config import settings
 from app.domain.lesson import Lesson
@@ -76,10 +76,10 @@ def _shared_providers() -> tuple[LLMClient, SpeechToText, TextToSpeech]:
     """Dùng chung cho cả tiến trình: mỗi lần tạo mới là một connection pool mới,
     mở theo từng phiên sẽ sớm cạn socket."""
     from app.adapters.llm.openai import OpenAILLM
-    from app.adapters.stt.speechmatics import SpeechmaticsSTT
+    from app.adapters.stt.speechmatics import SpeechmaticsRealtimeSTT
     from app.adapters.tts.openai import OpenAITTS
 
-    stt = SpeechmaticsSTT() if settings.speechmatics_api_key else MockSTT()
+    stt = SpeechmaticsRealtimeSTT() if settings.speechmatics_api_key else MockSTT()
     if not settings.speechmatics_api_key:
         log.warning("Chưa có SPEECHMATICS_API_KEY — đường nói dùng mock, hãy gõ chữ để thử")
     return OpenAILLM(), stt, OpenAITTS()
@@ -115,10 +115,15 @@ async def teach_back_session(ws: WebSocket):
     student_id = ws.query_params.get("student_id", "demo")
     profile = await profiles.load(student_id)
 
-    audio_buffer: list[bytes] = []
+    live: LiveTurn | None = None
     first_turn = True
     turn_index = 0
     review_spans: list[str] = []
+
+    async def partial_to_client(text: str) -> None:
+        """Chữ chạy lên màn hình khi học viên còn đang nói — không có cái này
+        thì họ nói vào khoảng không, không biết mic có ăn hay không."""
+        await ws.send_json({"type": "partial", "text": text})
 
     await ws.send_json({"type": "state", "state": TurnState.STUDENT_TEACHING.name})
 
@@ -129,7 +134,11 @@ async def teach_back_session(ws: WebSocket):
                 break
 
             if (chunk := message.get("bytes")) is not None:
-                audio_buffer.append(chunk)
+                # Mở phiên nhận dạng ngay ở gói audio đầu tiên của lượt, để
+                # partial chạy lên màn hình trong lúc học viên còn đang nói.
+                if live is None:
+                    live = LiveTurn(stt, partial_to_client)
+                live.feed(chunk)
                 continue
 
             if message.get("text") is None:
@@ -141,13 +150,35 @@ async def teach_back_session(ws: WebSocket):
             # không lẫn lỗi nhận dạng giọng nói, và là phương án dự phòng nếu
             # mic hỏng giữa buổi demo.
             if command.get("type") == "explanation_text":
+                if live is not None:
+                    await live.abort()
+                    live = None
                 await ws.send_json({"type": "state", "state": TurnState.CHECKING.name})
                 student_text = str(command.get("text", ""))
-                audio_buffer.clear()
             elif command.get("type") == "explanation_done":
                 await ws.send_json({"type": "state", "state": TurnState.CHECKING.name})
-                student_text = await _transcribe(stt, audio_buffer)
-                audio_buffer.clear()
+                if live is None:
+                    student_text = ""
+                else:
+                    try:
+                        student_text = await live.finish()
+                    except Exception:
+                        # STT hỏng KHÔNG được giết cả phiên. Chỗ này trước đây
+                        # nằm ngoài khối bảo vệ bên dưới nên một lượt nhận dạng
+                        # lỗi là rớt kết nối, học viên chỉ thấy "Đã ngắt kết nối".
+                        log.exception("STT hỏng ở phiên %s", session_id)
+                        await ws.send_json(
+                            {
+                                "type": "error",
+                                "message": "Mình chưa nghe rõ được. Bạn thử lại, hoặc gõ chữ cũng được.",
+                            }
+                        )
+                        await ws.send_json(
+                            {"type": "state", "state": turn_state_for_retry(first_turn)}
+                        )
+                        continue
+                    finally:
+                        live = None
             else:
                 continue
 
@@ -229,6 +260,9 @@ async def teach_back_session(ws: WebSocket):
 
     except WebSocketDisconnect:
         pass
+    finally:
+        if live is not None:
+            await live.abort()
 
 
 def turn_state_for_retry(first_turn: bool) -> str:
@@ -272,20 +306,3 @@ async def _log_turn(
     )
     return grade
 
-
-async def _transcribe(stt, chunks: list[bytes]) -> str:
-    """MVP gom hết audio của lượt rồi mới STT.
-
-    Port đã có sẵn dạng streaming (trả partial trước final), nên khi cắm
-    Speechmatics vào để lấy partial <500ms thì chỉ sửa trong hàm này.
-    """
-
-    async def replay() -> AsyncIterator[bytes]:
-        for c in chunks:
-            yield c
-
-    text = ""
-    async for t in stt.stream(replay()):
-        if t.is_final:
-            text = t.text
-    return text

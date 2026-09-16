@@ -1,11 +1,15 @@
-"""Adapter STT dùng Speechmatics (REST batch).
+"""Adapter STT dùng Speechmatics realtime (WebSocket).
 
-Đo thật trên tiếng Việt: đọc lại đúng nguyên văn cả dấu, mất ~2s cho một câu.
+Đo thật trên tiếng Việt: đọc lại đúng nguyên văn cả dấu.
 
-DÙNG BATCH CHỨ CHƯA DÙNG REALTIME, có chủ ý: tầng trên hiện gom hết audio của
-một lượt rồi mới gọi STT (xem `_transcribe` trong main.py), nên partial chưa có
-chỗ dùng. Port đã có sẵn dạng streaming, khi nào chuyển sang nuôi audio liên
-tục thì thay phần thân hàm này bằng WebSocket realtime, call site không đổi.
+VÌ SAO REALTIME CHỨ KHÔNG PHẢI BATCH: bản batch đầu tiên nhận webm từ
+MediaRecorder và bị từ chối thẳng — `{"code":400,"error":"Job rejected due to
+invalid audio"}`. Chuỗi chunk webm ghép lại không thành file hợp lệ. Realtime
+nhận PCM thô, không có container nên không có gì để hỏng; đổi lại còn được
+partial để hiện chữ lên màn hình ngay khi học viên đang nói.
+
+Định dạng chốt với frontend: PCM 16-bit little-endian, một kênh. Frontend lấy
+bằng AudioWorklet (xem js/pcm-worklet.js), không dùng MediaRecorder.
 """
 
 from __future__ import annotations
@@ -15,63 +19,89 @@ import json
 import logging
 from collections.abc import AsyncIterator
 
-import httpx
+import websockets
 
 from app.config import settings
 from app.ports.stt import SpeechToText, Transcript
 
 log = logging.getLogger(__name__)
 
-API = "https://asr.api.speechmatics.com/v2/jobs"
-POLL_EVERY_S = 0.75
-POLL_TIMEOUT_S = 45.0
-
-_CONFIG = json.dumps(
-    {
-        "type": "transcription",
-        # operating_point "enhanced" đắt hơn nhưng tiếng Việt có dấu thì độ
-        # chính xác quan trọng hơn: sai dấu là sai nghĩa, và bộ chấm ở sau sẽ
-        # phạt oan học viên vì lỗi của máy nghe.
-        "transcription_config": {"language": "vi", "operating_point": "enhanced"},
-    }
-)
+ENDPOINT = "wss://eu2.rt.speechmatics.com/v2"
+IDLE_TIMEOUT_S = 30.0
 
 
-class SpeechmaticsSTT(SpeechToText):
-    def __init__(self, api_key: str | None = None):
+def _start_message(sample_rate: int) -> str:
+    return json.dumps(
+        {
+            "message": "StartRecognition",
+            "audio_format": {
+                "type": "raw",
+                "encoding": "pcm_s16le",
+                "sample_rate": sample_rate,
+            },
+            "transcription_config": {
+                "language": "vi",
+                # Sai dấu là sai nghĩa, và bộ chấm ở sau sẽ phạt oan học viên
+                # vì lỗi của máy nghe — nên trả thêm tiền cho "enhanced".
+                "operating_point": "enhanced",
+                "enable_partials": True,
+                "max_delay": 2.0,
+            },
+        }
+    )
+
+
+class SpeechmaticsRealtimeSTT(SpeechToText):
+    def __init__(self, api_key: str | None = None, sample_rate: int = 16000):
         self._key = api_key or settings.speechmatics_api_key
+        self._sample_rate = sample_rate
 
     async def stream(self, audio: AsyncIterator[bytes]) -> AsyncIterator[Transcript]:
-        blob = b"".join([chunk async for chunk in audio])
-        if len(blob) < 1024:
-            # Vài chục byte thì không phải tiếng nói, gửi lên chỉ tốn một job.
-            yield Transcript(text="", is_final=True)
-            return
+        """Nuôi audio vào và nhả transcript ra — partial trước, final sau."""
+        out: asyncio.Queue[Transcript | None] = asyncio.Queue()
 
-        headers = {"Authorization": f"Bearer {self._key}"}
-        async with httpx.AsyncClient(timeout=60.0, headers=headers) as http:
-            created = await http.post(
-                API,
-                data={"config": _CONFIG},
-                files={"data_file": ("turn.webm", blob, "audio/webm")},
-            )
-            created.raise_for_status()
-            job_id = created.json()["id"]
+        async with websockets.connect(
+            ENDPOINT, additional_headers={"Authorization": f"Bearer {self._key}"}
+        ) as sock:
+            await sock.send(_start_message(self._sample_rate))
+            feeder = asyncio.create_task(self._feed(sock, audio))
+            reader = asyncio.create_task(self._read(sock, out))
+            try:
+                while (item := await asyncio.wait_for(out.get(), IDLE_TIMEOUT_S)) is not None:
+                    yield item
+            finally:
+                for task in (feeder, reader):
+                    task.cancel()
+                await asyncio.gather(feeder, reader, return_exceptions=True)
 
-            text = await self._await_transcript(http, job_id)
+    async def _feed(self, sock, audio: AsyncIterator[bytes]) -> None:
+        sent = 0
+        async for chunk in audio:
+            await sock.send(chunk)
+            sent += 1
+        await sock.send(json.dumps({"message": "EndOfStream", "last_seq_no": sent}))
 
-        yield Transcript(text=text, is_final=True)
+    async def _read(self, sock, out: asyncio.Queue[Transcript | None]) -> None:
+        final = ""
+        async for raw in sock:
+            if isinstance(raw, bytes):
+                continue
+            msg = json.loads(raw)
+            kind = msg.get("message")
 
-    async def _await_transcript(self, http: httpx.AsyncClient, job_id: str) -> str:
-        url = f"{API}/{job_id}/transcript?format=txt"
-        deadline = asyncio.get_running_loop().time() + POLL_TIMEOUT_S
-        while asyncio.get_running_loop().time() < deadline:
-            await asyncio.sleep(POLL_EVERY_S)
-            got = await http.get(url)
-            if got.status_code == 200:
-                return got.text.strip()
-            if got.status_code not in (404, 202):
-                got.raise_for_status()
-
-        log.warning("Speechmatics job %s quá %.0fs chưa xong, bỏ lượt", job_id, POLL_TIMEOUT_S)
-        return ""
+            if kind == "AddPartialTranscript":
+                if text := msg["metadata"]["transcript"].strip():
+                    await out.put(Transcript(text=(final + " " + text).strip(), is_final=False))
+            elif kind == "AddTranscript":
+                # Speechmatics chốt từng mảnh một, phải cộng dồn mới ra cả lượt.
+                # KHÔNG phát mảnh vừa chốt ra màn hình: nó ngắn hơn partial gần
+                # nhất (đã gồm cả phần đuôi chưa chốt), nên chữ sẽ thụt lại rồi
+                # dài ra liên tục — nhìn như đang giật. Cứ để partial kế tiếp
+                # phát, nó đã cộng cả phần chốt mới vào rồi.
+                final = (final + " " + msg["metadata"]["transcript"].strip()).strip()
+            elif kind in ("EndOfTranscript", "Error"):
+                if kind == "Error":
+                    log.error("Speechmatics báo lỗi: %s", msg)
+                await out.put(Transcript(text=final, is_final=True))
+                await out.put(None)
+                return

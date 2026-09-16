@@ -28,9 +28,12 @@ const conceptEl = $("concept");
 const textForm = $("text-form");
 const textInput = $("text-input");
 const sendBtn = $("send-btn");
+const partialEl = $("partial");
 
 let ws = null;
-let mediaRecorder = null;
+let audioCtx = null;
+let micNode = null;
+let recording = false;
 let turnState = null;
 const audioQueue = [];
 let isPlaying = false;
@@ -81,18 +84,16 @@ function skipAgentAudio() {
 
 function applyTurnPolicy() {
   const mine = myTurn();
-  const recording = mediaRecorder?.state === "recording";
+  if (!mine) recording = false; // mic không được ăn lúc agent đang nói
 
   textInput.disabled = !mine;
   sendBtn.disabled = !mine;
   doneBtn.disabled = !mine || !recording;
   micBtn.disabled = !live() || !mine || recording;
 
-  if (!mine && recording) mediaRecorder.stop();
-
   if (isPlaying) statusEl.textContent = "Học trò AI đang nói…";
   else if (mine) statusEl.textContent = recording
-    ? "Đang nghe bạn giải thích… — Space khi nói xong"
+    ? "🔴 Đang nghe bạn giải thích… — Space khi nói xong"
     : "Tới lượt bạn — gõ chữ hoặc bật micro";
   else if (turnState) statusEl.textContent = "Học trò AI đang nghĩ…";
 }
@@ -109,7 +110,6 @@ textForm.addEventListener("submit", (e) => {
   e.preventDefault();
   const text = textInput.value.trim();
   if (!text || !myTurn()) return;
-  log("student", text, false);
   textInput.value = "";
   submitTurn({ type: "explanation_text", text });
 });
@@ -118,32 +118,46 @@ textInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) textForm.requestSubmit();
 });
 
+// Lấy audio bằng AudioWorklet chứ KHÔNG dùng MediaRecorder: MediaRecorder đóng
+// gói webm/opus, và chuỗi chunk ghép lại bị Speechmatics từ chối thẳng ("Job
+// rejected due to invalid audio"). PCM thô không có container nên không hỏng
+// được, lại gửi liên tục nên nhận dạng chạy song song lúc học viên đang nói.
+const SAMPLE_RATE = 16000;
+
+async function openMic() {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+  });
+  audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  if (audioCtx.sampleRate !== SAMPLE_RATE) {
+    // Backend khai cứng 16kHz với Speechmatics; lệch tần số là ra chữ vô nghĩa.
+    statusEl.textContent = `Trình duyệt không cho 16kHz (đang ${audioCtx.sampleRate}Hz) — hãy gõ chữ.`;
+    return false;
+  }
+  await audioCtx.audioWorklet.addModule("js/pcm-worklet.js");
+  micNode = new AudioWorkletNode(audioCtx, "pcm-worklet");
+  micNode.port.onmessage = (e) => {
+    if (live() && recording) ws.send(e.data);
+  };
+  audioCtx.createMediaStreamSource(stream).connect(micNode);
+  return true;
+}
+
 micBtn.addEventListener("click", async () => {
   micBtn.blur();
-  if (!mediaRecorder) {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.ondataavailable = (e) => {
-      if (live() && e.data.size) ws.send(e.data);
-    };
-  }
-  if (mediaRecorder.state === "inactive") mediaRecorder.start(250);
+  if (!audioCtx && !(await openMic())) return;
+  await audioCtx.resume();
+  recording = true;
   applyTurnPolicy();
 });
 
 function finishSpeaking() {
   // Chốt lượt bằng thao tác tường minh thay cho VAD tự động: học viên hay dừng
   // giữa chừng để nghĩ cách diễn đạt, endpointing tự động sẽ cắt sớm.
-  if (!live() || mediaRecorder?.state !== "recording") return;
-  // stop() đẩy nốt chunk audio cuối qua ondataavailable RỒI mới bắn sự kiện
-  // "stop". Gửi explanation_done ngay ở đây là chunk cuối về sau tín hiệu chốt
-  // lượt, và bị tính sang lượt kế tiếp — mất đoạn cuối câu học viên nói.
-  mediaRecorder.addEventListener(
-    "stop",
-    () => submitTurn({ type: "explanation_done" }),
-    { once: true },
-  );
-  mediaRecorder.stop();
+  if (!live() || !recording) return;
+  recording = false;
+  partialEl.hidden = true;
+  submitTurn({ type: "explanation_done" });
 }
 
 doneBtn.addEventListener("click", () => {
@@ -174,9 +188,16 @@ startBtn.addEventListener("click", () => {
     if (msg.type === "state") {
       turnState = msg.state;
       applyTurnPolicy();
+    } else if (msg.type === "partial") {
+      // Chữ chạy theo lời nói, chưa chốt — hiện riêng một dòng mờ để học viên
+      // thấy mic đang ăn, và thấy máy nghe ra đúng hay sai ngay lúc đang nói.
+      partialEl.hidden = false;
+      partialEl.textContent = msg.text;
     } else if (msg.type === "transcript") {
+      partialEl.hidden = true;
       // Lời học viên gõ đã hiện lúc gửi rồi, khỏi hiện lại.
       if (msg.role !== "student") log(msg.role, msg.text, msg.filler);
+      else log("student", msg.text, false);
     } else if (msg.type === "error") {
       statusEl.textContent = msg.message;
     } else if (msg.type === "session_end") {

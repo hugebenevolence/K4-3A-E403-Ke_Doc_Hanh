@@ -111,6 +111,17 @@ body.focus #status {
   font-style: italic;
 }
 
+/* Chữ chạy theo lời nói, chưa chốt — nhìn phải khác hẳn transcript đã chốt. */
+.partial {
+  margin: 8px 0 0;
+  padding: 10px 14px;
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  opacity: 0.75;
+  font-style: italic;
+  min-height: 1.4em;
+}
+
 .compose {
   display: flex;
   gap: 8px;
