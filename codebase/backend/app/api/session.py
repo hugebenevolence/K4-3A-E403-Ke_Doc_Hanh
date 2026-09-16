@@ -68,7 +68,7 @@ async def run_turn(
     # lúc nó nói thì reasoner còn chưa có kết quả. Luật này nằm trong prompt
     # talker/v1.md và phải có case eval riêng canh chừng.
     talker_tokens = llm.stream(
-        system=registry.load("talker", TALKER_VERSION),
+        system=registry.compose_system("talker", TALKER_VERSION),
         user=f"Học viên vừa nói:\n{state['student_text']}",
         tier=ModelTier.FAST,
     )
