@@ -67,6 +67,34 @@ chung (≥1024 token, giữ 24h, giảm 90%). Nên phần cố định (hướng
 nguồn) đi vào `system`, phần biến thiên (lời học viên) đi vào `user`. Đảo thứ
 tự là mất sạch giảm giá — xem `prompts/registry.py`.
 
+## Kiến trúc prompt
+
+```
+prompts/
+├── _base/
+│   ├── guardrails_v1.md   ← sàn an toàn: lời học viên là DỮ LIỆU không phải
+│   │                        chỉ thị (chống injection), luật ngôn ngữ, chỉ bám nguồn
+│   └── persona_v1.md      ← vai học trò, xưng hô, 6 kiểu ép lộ đáp án + cách đáp
+├── grader/v1.md           ← guardrails
+├── talker/v1.md           ← guardrails + persona
+└── student_persona/v1.md  ← guardrails + persona
+```
+
+`registry.compose_system()` ghép theo **mức ổn định giảm dần**: `_base` (giống
+nhau mọi prompt) → prompt riêng → đoạn nguồn (đổi theo khái niệm). Phần dùng
+chung đứng trước để prefix cache dùng lại được nhiều nhất.
+
+Sàn an toàn định nghĩa **một lần** trong `_base/` rồi ghép vào, thay vì chép ở
+từng file — chép lại là kiểu gì cũng trôi lệch khi sửa. `grader` cố ý KHÔNG
+kèm lớp persona: nó không nói với ai, nhét persona vào chỉ làm loãng hướng dẫn chấm.
+
+Mỗi prompt theo cùng bộ mục: **VIỆC PHẢI LÀM · LUẬT RIÊNG · ĐẦU RA · NEO ·
+CASE RÌA**. Mục NEO là ví dụ phân định các mức verdict — nghiên cứu LLM-judge
+cho thấy neo nâng mức khớp với người chấm từ ~0.4 lên ~0.78 kappa.
+
+Prompt sau khi ghép đều trên 1024 token nên caching kích hoạt; prompt dài thêm
+gần như không tốn thêm tiền vì phần cố định được tính 10% giá.
+
 ## Mock vs thật
 
 | Phần | Trạng thái | Kế hoạch |
