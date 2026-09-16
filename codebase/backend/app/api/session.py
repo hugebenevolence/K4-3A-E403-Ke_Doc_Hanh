@@ -36,8 +36,36 @@ _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 
 @dataclass(frozen=True)
 class Event:
-    kind: Literal["state", "transcript", "audio", "turn_done"]
+    kind: Literal["state", "transcript", "audio", "turn_done", "activity"]
     payload: Any
+
+
+# Tên node -> việc mà học viên hiểu được. Phát ra theo tiến trình THẬT của
+# graph chứ không phải đếm giờ giả: Apple HIG khuyên dùng chỉ báo tiến trình
+# xác định (determinate) thay vì vòng xoay mơ hồ, vì nó cho người ta biết còn
+# bao lâu và hệ thống đang làm gì — ở đây còn quan trọng hơn bình thường, vì
+# cả sản phẩm dựa vào việc học viên tin rằng agent thật sự đối chiếu với slide.
+ACTIVITY = {
+    "grade": "Đối chiếu với slide",
+    "ask_followup": "Soạn câu hỏi",
+    "close_taught": "Chốt lại",
+    "close_review": "Chốt lại",
+}
+
+
+async def _drive_graph(graph, state, thread_id: str, steps: asyncio.Queue) -> dict:
+    """Chạy graph và báo từng node vừa xong ra ngoài."""
+    config = {"configurable": {"thread_id": thread_id}}
+    async for update in graph.astream(state, config=config, stream_mode="updates"):
+        for node in update:
+            await steps.put(node)
+    await steps.put(None)
+
+    # stream_mode="updates" chỉ trả phần TỪNG NODE vừa ghi, không phải cả state
+    # như ainvoke — nên những trường do lượt trước để lại (source_span_ids,
+    # concept...) sẽ thiếu. Lấy bản đầy đủ từ checkpointer.
+    snapshot = await graph.aget_state(config)
+    return dict(snapshot.values)
 
 
 def _mark(existing: int | None, started: float) -> int:
@@ -72,9 +100,8 @@ async def run_turn(
 ) -> AsyncIterator[Event]:
     """Chạy một lượt, phát event theo đúng thứ tự client cần nghe."""
     started = perf_counter()
-    reasoner = asyncio.create_task(
-        graph.ainvoke(state, config={"configurable": {"thread_id": thread_id}})
-    )
+    steps: asyncio.Queue[str | None] = asyncio.Queue()
+    reasoner = asyncio.create_task(_drive_graph(graph, state, thread_id, steps))
     first_audio_ms: int | None = None
 
     try:
@@ -108,12 +135,26 @@ async def run_turn(
             # tự diễn.
             break
 
+        # Báo từng bước agent vừa làm xong, để học viên thấy nó đang đối chiếu
+        # với slide thật chứ không phải ngồi chờ một hộp đen.
+        while (node := await asyncio.wait_for(steps.get(), reasoner_timeout_s)) is not None:
+            if label := ACTIVITY.get(node):
+                yield Event("activity", {"step": node, "label": label})
+
         # Không có timeout thì provider treo là học viên ngồi im vô hạn, không
         # có cách nào thoát ngoài tự tải lại trang. Thà mất một lượt.
         result = await asyncio.wait_for(reasoner, timeout=reasoner_timeout_s)
         said = sanitize_spoken(result["agent_says"])
         yield Event(
-            "state", {"turn_state": result["turn_state"], "verdict": result.get("verdict")}
+            "state",
+            {
+                "turn_state": result["turn_state"],
+                "verdict": result.get("verdict"),
+                # Căn cứ chấm, gửi nguyên về client: đây là dữ liệu THẬT model
+                # vừa dùng để quyết định, và là thứ làm học viên tin được rằng
+                # hệ thống bám slide chứ không phán bừa.
+                "evidence": result.get("evidence") or [],
+            },
         )
         yield Event("transcript", {"role": "agent", "text": said, "filler": False})
         async for chunk in tts.synthesize(said):

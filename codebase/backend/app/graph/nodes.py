@@ -105,6 +105,25 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
     return grade
 
 
+def _reanchor(state: TeachBackState) -> str:
+    """Câu hỏi dùng khi viết lại vẫn lộ đáp án.
+
+    Câu chung chung ("bạn giải thích thêm chỗ đó được không?") là câu tệ nhất:
+    học viên không biết "chỗ đó" là chỗ nào, và quan sát thật cho thấy nó rơi
+    đúng vào lúc học viên đang lạc đề — tức lúc họ cần được neo lại nhất.
+
+    Nhắc tên khái niệm KHÔNG phải là lộ đáp án: nó đang hiện sẵn trên màn hình.
+    Lộ là nói ra phần NỘI DUNG học viên còn thiếu.
+    """
+    concept = (state.get("concept") or "").strip()
+    if not concept:
+        return "Bạn kể lại cho mình từ đầu được không, mình chưa bắt kịp."
+    return (
+        f"Thật ra mình vẫn chưa nối được chỗ bạn vừa nói với {concept}. "
+        "Bạn thử kể lại từ đầu giúp mình nhé?"
+    )
+
+
 def _uncovered_text(state: TeachBackState, source) -> str:
     """Nội dung những span học viên chưa chạm tới — tức phần đang thiếu.
 
@@ -168,12 +187,8 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
                 tier=ModelTier.STANDARD,
             )
             if leaks_answer(out.question, uncovered, state["student_text"]):
-                # Hỏi lại vẫn lộ thì thà hỏi một câu mở, nhạt còn hơn cho đáp án.
-                log.warning("Viết lại vẫn lộ, dùng câu hỏi mở an toàn")
-                out = FollowupOutput(
-                    question="Bạn giải thích thêm giúp mình chỗ đó được không?",
-                    cites_span_id=None,
-                )
+                log.warning("Viết lại vẫn lộ, dùng câu hỏi neo lại khái niệm")
+                out = FollowupOutput(question=_reanchor(state), cites_span_id=None)
         # Trích dẫn bịa còn tệ hơn không trích: frontend sẽ dùng mã này để
         # highlight vùng trên slide, trỏ sai là học viên mất niềm tin ngay.
         canonical = {normalize_span_id(s.span_id): s.span_id for s in source}

@@ -109,7 +109,14 @@ async def lesson_info():
         # bbox theo hệ PyMuPDF (gốc trên-trái). Frontend phải đổi sang hệ của
         # PDF.js trước khi vẽ — xem ghi chú trong js/slides.js.
         "spans": [
-            {"span_id": s.span_id, "page": s.page, "bbox": list(s.bbox) if s.bbox else None}
+            {
+                "span_id": s.span_id,
+                "page": s.page,
+                "bbox": list(s.bbox) if s.bbox else None,
+                # Nội dung thật để client hiện lại nguyên văn khi đối chiếu —
+                # học viên thấy được agent đang dựa vào đúng chữ nào trên slide.
+                "text": s.text,
+            }
             for s in spans
         ],
     }
@@ -257,7 +264,16 @@ async def teach_back_session(ws: WebSocket):
                         await ws.send_bytes(event.payload)
                     elif event.kind == "state":
                         turn_state = event.payload["turn_state"]
-                        await ws.send_json({"type": "state", "state": turn_state})
+                        await ws.send_json(
+                            {
+                                "type": "state",
+                                "state": turn_state,
+                                "verdict": event.payload.get("verdict"),
+                                "evidence": event.payload.get("evidence") or [],
+                            }
+                        )
+                    elif event.kind == "activity":
+                        await ws.send_json({"type": "activity", **event.payload})
                     elif event.kind == "turn_done":
                         grade = await _log_turn(
                             session_log, session_id, turn_index, student_text, event

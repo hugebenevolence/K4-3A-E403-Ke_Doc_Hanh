@@ -35,3 +35,9 @@ dist/
 Thumbs.db
 .vscode/
 .idea/
+
+# Skill bên thứ ba cài bằng npx skills add. Nội dung là bản mirror Apple HIG
+# (bản quyền Apple Inc.) — dùng để tham khảo khi thiết kế, KHÔNG thuộc bài nộp.
+# skills-lock.json vẫn commit để cả nhóm cài lại đúng bản.
+/.agents/
+/.claude/skills/

@@ -5,27 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Kẻ Độc Hành — Dạy lại cho AI</title>
   <link rel="stylesheet" href="css/style.css" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.6.82/pdf.min.mjs" type="module"></script>
 </head>
 <body>
   <header class="topbar">
-    <span class="crumb">Bài · AI &amp; LLM Foundation</span>
-    <span id="concept" class="concept">đang tải…</span>
-    <span id="status" class="status">Chưa kết nối</span>
+    <div class="titles">
+      <span class="eyebrow">AI &amp; LLM Foundation</span>
+      <h1 id="concept">đang tải…</h1>
+    </div>
+    <div class="live">
+      <span id="pulse" class="pulse" data-mode="idle"></span>
+      <span id="status">Chưa kết nối</span>
+    </div>
   </header>
 
   <div class="layout">
     <aside class="sidebar">
-      <h2>Nội dung bài học</h2>
+      <h2>Slide</h2>
       <ol id="page-list" class="page-list"></ol>
     </aside>
 
     <main class="stage">
       <div class="slide-bar">
-        <button id="prev-page" title="Trang trước">‹</button>
-        <span>Slide <b id="page-now">–</b> / <span id="page-total">–</span></span>
-        <button id="next-page" title="Trang sau">›</button>
-        <button id="goto-source" class="linkish">↦ Về trang đang dạy</button>
+        <button id="prev-page">Trước</button>
+        <span class="counter">Slide <b id="page-now">–</b> / <span id="page-total">–</span></span>
+        <button id="next-page">Sau</button>
+        <button id="goto-source" class="quiet">Về trang đang dạy</button>
       </div>
       <div id="slide-wrap" class="slide-wrap">
         <canvas id="slide"></canvas>
@@ -43,15 +47,20 @@
       <div id="transcript" class="transcript" aria-live="polite"></div>
       <p id="partial" class="partial" hidden></p>
 
+      <section id="evidence" class="evidence" hidden>
+        <h2>Agent đối chiếu với slide</h2>
+        <ul id="evidence-list"></ul>
+      </section>
+
       <div class="controls">
-        <button id="start-btn">Bắt đầu phiên</button>
-        <button id="mic-btn" disabled>🎤 Bật micro</button>
-        <button id="done-btn" disabled>✅ Xong</button>
+        <button id="start-btn" class="primary">Bắt đầu phiên</button>
+        <button id="mic-btn" disabled>Bật micro</button>
+        <button id="done-btn" disabled>Xong</button>
         <kbd class="hint">Space</kbd>
       </div>
 
       <form id="text-form" class="compose">
-        <textarea id="text-input" rows="3" disabled
+        <textarea id="text-input" rows="2" disabled
           placeholder="…hoặc gõ lời giải thích (Ctrl+Enter để gửi)"></textarea>
         <button id="send-btn" type="submit" disabled>Gửi</button>
       </form>

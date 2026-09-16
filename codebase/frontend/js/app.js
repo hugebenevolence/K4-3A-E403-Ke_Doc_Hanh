@@ -8,6 +8,7 @@
 // xong. Thiếu vế sau thì mic bắt lại chính giọng agent qua loa, STT sẽ nghe
 // agent nói và tưởng là học viên.
 
+import { clearEvidence, indexSpans, renderEvidence } from "./evidence.js";
 import { loadSlides, show, sourcePage, step } from "./slides.js";
 
 const API = `http://${location.hostname}:8000`;
@@ -32,6 +33,14 @@ const textForm = $("text-form");
 const textInput = $("text-input");
 const sendBtn = $("send-btn");
 const partialEl = $("partial");
+const pulseEl = $("pulse");
+
+// Trạng thái hiện ra cho học viên. Không dùng biểu tượng: chữ đọc được bằng
+// VoiceOver, dịch được, và không bị hiểu nhầm giữa các nền văn hoá.
+function setLive(mode, text) {
+  pulseEl.dataset.mode = mode; // idle | listening | working | speaking
+  statusEl.textContent = text;
+}
 
 let ws = null;
 let audioCtx = null;
@@ -94,19 +103,19 @@ function applyTurnPolicy() {
   doneBtn.disabled = !mine || !recording;
   micBtn.disabled = !live() || !mine || recording;
 
-  if (isPlaying) statusEl.textContent = "Học trò AI đang nói…";
-  else if (mine) statusEl.textContent = recording
-    ? "🔴 Đang nghe bạn giải thích… — Space khi nói xong"
-    : "Tới lượt bạn — gõ chữ hoặc bật micro";
-  else if (turnState) statusEl.textContent = "Học trò AI đang nghĩ…";
+  if (isPlaying) setLive("speaking", "Học trò AI đang nói");
+  else if (mine && recording) setLive("listening", "Đang nghe — Space khi bạn nói xong");
+  else if (mine) setLive("idle", "Tới lượt bạn");
+  else if (turnState) setLive("working", "Học trò AI đang nghĩ");
 }
 
 function submitTurn(payload) {
   if (!live()) return;
   ws.send(JSON.stringify(payload));
   turnState = null; // khoá ngay, khỏi gửi hai lần trước khi server kịp trả lời
+  clearEvidence();
   applyTurnPolicy();
-  statusEl.textContent = "Học trò AI đang nghĩ…";
+  setLive("working", "Đang nhận lời bạn");
 }
 
 textForm.addEventListener("submit", (e) => {
@@ -190,7 +199,12 @@ startBtn.addEventListener("click", () => {
     const msg = JSON.parse(event.data);
     if (msg.type === "state") {
       turnState = msg.state;
+      if (msg.evidence?.length) renderEvidence(msg.evidence);
       applyTurnPolicy();
+    } else if (msg.type === "activity") {
+      // Tiến trình THẬT của agent (tên node trong graph), không phải vòng xoay
+      // đếm giờ giả. HIG khuyên chỉ báo xác định hơn chỉ báo mơ hồ.
+      setLive("working", msg.label);
     } else if (msg.type === "partial") {
       // Chữ chạy theo lời nói, chưa chốt — hiện riêng một dòng mờ để học viên
       // thấy mic đang ăn, và thấy máy nghe ra đúng hay sai ngay lúc đang nói.
@@ -235,6 +249,7 @@ fetch(`${API}/lesson`)
   .then((r) => r.json())
   .then(async (lesson) => {
     conceptEl.textContent = lesson.concept;
+    indexSpans(lesson.spans);
     if (!lesson.has_slides) {
       document.getElementById("no-slides").hidden = false;
       return;
