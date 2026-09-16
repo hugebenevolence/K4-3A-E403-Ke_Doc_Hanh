@@ -59,6 +59,7 @@ async def run_turn(
     llm: LLMClient,
     tts: TextToSpeech,
     thread_id: str,
+    reasoner_timeout_s: float = 20.0,
 ) -> AsyncIterator[Event]:
     """Chạy một lượt, phát event theo đúng thứ tự client cần nghe."""
     started = perf_counter()
@@ -87,7 +88,9 @@ async def run_turn(
                     first_audio_ms = int((perf_counter() - started) * 1000)
                 yield Event("audio", chunk)
 
-        result = await reasoner
+        # Không có timeout thì provider treo là học viên ngồi im vô hạn, không
+        # có cách nào thoát ngoài tự tải lại trang. Thà mất một lượt.
+        result = await asyncio.wait_for(reasoner, timeout=reasoner_timeout_s)
         said = sanitize_spoken(result["agent_says"])
         yield Event(
             "state", {"turn_state": result["turn_state"], "verdict": result.get("verdict")}

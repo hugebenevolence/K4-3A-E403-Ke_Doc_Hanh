@@ -50,6 +50,9 @@ app.add_middleware(
 def _build_deps() -> tuple[
     Lesson, SpanStore, LLMClient, SpeechToText, TextToSpeech, SessionLog, ProfileStore
 ]:
+    # Gọi mỗi lần mở kết nối. Với mock thì không sao, nhưng khi viết adapter
+    # thật thì HTTP client phải là singleton ở tầng module — tạo client mới cho
+    # mỗi phiên sẽ mở thừa connection pool và sớm muộn cạn socket.
     session_log = JsonlSessionLog(settings.session_log_file)
     profiles = JsonProfileStore(settings.profile_file)
 
@@ -119,6 +122,17 @@ async def teach_back_session(ws: WebSocket):
             await ws.send_json({"type": "state", "state": TurnState.CHECKING.name})
             student_text = await _transcribe(stt, audio_buffer)
             audio_buffer.clear()
+
+            if not student_text.strip():
+                # Bấm chốt lượt mà chưa nói gì (hoặc bấm hai lần liên tiếp).
+                # Chạy tiếp sẽ tiêu mất một lượt hỏi ngược vì lời rỗng chắc
+                # chắn bị chấm là chưa đủ — trả lại lượt thay vì phạt oan.
+                await ws.send_json(
+                    {"type": "error", "message": "Mình chưa nghe thấy gì, bạn thử nói lại nhé."}
+                )
+                await ws.send_json({"type": "state", "state": turn_state_for_retry(first_turn)})
+                continue
+
             await ws.send_json(
                 {"type": "transcript", "role": "student", "text": student_text}
             )
@@ -187,6 +201,14 @@ async def teach_back_session(ws: WebSocket):
 
     except WebSocketDisconnect:
         pass
+
+
+def turn_state_for_retry(first_turn: bool) -> str:
+    """Lượt đầu thì quay lại trạng thái đang giảng; các lượt sau là đang trả lời
+    câu hỏi ngược — hai trạng thái này có ngưỡng chờ im lặng khác nhau."""
+    return (
+        TurnState.STUDENT_TEACHING.name if first_turn else TurnState.STUDENT_RESPONDING.name
+    )
 
 
 async def _log_turn(
