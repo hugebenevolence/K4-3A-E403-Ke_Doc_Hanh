@@ -63,6 +63,18 @@ def test_bat_duoc_viec_doc_lai_nguyen_van_nguon():
     )
 
 
+def test_cau_ngan_ma_dung_khong_bi_vu_la_doc_lai_sach():
+    """Lỗi tệ nhất hệ thống có thể mắc: học viên trả lời đúng, ngắn gọn, bằng
+    lời mình, rồi bị bảo là đang chép tài liệu. Câu ngắn gần như toàn từ chủ đề
+    lấy từ bài nên tỉ lệ trùng luôn cao — không được dùng nó để kết luận."""
+    for ngan_va_dung in [
+        "Dữ liệu huấn luyện có thiên lệch sẵn.",
+        "Vì không bao giờ đúng 100 phần trăm.",
+        "Do bias trong dữ liệu internet.",
+    ]:
+        assert not is_verbatim_paste(ngan_va_dung, SOURCE.text), ngan_va_dung
+
+
 def test_graph_chay_het_luot_va_talker_noi_truoc_ket_qua_cham():
     async def main():
         graph = build_graph(
