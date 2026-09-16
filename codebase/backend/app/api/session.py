@@ -99,6 +99,15 @@ async def run_turn(
                 first_audio_ms = _mark(first_audio_ms, started)
                 yield Event("audio", chunk)
 
+            # ĐÚNG MỘT CÂU, cắt bằng code chứ không tin prompt. Quan sát thật:
+            # talker nói ba câu, và câu thứ ba là "Bạn có muốn mình gợi ý cách
+            # diễn đạt lại ý này ngắn gọn hơn để học thuộc không?" — vừa phá
+            # vai học trò (đang đề nghị dạy lại học viên) vừa phá tiền đề của
+            # cả track (dạy để hiểu, không phải học thuộc). Câu đầu gần như
+            # luôn là câu nhắc lại đúng ý; những câu sau là chỗ model bắt đầu
+            # tự diễn.
+            break
+
         # Không có timeout thì provider treo là học viên ngồi im vô hạn, không
         # có cách nào thoát ngoài tự tải lại trang. Thà mất một lượt.
         result = await asyncio.wait_for(reasoner, timeout=reasoner_timeout_s)
