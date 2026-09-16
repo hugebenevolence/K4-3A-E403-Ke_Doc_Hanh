@@ -12,7 +12,11 @@ langgraph-checkpoint-sqlite==3.1.1
 pytest==9.1.1
 httpx==0.28.1
 
-# Provider thật — bỏ comment khi viết adapter tương ứng trong app/adapters/.
-# openai              # LLM: gpt-5-nano (talker) / gpt-5-mini (chấm) / gpt-5 (judge offline)
+# LLM: gpt-5-nano (talker) / gpt-5-mini (chấm) / gpt-5 (judge offline)
+openai==3.14.1
+
+# Bóc slide PDF ra span + bbox
+pymupdf==1.28.2
+
+# Provider thật còn lại — bỏ comment khi viết adapter tương ứng.
 # speechmatics-python  # STT realtime, có partial <500ms, hỗ trợ tiếng Việt
-# pymupdf             # giai đoạn PDF: parse slide ra span + bbox
