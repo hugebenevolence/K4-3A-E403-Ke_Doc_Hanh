@@ -49,6 +49,35 @@ button {
   background: rgba(185, 135, 31, 0.08);
 }
 
+.hint {
+  align-self: center;
+  font-size: 13px;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  opacity: 0.65;
+}
+
+/* Focus mode: vào phiên thì bớt thứ gây phân tán, đẩy phần thoại lên trước. */
+body.focus .brief .rules {
+  display: none;
+}
+
+body.focus #start-btn {
+  display: none;
+}
+
+body.focus .hint {
+  opacity: 1;
+  border-color: var(--accent);
+}
+
+body.focus #status {
+  font-size: 17px;
+  font-weight: 600;
+}
+
 .brief p {
   margin: 4px 0;
 }

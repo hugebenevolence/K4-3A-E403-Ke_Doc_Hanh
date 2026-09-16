@@ -1,0 +1,14 @@
+{
+  "_comment": "Bài demo TỰ BỊA để repo chạy được mà không cần data pack của BTC. Nội dung thật nạp vào knowledge/ (đã gitignore) — xem knowledge/README.md.",
+  "concept": "vì sao nước sôi ở nhiệt độ khác nhau tuỳ độ cao",
+  "spans": [
+    {
+      "span_id": "[DEMO-01]",
+      "text": "Nước sôi ở 100 độ C là do áp suất khí quyển ở mực nước biển đè lên mặt nước."
+    },
+    {
+      "span_id": "[DEMO-02]",
+      "text": "Lên cao thì áp suất khí quyển giảm, nên nước sôi ở nhiệt độ thấp hơn 100 độ C."
+    }
+  ]
+}

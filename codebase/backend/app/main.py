@@ -6,22 +6,24 @@ Chạy: uvicorn app.main:app --reload --port 8000
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from collections.abc import AsyncIterator
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from langgraph.checkpoint.memory import InMemorySaver
 
-from app.adapters.knowledge.local import InMemorySpanStore
+from app.adapters.knowledge.local import load_lesson
 from app.adapters.llm.mock import MockLLM
 from app.adapters.store.jsonl import JsonlSessionLog, JsonProfileStore
 from app.adapters.stt.mock import MockSTT
 from app.adapters.tts.mock import MockTTS
 from app.api.session import TALKER_VERSION, run_turn
 from app.config import settings
+from app.domain.lesson import Lesson
 from app.domain.log import TurnLog
 from app.domain.session import TurnState
-from app.domain.span import Span
 from app.domain.verdict import Evidence, GradeResult, Verdict
 from app.graph.build import build_graph
 from app.graph.nodes import GRADER_VERSION, PERSONA_VERSION
@@ -31,26 +33,42 @@ from app.ports.store import ProfileStore, SessionLog
 from app.ports.stt import SpeechToText
 from app.ports.tts import TextToSpeech
 
+log = logging.getLogger(__name__)
+
 app = FastAPI(title="Ke Doc Hanh — Track D3 teach-back")
 
-CONCEPT = "vì sao LLM bịa"
-DEMO_SPAN = Span(
-    span_id="[T06-138]",
-    text="(chưa nạp knowledge/spans.json — xem knowledge/README.md)",
+# Frontend chạy ở cổng khác (http.server 5500) nên fetch /lesson là cross-origin.
+# WebSocket không cần CORS nhưng fetch thì có. Chỉ mở cho localhost — đây là
+# prototype chạy máy cá nhân, không deploy.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_methods=["GET"],
+    allow_headers=["*"],
 )
 
-
 def _build_deps() -> tuple[
-    SpanStore, LLMClient, SpeechToText, TextToSpeech, SessionLog, ProfileStore
+    Lesson, SpanStore, LLMClient, SpeechToText, TextToSpeech, SessionLog, ProfileStore
 ]:
-    log = JsonlSessionLog(settings.session_log_file)
+    session_log = JsonlSessionLog(settings.session_log_file)
     profiles = JsonProfileStore(settings.profile_file)
+
     if settings.use_mocks:
-        return InMemorySpanStore([DEMO_SPAN]), MockLLM(), MockSTT(), MockTTS(), log, profiles
+        lesson, spans = load_lesson(settings.demo_lesson_file)
+        return lesson, spans, MockLLM(), MockSTT(), MockTTS(), session_log, profiles
+
     raise NotImplementedError(
         "Chưa gắn provider thật. Viết adapter theo port trong app/ports/ rồi "
-        "wire vào đây — không sửa call site ở chỗ khác."
+        "wire vào đây — không sửa call site ở chỗ khác. "
+        f"Bài học thật nạp từ {settings.lesson_file}."
     )
+
+
+@app.get("/lesson")
+async def lesson_info():
+    """Frontend hỏi bài học đang chạy để hiện lên màn hình, thay vì chép cứng."""
+    lesson, _, *_ = _build_deps()
+    return {"concept": lesson.concept, "source_span_ids": list(lesson.source_span_ids)}
 
 
 @app.get("/health")
@@ -67,7 +85,7 @@ async def teach_back_session(ws: WebSocket):
     nếu không mic sẽ bắt lại chính giọng agent qua loa.
     """
     await ws.accept()
-    spans, llm, stt, tts, session_log, profiles = _build_deps()
+    lesson, spans, llm, stt, tts, session_log, profiles = _build_deps()
     graph = build_graph(llm, spans, checkpointer=InMemorySaver())
 
     session_id = str(uuid.uuid4())
@@ -79,6 +97,7 @@ async def teach_back_session(ws: WebSocket):
     audio_buffer: list[bytes] = []
     first_turn = True
     turn_index = 0
+    review_spans: list[str] = []
 
     await ws.send_json({"type": "state", "state": TurnState.STUDENT_TEACHING.name})
 
@@ -113,38 +132,55 @@ async def teach_back_session(ws: WebSocket):
                 turn_input |= {
                     "session_id": session_id,
                     "student_id": student_id,
-                    "concept": CONCEPT,
-                    "source_span_ids": [DEMO_SPAN.span_id],
+                    "concept": lesson.concept,
+                    "source_span_ids": list(lesson.source_span_ids),
                     "followups_asked": 0,
                     "recurring_gaps": dict(profile.recurring_gaps),
                 }
                 first_turn = False
 
             turn_state = TurnState.CHECKING.name
-            async for event in run_turn(
-                turn_input, graph=graph, llm=llm, tts=tts, thread_id=session_id
-            ):
-                if event.kind == "audio":
-                    await ws.send_bytes(event.payload)
-                elif event.kind == "state":
-                    turn_state = event.payload["turn_state"]
-                    await ws.send_json({"type": "state", "state": turn_state})
-                elif event.kind == "turn_done":
-                    grade = await _log_turn(
-                        session_log, session_id, turn_index, student_text, event
-                    )
-                    profile.absorb(CONCEPT, grade)
-                    await profiles.save(profile)
-                    turn_index += 1
-                else:
-                    await ws.send_json({"type": "transcript", **event.payload})
+            try:
+                async for event in run_turn(
+                    turn_input, graph=graph, llm=llm, tts=tts, thread_id=session_id
+                ):
+                    if event.kind == "audio":
+                        await ws.send_bytes(event.payload)
+                    elif event.kind == "state":
+                        turn_state = event.payload["turn_state"]
+                        await ws.send_json({"type": "state", "state": turn_state})
+                    elif event.kind == "turn_done":
+                        grade = await _log_turn(
+                            session_log, session_id, turn_index, student_text, event
+                        )
+                        profile.absorb(lesson.concept, grade)
+                        await profiles.save(profile)
+                        review_spans = event.payload["result"].get("review_span_ids", [])
+                        turn_index += 1
+                    else:
+                        await ws.send_json({"type": "transcript", **event.payload})
+            except WebSocketDisconnect:
+                raise
+            except Exception:
+                # Provider thật sẽ hỏng theo đủ kiểu: hết quota, timeout, 401,
+                # JSON méo. Để lỗi thoát ra đây là rớt kết nối giữa buổi học mà
+                # học viên không nhận được lời nào. Thà mất một lượt còn hơn
+                # mất cả phiên — trả về lượt nói để họ thử lại.
+                log.exception("Lượt %d của phiên %s hỏng", turn_index, session_id)
+                await ws.send_json(
+                    {"type": "error", "message": "Mình nghe chưa rõ, bạn nói lại giúp mình nhé."}
+                )
+                turn_state = TurnState.STUDENT_TEACHING.name
+                await ws.send_json({"type": "state", "state": turn_state})
 
             if TurnState[turn_state].is_terminal:
                 await ws.send_json(
                     {
                         "type": "session_end",
                         "outcome": turn_state,
-                        "source_span": DEMO_SPAN.span_id,
+                        # Đoạn nên xem lại = những ý học viên chưa chạm tới ở
+                        # lần chấm cuối. Không phải đáp án, chỉ là chỗ để quay lại.
+                        "review_spans": review_spans,
                     }
                 )
                 break

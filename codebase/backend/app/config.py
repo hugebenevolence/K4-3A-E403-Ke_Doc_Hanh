@@ -28,7 +28,10 @@ class Settings(BaseSettings):
     model_standard: str = "gpt-5-mini"
     model_judge: str = "gpt-5"
 
-    knowledge_file: Path = REPO_ROOT / "knowledge" / "spans.json"
+    # Bài thật nằm ngoài repo (data pack không commit được). Khi USE_MOCKS=true
+    # thì dùng bài demo tự bịa trong fixtures/ để repo chạy được ngay.
+    lesson_file: Path = REPO_ROOT / "knowledge" / "lesson.json"
+    demo_lesson_file: Path = BACKEND_DIR / "fixtures" / "demo_lesson.json"
     session_log_file: Path = BACKEND_DIR / "var" / "sessions.jsonl"
     profile_file: Path = BACKEND_DIR / "var" / "profiles.json"
     checkpoint_db: Path = BACKEND_DIR / "var" / "checkpoints.sqlite"
