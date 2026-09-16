@@ -91,6 +91,28 @@ def test_ket_phien_goi_y_dung_doan_co_that(client):
                     break
 
 
+def test_bam_chot_luot_ma_chua_noi_gi_thi_khong_bi_tinh_mot_luot(client, monkeypatch, tmp_path):
+    """Bấm nhầm hai lần, hoặc bấm trước khi kịp nói. Chạy tiếp là tiêu mất một
+    lượt hỏi ngược vì lời rỗng chắc chắn bị chấm chưa đủ — phạt oan học viên."""
+    from app import main
+
+    async def _im_lang(stt, chunks):
+        return "   "
+
+    monkeypatch.setattr(main, "_transcribe", _im_lang)
+
+    with client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()
+        ws.send_text(DONE)
+        assert ws.receive_json()["state"] == "CHECKING"
+        err = ws.receive_json()
+        assert err["type"] == "error"
+        assert ws.receive_json()["state"] == "STUDENT_TEACHING"
+
+    # Không lượt nào được ghi log vì không có lượt nào thực sự chạy.
+    assert not (tmp_path / "s.jsonl").exists()
+
+
 def test_moi_luot_deu_duoc_ghi_log_replay_duoc(client, tmp_path):
     with client.websocket_connect("/ws/session") as ws:
         ws.receive_json()

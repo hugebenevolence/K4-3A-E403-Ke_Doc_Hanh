@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 
+import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.adapters.knowledge.local import InMemorySpanStore
@@ -61,6 +62,29 @@ def test_audio_phai_chay_ra_ngay_chu_khong_gom_het_ca_cau():
         # Nếu stream đúng: sinh 1 chunk là gửi ngay -> ["tts0", "gui"].
         # Nếu gom cả câu: ["tts0", "tts1", "tts2", "gui"].
         assert first_batch == ["tts0", "gui"], f"đang gom cả câu: {first_batch}"
+
+    asyncio.run(main())
+
+
+def test_provider_treo_thi_bo_luot_chu_khong_treo_vo_han():
+    """Không có timeout thì học viên ngồi im vô hạn, không cách nào thoát ngoài
+    tải lại trang. Thà mất một lượt."""
+
+    class SlowGraph:
+        async def ainvoke(self, state, config=None):
+            await asyncio.sleep(30)
+
+    async def main():
+        with pytest.raises(asyncio.TimeoutError):
+            async for _ in run_turn(
+                STATE,
+                graph=SlowGraph(),
+                llm=MockLLM(),
+                tts=TracingTTS([]),
+                thread_id="s1",
+                reasoner_timeout_s=0.05,
+            ):
+                pass
 
     asyncio.run(main())
 
