@@ -1,25 +1,33 @@
 // Client phiên dạy-lại.
 //
+// Hai đường vào: gõ chữ hoặc nói. Đường gõ chữ chạy được ngay không cần mic và
+// không lẫn lỗi nhận dạng giọng nói — hợp để thử phần sư phạm, và là phương án
+// dự phòng nếu mic hỏng giữa buổi demo.
+//
 // Luật mic: chỉ mở khi backend báo state cho phép VÀ audio của agent đã phát
 // xong. Thiếu vế sau thì mic bắt lại chính giọng agent qua loa, STT sẽ nghe
 // agent nói và tưởng là học viên.
 
 const MIC_STATES = new Set(["STUDENT_TEACHING", "STUDENT_RESPONDING"]);
 
-// Phím chốt lượt. Chọn Space vì đây là quy ước sẵn có cho thoại (push-to-talk),
-// không đụng bộ gõ tiếng Việt, và không có ô nhập liệu nào trong màn này để
-// tranh chấp. Alt+C giữ làm phương án hai cho ai quen tổ hợp phím hơn.
-// (Ctrl+Space thì KHÔNG dùng được — nhiều bộ gõ tiếng Việt chiếm phím đó.)
+// Phím chốt lượt. Space vì đây là quy ước sẵn có cho thoại (push-to-talk),
+// không đụng bộ gõ tiếng Việt. Alt+C là phương án hai.
+// (Ctrl+Space KHÔNG dùng được — nhiều bộ gõ tiếng Việt chiếm phím đó.)
 const isTalkKey = (e) =>
   (e.code === "Space" && !e.ctrlKey && !e.metaKey && !e.altKey) ||
   (e.altKey && e.code === "KeyC");
 
-const statusEl = document.getElementById("status");
-const startBtn = document.getElementById("start-btn");
-const doneBtn = document.getElementById("done-btn");
-const transcriptEl = document.getElementById("transcript");
-const audioEl = document.getElementById("ai-audio");
-const conceptEl = document.getElementById("concept");
+const $ = (id) => document.getElementById(id);
+const statusEl = $("status");
+const startBtn = $("start-btn");
+const micBtn = $("mic-btn");
+const doneBtn = $("done-btn");
+const transcriptEl = $("transcript");
+const audioEl = $("ai-audio");
+const conceptEl = $("concept");
+const textForm = $("text-form");
+const textInput = $("text-input");
+const sendBtn = $("send-btn");
 
 let ws = null;
 let mediaRecorder = null;
@@ -27,7 +35,8 @@ let turnState = null;
 const audioQueue = [];
 let isPlaying = false;
 
-const inFocusMode = () => document.body.classList.contains("focus");
+const live = () => ws?.readyState === WebSocket.OPEN;
+const myTurn = () => MIC_STATES.has(turnState) && !isPlaying;
 
 function log(role, text, filler) {
   const line = document.createElement("p");
@@ -49,11 +58,11 @@ function playNext() {
   const blob = audioQueue.shift();
   if (!blob) {
     isPlaying = false;
-    applyMicPolicy();
+    applyTurnPolicy();
     return;
   }
   isPlaying = true;
-  applyMicPolicy();
+  applyTurnPolicy();
   audioEl.src = URL.createObjectURL(blob);
   audioEl.play().catch(() => playNext());
 }
@@ -70,65 +79,88 @@ function skipAgentAudio() {
   playNext();
 }
 
-function applyMicPolicy() {
-  const allowed = MIC_STATES.has(turnState) && !isPlaying;
-  doneBtn.disabled = !allowed;
+function applyTurnPolicy() {
+  const mine = myTurn();
+  const recording = mediaRecorder?.state === "recording";
 
-  if (allowed && mediaRecorder?.state === "inactive") {
-    mediaRecorder.start(250);
-    statusEl.textContent = "Đang nghe bạn giải thích… — nhấn Space khi nói xong";
-  } else if (!allowed && mediaRecorder?.state === "recording") {
-    mediaRecorder.stop();
-  }
+  textInput.disabled = !mine;
+  sendBtn.disabled = !mine;
+  doneBtn.disabled = !mine || !recording;
+  micBtn.disabled = !live() || !mine || recording;
 
-  if (!allowed && !isPlaying && turnState) statusEl.textContent = "Học trò AI đang nghĩ…";
+  if (!mine && recording) mediaRecorder.stop();
+
+  if (isPlaying) statusEl.textContent = "Học trò AI đang nói…";
+  else if (mine) statusEl.textContent = recording
+    ? "Đang nghe bạn giải thích… — Space khi nói xong"
+    : "Tới lượt bạn — gõ chữ hoặc bật micro";
+  else if (turnState) statusEl.textContent = "Học trò AI đang nghĩ…";
 }
 
-function sendDone() {
-  if (ws?.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "explanation_done" }));
-  }
-}
-
-function finishTurn() {
-  // Chốt hết lượt bằng thao tác tường minh thay cho VAD tự động: học viên hay
-  // dừng giữa chừng để nghĩ cách diễn đạt, endpointing tự động sẽ cắt sớm.
-  if (ws?.readyState !== WebSocket.OPEN || doneBtn.disabled) return;
-  doneBtn.disabled = true;
+function submitTurn(payload) {
+  if (!live()) return;
+  ws.send(JSON.stringify(payload));
+  turnState = null; // khoá ngay, khỏi gửi hai lần trước khi server kịp trả lời
+  applyTurnPolicy();
   statusEl.textContent = "Học trò AI đang nghĩ…";
-
-  if (mediaRecorder?.state === "recording") {
-    // stop() đẩy nốt chunk audio cuối qua ondataavailable RỒI mới bắn sự kiện
-    // "stop". Gửi explanation_done ngay ở đây là chunk cuối về sau tín hiệu
-    // chốt lượt, và bị tính sang lượt kế tiếp — mất đoạn cuối câu học viên nói.
-    mediaRecorder.addEventListener("stop", sendDone, { once: true });
-    mediaRecorder.stop();
-  } else {
-    sendDone();
-  }
 }
 
-document.addEventListener("keydown", (e) => {
-  if (!inFocusMode() || !isTalkKey(e) || e.repeat) return;
-  // Space cuộn trang, và nếu focus đang nằm trên nút thì còn bấm luôn nút đó.
+textForm.addEventListener("submit", (e) => {
   e.preventDefault();
-
-  if (isPlaying) skipAgentAudio();
-  else finishTurn();
+  const text = textInput.value.trim();
+  if (!text || !myTurn()) return;
+  log("student", text, false);
+  textInput.value = "";
+  submitTurn({ type: "explanation_text", text });
 });
+
+textInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) textForm.requestSubmit();
+});
+
+micBtn.addEventListener("click", async () => {
+  micBtn.blur();
+  if (!mediaRecorder) {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => {
+      if (live() && e.data.size) ws.send(e.data);
+    };
+  }
+  if (mediaRecorder.state === "inactive") mediaRecorder.start(250);
+  applyTurnPolicy();
+});
+
+function finishSpeaking() {
+  // Chốt lượt bằng thao tác tường minh thay cho VAD tự động: học viên hay dừng
+  // giữa chừng để nghĩ cách diễn đạt, endpointing tự động sẽ cắt sớm.
+  if (!live() || mediaRecorder?.state !== "recording") return;
+  // stop() đẩy nốt chunk audio cuối qua ondataavailable RỒI mới bắn sự kiện
+  // "stop". Gửi explanation_done ngay ở đây là chunk cuối về sau tín hiệu chốt
+  // lượt, và bị tính sang lượt kế tiếp — mất đoạn cuối câu học viên nói.
+  mediaRecorder.addEventListener(
+    "stop",
+    () => submitTurn({ type: "explanation_done" }),
+    { once: true },
+  );
+  mediaRecorder.stop();
+}
 
 doneBtn.addEventListener("click", () => {
   doneBtn.blur(); // trả focus về body, nếu không Space sẽ bấm lại chính nút này
-  finishTurn();
+  finishSpeaking();
 });
 
-startBtn.addEventListener("click", async () => {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  mediaRecorder = new MediaRecorder(stream);
-  mediaRecorder.ondataavailable = (e) => {
-    if (ws?.readyState === WebSocket.OPEN && e.data.size) ws.send(e.data);
-  };
+document.addEventListener("keydown", (e) => {
+  if (!document.body.classList.contains("focus") || !isTalkKey(e) || e.repeat) return;
+  if (document.activeElement === textInput) return; // đang gõ chữ thì Space là dấu cách
+  e.preventDefault();
 
+  if (isPlaying) skipAgentAudio();
+  else finishSpeaking();
+});
+
+startBtn.addEventListener("click", () => {
   ws = new WebSocket(`ws://${location.hostname}:8000/ws/session`);
   ws.binaryType = "blob";
   startBtn.disabled = true;
@@ -141,18 +173,19 @@ startBtn.addEventListener("click", async () => {
     const msg = JSON.parse(event.data);
     if (msg.type === "state") {
       turnState = msg.state;
-      applyMicPolicy();
+      applyTurnPolicy();
     } else if (msg.type === "transcript") {
-      log(msg.role, msg.text, msg.filler);
+      // Lời học viên gõ đã hiện lúc gửi rồi, khỏi hiện lại.
+      if (msg.role !== "student") log(msg.role, msg.text, msg.filler);
     } else if (msg.type === "error") {
       statusEl.textContent = msg.message;
     } else if (msg.type === "session_end") {
       turnState = null;
       document.body.classList.remove("focus");
-      applyMicPolicy();
+      applyTurnPolicy();
       statusEl.textContent =
         msg.outcome === "TAUGHT"
-          ? "Học trò AI đã hiểu. Xong phiên!"
+          ? "🎉 Học trò AI đã hiểu. Xong phiên!"
           : `Kết phiên — nên xem lại ${msg.review_spans.join(", ")}.`;
     }
   };
@@ -161,7 +194,7 @@ startBtn.addEventListener("click", async () => {
     turnState = null;
     startBtn.disabled = false;
     document.body.classList.remove("focus");
-    applyMicPolicy();
+    applyTurnPolicy();
     statusEl.textContent = "Đã ngắt kết nối";
   };
 });

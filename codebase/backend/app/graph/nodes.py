@@ -143,7 +143,7 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
 
         system = registry.compose_system("student_persona", PERSONA_VERSION, source)
         user = (
-            f"Học viên vừa nói:\n{state['student_text']}\n\n"
+            f"Nội dung vừa nghe được:\n{state['student_text']}\n\n"
             f"Chỗ hổng cần hỏi vào:\n{state['gap_summary']}{history}"
         )
         out = await llm.structured(

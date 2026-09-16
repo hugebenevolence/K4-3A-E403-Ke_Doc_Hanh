@@ -128,12 +128,22 @@ async def teach_back_session(ws: WebSocket):
 
             if message.get("text") is None:
                 continue
-            if json.loads(message["text"]).get("type") != "explanation_done":
-                continue
+            command = json.loads(message["text"])
 
-            await ws.send_json({"type": "state", "state": TurnState.CHECKING.name})
-            student_text = await _transcribe(stt, audio_buffer)
-            audio_buffer.clear()
+            # Hai đường vào cùng dẫn tới một chỗ: nói (qua STT) hoặc gõ chữ.
+            # Đường gõ chữ không phải tạm bợ — nó test được phần sư phạm mà
+            # không lẫn lỗi nhận dạng giọng nói, và là phương án dự phòng nếu
+            # mic hỏng giữa buổi demo.
+            if command.get("type") == "explanation_text":
+                await ws.send_json({"type": "state", "state": TurnState.CHECKING.name})
+                student_text = str(command.get("text", ""))
+                audio_buffer.clear()
+            elif command.get("type") == "explanation_done":
+                await ws.send_json({"type": "state", "state": TurnState.CHECKING.name})
+                student_text = await _transcribe(stt, audio_buffer)
+                audio_buffer.clear()
+            else:
+                continue
 
             if not student_text.strip():
                 # Bấm chốt lượt mà chưa nói gì (hoặc bấm hai lần liên tiếp).

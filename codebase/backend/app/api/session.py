@@ -83,7 +83,10 @@ async def run_turn(
         # talker/v1.md và phải có case eval riêng canh chừng.
         talker_tokens = llm.stream(
             system=registry.compose_system("talker", TALKER_VERSION),
-            user=f"Học viên vừa nói:\n{state['student_text']}",
+            # Không dán nhãn "Học viên" ở đây: model echo lại thành "Ừm, học
+            # viên nói rằng..." — gọi người đối diện ở ngôi thứ ba, nghe như
+            # máy đọc biên bản chứ không phải bạn học đang nghe giảng.
+            user=f"Nội dung vừa nghe được:\n{state['student_text']}",
             tier=ModelTier.FAST,
         )
         async for raw in sentence_chunks(talker_tokens):

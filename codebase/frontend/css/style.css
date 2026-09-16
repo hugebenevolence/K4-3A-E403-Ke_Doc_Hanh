@@ -110,3 +110,34 @@ body.focus #status {
   opacity: 0.6;
   font-style: italic;
 }
+
+.compose {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.compose textarea {
+  flex: 1;
+  font: inherit;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  resize: vertical;
+}
+
+.compose textarea:disabled {
+  background: #eee;
+}
+
+#send-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding-inline: 20px;
+}
+
+#send-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}

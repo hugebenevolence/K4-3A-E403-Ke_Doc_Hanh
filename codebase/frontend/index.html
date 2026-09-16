@@ -22,11 +22,18 @@
 
     <div class="controls">
       <button id="start-btn">Bắt đầu phiên</button>
+      <button id="mic-btn" disabled title="Cần cấp quyền micro">🎤 Bật micro</button>
       <button id="done-btn" disabled>✅ Tôi giải thích xong</button>
       <kbd class="hint">Space — nói xong / ngắt lời</kbd>
     </div>
 
     <section id="transcript" aria-live="polite"></section>
+
+    <form id="text-form" class="compose">
+      <textarea id="text-input" rows="3" disabled
+        placeholder="Giải thích bằng lời của bạn… (Ctrl+Enter để gửi)"></textarea>
+      <button id="send-btn" type="submit" disabled>Gửi</button>
+    </form>
 
     <audio id="ai-audio"></audio>
   </main>

@@ -1,4 +1,10 @@
-"""STT giả — phát lại partial rồi final để test nhịp frontend."""
+"""STT giả — phát lại partial rồi final để test nhịp frontend.
+
+Cố ý trả một câu KHÔNG dính tới bài nào cụ thể: mock trước đây trả sẵn một câu
+về bias dữ liệu, trong khi bài demo lại nói về nước sôi, nên người test tưởng
+hệ thống chấm sai. Muốn thử nội dung thật thì dùng đường gõ chữ
+(`explanation_text`), ở đó lời học viên là thật.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +12,7 @@ from collections.abc import AsyncIterator
 
 from app.ports.stt import SpeechToText, Transcript
 
-_SCRIPT = "LLM bịa là vì dữ liệu huấn luyện vốn đã có thiên lệch sẵn rồi"
+_SCRIPT = "đây là lời nói giả lập, hãy dùng ô nhập chữ để thử nội dung thật"
 
 
 class MockSTT(SpeechToText):
