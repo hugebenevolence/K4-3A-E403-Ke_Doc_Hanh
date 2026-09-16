@@ -11,6 +11,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from app.domain.session import MAX_FOLLOWUPS
 from app.main import app
 
 DONE = json.dumps({"type": "explanation_done"})
@@ -58,6 +59,36 @@ def test_ngat_ket_noi_giua_chung_khong_lam_server_no(client):
     # Vao lai duoc nghia la handler da thoat sach, khong ket treo.
     with client.websocket_connect("/ws/session") as ws:
         assert ws.receive_json()["state"] == "STUDENT_TEACHING"
+
+
+def test_bai_hoc_lay_tu_file_chu_khong_hardcode(client):
+    body = client.get("/lesson").json()
+    assert body["concept"] and body["source_span_ids"]
+    assert all(s.startswith("[") for s in body["source_span_ids"])
+
+
+def test_ket_phien_goi_y_dung_doan_co_that(client):
+    """Hết lượt hỏi thì phải trỏ được về đoạn CÓ THẬT để xem lại — nếu bộ lọc
+    mã bịa loại sạch evidence thì tính năng này im lặng chết."""
+    spans = client.get("/lesson").json()["source_span_ids"]
+
+    with client.websocket_connect("/ws/session") as ws:
+        ws.receive_json()
+        for _ in range(MAX_FOLLOWUPS + 1):
+            ws.send_bytes(b"\x00" * 100)
+            ws.send_text(DONE)
+            while True:
+                msg = ws.receive()
+                if not msg.get("text"):
+                    continue
+                body = json.loads(msg["text"])
+                if body.get("type") == "session_end":
+                    assert body["outcome"] == "SUGGEST_REVIEW"
+                    assert body["review_spans"], "khong goi y duoc doan nao"
+                    assert set(body["review_spans"]) <= set(spans)
+                    return
+                if body.get("type") == "transcript" and body.get("filler") is False:
+                    break
 
 
 def test_moi_luot_deu_duoc_ghi_log_replay_duoc(client, tmp_path):
