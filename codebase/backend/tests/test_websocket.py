@@ -30,6 +30,25 @@ def client(tmp_path, monkeypatch):
     return TestClient(app)
 
 
+def _opening(ws) -> str:
+    """Nuốt phần mở bài và trả về câu agent chào mời.
+
+    Phiên bắt đầu bằng một câu hỏi cụ thể mời học viên dạy, chứ không phải một
+    ô trống — nên message đầu tiên không còn là `state` nữa.
+    """
+    question = ""
+    while True:
+        msg = ws.receive()
+        if not msg.get("text"):
+            continue
+        body = json.loads(msg["text"])
+        if body["type"] == "transcript":
+            question = body["text"]
+        elif body["type"] == "state":
+            assert body["state"] == "STUDENT_TEACHING"
+            return question
+
+
 def _one_turn(ws) -> list:
     """Chạy một lượt nói và thu hết message tới khi agent chốt câu trả lời.
 
@@ -57,7 +76,7 @@ def test_health(client):
 
 def test_mot_luot_day_đay_du(client):
     with client.websocket_connect("/ws/session") as ws:
-        assert ws.receive_json() == {"type": "state", "state": "STUDENT_TEACHING"}
+        assert _opening(ws), "phien phai mo bang mot cau hoi cu the"
         msgs = _one_turn(ws)
 
     texts = [json.loads(m["text"]) for m in msgs if m.get("text")]
@@ -82,7 +101,7 @@ def test_ngat_ket_noi_giua_chung_khong_lam_server_no(client):
         ws.send_bytes(b"\x00" * 50)
     # Vao lai duoc nghia la handler da thoat sach, khong ket treo.
     with client.websocket_connect("/ws/session") as ws:
-        assert ws.receive_json()["state"] == "STUDENT_TEACHING"
+        assert _opening(ws) is not None
 
 
 def test_lesson_lay_tu_file_chu_khong_hardcode(client):
@@ -97,7 +116,7 @@ def test_ket_phien_goi_y_dung_doan_co_that(client):
     spans = [s["span_id"] for s in client.get("/lesson").json()["spans"]]
 
     with client.websocket_connect("/ws/session") as ws:
-        ws.receive_json()
+        _opening(ws)
         for _ in range(MAX_FOLLOWUPS + 1):
             ws.send_bytes(b"\x00" * 100)
             ws.send_text(DONE)
@@ -119,7 +138,7 @@ def test_bam_chot_luot_ma_chua_noi_gi_thi_khong_bi_tinh_mot_luot(client, tmp_pat
     """Bấm nhầm hai lần, hoặc bấm trước khi kịp nói. Chạy tiếp là tiêu mất một
     lượt hỏi ngược vì lời rỗng chắc chắn bị chấm chưa đủ — phạt oan học viên."""
     with client.websocket_connect("/ws/session") as ws:
-        ws.receive_json()
+        _opening(ws)
         ws.send_text(DONE)  # chốt lượt mà chưa gửi byte audio nào
         assert ws.receive_json()["state"] == "CHECKING"
         err = ws.receive_json()
@@ -132,7 +151,7 @@ def test_bam_chot_luot_ma_chua_noi_gi_thi_khong_bi_tinh_mot_luot(client, tmp_pat
 
 def test_moi_luot_deu_duoc_ghi_log_replay_duoc(client, tmp_path):
     with client.websocket_connect("/ws/session") as ws:
-        ws.receive_json()
+        _opening(ws)
         _one_turn(ws)
         _one_turn(ws)
 
