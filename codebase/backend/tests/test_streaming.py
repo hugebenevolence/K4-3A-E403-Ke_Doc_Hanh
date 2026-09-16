@@ -66,6 +66,34 @@ def test_audio_phai_chay_ra_ngay_chu_khong_gom_het_ca_cau():
     asyncio.run(main())
 
 
+class ChattyLLM(MockLLM):
+    """Talker nói nhiều câu — đúng cái quan sát được khi chạy thật."""
+
+    async def stream(self, *, system: str, user: str, tier) -> AsyncIterator[str]:
+        yield "Ừm, ý bạn là temperature ảnh hưởng tới kết quả. "
+        yield "Bạn cho rằng nó làm mô hình tự tin nhưng sai. "
+        yield "Bạn có muốn mình gợi ý cách diễn đạt lại cho dễ học thuộc không?"
+
+
+def test_talker_chi_duoc_noi_dung_mot_cau():
+    """Prompt quy định một câu nhưng model không nghe. Quan sát thật: nó nói ba
+    câu, và câu thứ ba là 'Bạn có muốn mình gợi ý... để học thuộc không?' — vừa
+    phá vai học trò (đang đề nghị dạy lại học viên) vừa phá tiền đề của track."""
+
+    async def main():
+        fillers = [
+            e.payload["text"]
+            async for e in run_turn(
+                STATE, graph=_graph(), llm=ChattyLLM(), tts=TracingTTS([]), thread_id="s1"
+            )
+            if e.kind == "transcript" and e.payload.get("filler")
+        ]
+        assert len(fillers) == 1, f"talker nói {len(fillers)} câu: {fillers}"
+        assert "học thuộc" not in fillers[0]
+
+    asyncio.run(main())
+
+
 def test_provider_treo_thi_bo_luot_chu_khong_treo_vo_han():
     """Không có timeout thì học viên ngồi im vô hạn, không cách nào thoát ngoài
     tải lại trang. Thà mất một lượt."""
