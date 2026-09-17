@@ -46,6 +46,7 @@ def load_lesson(path: Path) -> tuple[Lesson, InMemorySpanStore]:
             text=s["text"],
             page=s.get("page"),
             bbox=tuple(s["bbox"]) if s.get("bbox") else None,
+            lines=tuple(s["lines"]) if s.get("lines") else None,
         )
         for s in raw["spans"]
     ]
@@ -53,5 +54,8 @@ def load_lesson(path: Path) -> tuple[Lesson, InMemorySpanStore]:
         concept=raw["concept"],
         source_span_ids=tuple(s.span_id for s in spans),
         vocabulary=tuple(raw.get("vocabulary", ())),
+        kind=raw.get("kind", "slide"),
+        code=raw.get("code", ""),
+        language=raw.get("language", "python"),
     )
     return lesson, InMemorySpanStore(spans)

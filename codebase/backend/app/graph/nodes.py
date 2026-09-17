@@ -22,6 +22,7 @@ from app.prompts.schemas import FollowupOutput, GradeOutput
 log = logging.getLogger(__name__)
 
 GRADER_VERSION = "v2"
+GRADER_CODE_VERSION = "v1"
 PERSONA_VERSION = "v1"
 OPENER_VERSION = "v1"
 
@@ -91,8 +92,15 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
         # nguồn không phải là dạy lại, dù model có thấy "đúng hết" đi nữa.
         verbatim = is_verbatim_paste(student_text, "\n".join(s.text for s in source))
 
+        # Bài code dùng prompt chấm riêng: nguồn không phải là chữ trên slide mà
+        # là hành vi thật của đoạn code, và chỗ cấm quan trọng nhất đổi từ
+        # "đừng nói hộ đáp án" thành "đừng sửa hộ code".
+        code = state.get("code") or ""
+        grader = "grader_code" if code else "grader"
+        version = GRADER_CODE_VERSION if code else GRADER_VERSION
+
         out = await llm.structured(
-            system=registry.compose_system("grader", GRADER_VERSION, source),
+            system=registry.compose_system(grader, version, source, code=code),
             user=f"Lời học viên vừa giải thích:\n\n{student_text}",
             schema=GradeOutput,
             tier=ModelTier.STANDARD,
@@ -211,7 +219,18 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
                 "nhẹ điều đó, nhưng đừng làm bạn ấy thấy bị chấm điểm."
             )
 
-        system = registry.compose_system("student_persona", PERSONA_VERSION, source)
+        code = state.get("code") or ""
+        system = registry.compose_system(
+            "student_persona", PERSONA_VERSION, source, code=code
+        )
+        if code:
+            # Persona viết cho bài slide nên quen miệng gọi "đoạn nguồn"; đang
+            # bàn về code mà nói vậy thì học viên không hiểu đang trỏ vào đâu.
+            history += (
+                "\n\nĐây là buổi giải thích CODE: gọi là 'code', 'dòng', 'vòng lặp' "
+                "chứ đừng gọi là 'đoạn nguồn'. Và tuyệt đối không gợi ý cách sửa "
+                "hay nêu tên thuật toán tốt hơn — học viên phải tự tìm ra."
+            )
         user = (
             f"Nội dung vừa nghe được:\n{state['student_text']}\n\n"
             f"Chỗ hổng cần hỏi vào:\n{state['gap_summary']}{history}"

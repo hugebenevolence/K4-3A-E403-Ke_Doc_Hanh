@@ -1,0 +1,19 @@
+{
+  "_comment": "Bài code demo TỰ VIẾT. Cố ý chọn đoạn CHẠY ĐÚNG nhưng chậm, và có một chỗ học viên hay giải thích sai — để thấy agent chẩn đoán được chỗ lập luận hỏng chứ không phải chỉ bắt lỗi cú pháp.",
+  "kind": "code",
+  "concept": "vì sao hàm này chậm, và chỗ nào quyết định độ phức tạp",
+  "language": "python",
+  "code": "def tim_cap_co_tong(nums, target):\n    \"\"\"Trả về chỉ số của hai phần tử cộng lại bằng target.\"\"\"\n    ket_qua = []\n    for i in range(len(nums)):\n        for j in range(len(nums)):\n            if i == j:\n                continue\n            if nums[i] + nums[j] == target:\n                ket_qua.append((i, j))\n    return ket_qua\n\n\ndef loc_trung_lap(cap):\n    da_thay = set()\n    sach = []\n    for a, b in cap:\n        khoa = tuple(sorted((a, b)))\n        if khoa not in da_thay:\n            da_thay.add(khoa)\n            sach.append((a, b))\n    return sach\n",
+  "spans": [
+    {
+      "span_id": "[code-L4-L9]",
+      "lines": [4, 9],
+      "text": "Hai vòng lặp lồng nhau, cả hai đều chạy hết mảng. Với mỗi i, vòng trong duyệt lại toàn bộ mảng từ đầu — kể cả những j đã xét ở lượt trước. Đây là chỗ quyết định độ phức tạp O(n^2)."
+    },
+    {
+      "span_id": "[code-L13-L21]",
+      "lines": [13, 21],
+      "text": "Hàm lọc trùng lặp chạy O(n) nhờ dùng set để tra cứu trong thời gian hằng số. Nó không phải chỗ gây chậm — nhưng sự tồn tại của nó là dấu hiệu vòng lặp ở trên đang sinh ra mỗi cặp hai lần."
+    }
+  ]
+}

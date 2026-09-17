@@ -59,17 +59,29 @@ def _build_deps() -> tuple[
     profiles = JsonProfileStore(settings.profile_file)
 
     if settings.use_mocks:
-        lesson, spans = load_lesson(settings.demo_lesson_file)
+        lesson, spans = load_lesson(_demo_file())
         return lesson, spans, MockLLM(), MockSTT(), MockTTS(), session_log, profiles
 
     # Bài thật nếu đã nạp, không thì vẫn dùng bài demo — để chạy LLM thật được
     # ngay mà chưa cần đụng tới data pack.
     lesson_file = (
-        settings.lesson_file if settings.lesson_file.is_file() else settings.demo_lesson_file
+        settings.lesson_file if settings.lesson_file.is_file() else _demo_file()
     )
     lesson, spans = load_lesson(lesson_file)
     llm, tts = _shared_providers()
     return lesson, spans, llm, _speech_to_text(lesson), tts, session_log, profiles
+
+
+def _demo_file():
+    """Bài demo theo LESSON_MODE: "slide" hay "code".
+
+    Hai chế độ dùng CHUNG toàn bộ backend — chỉ khác file bài và prompt
+    chấm. Đó là điểm của việc Span mang được cả toạ độ trang lẫn khoảng dòng."""
+    return (
+        settings.demo_code_lesson_file
+        if settings.lesson_mode == "code"
+        else settings.demo_lesson_file
+    )
 
 
 def _speech_to_text(lesson: Lesson) -> SpeechToText:
@@ -105,7 +117,11 @@ async def lesson_info():
     spans = await store.get_many(lesson.source_span_ids)
     return {
         "concept": lesson.concept,
-        "has_slides": bool(settings.slides_pdf and settings.slides_pdf.is_file()),
+        "kind": lesson.kind,
+        "code": lesson.code,
+        "language": lesson.language,
+        "has_slides": lesson.kind == "slide"
+        and bool(settings.slides_pdf and settings.slides_pdf.is_file()),
         # bbox theo hệ PyMuPDF (gốc trên-trái). Frontend phải đổi sang hệ của
         # PDF.js trước khi vẽ — xem ghi chú trong js/slides.js.
         "spans": [
@@ -113,6 +129,7 @@ async def lesson_info():
                 "span_id": s.span_id,
                 "page": s.page,
                 "bbox": list(s.bbox) if s.bbox else None,
+                "lines": list(s.lines) if s.lines else None,
                 # Nội dung thật để client hiện lại nguyên văn khi đối chiếu —
                 # học viên thấy được agent đang dựa vào đúng chữ nào trên slide.
                 "text": s.text,
@@ -267,6 +284,7 @@ async def teach_back_session(ws: WebSocket):
                     "source_span_ids": list(lesson.source_span_ids),
                     "followups_asked": 0,
                     "recurring_gaps": dict(profile.recurring_gaps),
+                    "code": lesson.code,
                 }
                 first_turn = False
 

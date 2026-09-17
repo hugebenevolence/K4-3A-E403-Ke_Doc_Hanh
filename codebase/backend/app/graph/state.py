@@ -20,6 +20,9 @@ class TeachBackState(TypedDict, total=False):
     student_text: str  # lời học viên vừa nói (đã STT final)
     followups_asked: int
 
+    # Bài code: mã nguồn học viên đang giải thích. Rỗng với bài slide.
+    code: str
+
     # Cộng dồn qua các lượt (reducer của LangGraph). Không có cái này thì lượt
     # sau agent không biết mình đã hỏi gì và hỏi lại y câu cũ.
     asked_questions: Annotated[list[str], operator.add]

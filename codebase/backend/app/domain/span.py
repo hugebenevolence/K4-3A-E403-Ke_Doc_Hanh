@@ -12,10 +12,22 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Span:
-    span_id: str  # "[T06-138]" hoặc "slide-04-p3-l12"
+    """Một mẩu nguồn có thể trỏ tới được.
+
+    Cùng một kiểu dùng cho cả slide lẫn code — chỉ khác cách định vị. Nhờ vậy
+    toàn bộ phần chấm, chặn lộ đáp án và trích dẫn dùng lại được nguyên vẹn khi
+    đổi từ dạy-lại-slide sang dạy-lại-code.
+    """
+
+    span_id: str  # "[T06-138]", "slide-04-p3-l12", hoặc "code-L12-L18"
     text: str
+
+    # Định vị trên slide
     page: int | None = None
-    bbox: tuple[float, float, float, float] | None = None  # toạ độ PyMuPDF (gốc trên-trái)
+    bbox: tuple[float, float, float, float] | None = None  # PyMuPDF (gốc trên-trái)
+
+    # Định vị trong code: khoảng dòng, đánh số từ 1, bao gồm cả hai đầu
+    lines: tuple[int, int] | None = None
 
 
 def normalize_span_id(raw: str) -> str:

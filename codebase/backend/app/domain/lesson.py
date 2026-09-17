@@ -14,6 +14,14 @@ class Lesson:
     concept: str  # câu học viên sẽ được yêu cầu dạy lại
     source_span_ids: tuple[str, ...]
 
+    # "slide" hoặc "code". Quyết định frontend dựng viewer nào và backend dùng
+    # prompt chấm nào — phần còn lại của hệ không đổi.
+    kind: str = "slide"
+
+    # Chỉ dùng khi kind="code": mã nguồn học viên sẽ giải thích.
+    code: str = ""
+    language: str = "python"
+
     # Thuật ngữ rút tự động từ chính bộ slide, mớm cho bộ nhận dạng giọng nói.
     # Không gõ tay theo từng bài: bài nào cũng có thuật ngữ riêng, gõ tay thì
     # bài mới lại quên. Xem domain/terms.py.

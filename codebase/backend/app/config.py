@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     # thì dùng bài demo tự bịa trong fixtures/ để repo chạy được ngay.
     lesson_file: Path = REPO_ROOT / "knowledge" / "lesson.json"
     demo_lesson_file: Path = BACKEND_DIR / "fixtures" / "demo_lesson.json"
+    demo_code_lesson_file: Path = BACKEND_DIR / "fixtures" / "demo_code_lesson.json"
+
+    # "slide" hoặc "code" — đổi chế độ bài học mà không sửa dòng code nào.
+    lesson_mode: str = "slide"
 
     # File slide để frontend render. Nằm ngoài repo vì thuộc data pack.
     slides_pdf: Path | None = None
