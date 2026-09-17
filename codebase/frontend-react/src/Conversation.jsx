@@ -55,9 +55,15 @@ function StudentTurn({ turn }) {
   );
 }
 
-function AgentTurn({ turn, span, onOpen }) {
+function AgentTurn({ turn, span, live = false, onOpen }) {
   return (
-    <motion.div {...blurIn} className="space-y-3">
+    <motion.div
+      {...blurIn}
+      className="voice space-y-3 px-4 py-3.5"
+      // Viền sáng chỉ chạy đúng lúc câu này đang được đọc thành tiếng. Gắn
+      // theo dữ liệu chứ không theo class để CSS giữ hết phần trang trí.
+      data-live={live ? "true" : undefined}
+    >
       {/* Nhắc lại những ý đã nghe hiểu: học viên thấy phần nào đã ổn trước
           khi bị hỏi phần còn hổng. Chỉ hiện chữ, không đọc thành tiếng. */}
       {turn.understood?.length > 0 && (
@@ -346,6 +352,7 @@ export default function Conversation({
                 <AgentTurn
                   key={i}
                   turn={turn}
+                  live={i === lastAgent && session.speaking && !turn.filler}
                   // Câu chốt phiên không kèm thẻ: thẻ kết quả bên dưới đã chỉ
                   // đúng những chỗ cần xem lại, hiện hai lần là thừa.
                   span={ended && i === lastAgent ? null : spanById.get(turn.cites_span_id)}

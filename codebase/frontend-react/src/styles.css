@@ -57,6 +57,62 @@
   to { background-position: 12.728px 0; }
 }
 
+/* Lời học trò: một thẻ mềm thay vì chữ trôi nổi giữa nền trắng.
+   Bản trước để nguyên văn xuôi không khung — đọc thì sạch, nhưng người dùng thử
+   nói nó "trông chưa xong". Thẻ cho lời của agent một chỗ đứng, và tách khỏi
+   bong bóng của học viên bên phải mà không cần thêm màu nào. */
+.voice {
+  position: relative;
+  border-radius: 16px;
+  /* Nền TRẮNG viền mảnh, không phải nền xám: bong bóng của học viên đã là khối
+     xám đặc: hai bên cùng xám thì nhìn lướt không còn phân biệt được ai đang
+     nói. Trắng-có-viền đọc như "thẻ", xám-đặc đọc như "lời mình vừa nói". */
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgb(23 23 23 / 0.1);
+  transition: box-shadow 0.35s;
+}
+
+/* ĐANG NÓI: viền sáng chạy vòng quanh, kiểu Siri.
+   Đây là ngoại lệ DUY NHẤT của luật đơn sắc ở đầu file, và nó đáng: câu đang
+   được đọc thành tiếng là thứ học viên cần nhận ra ngay giữa một cột hội thoại
+   dài. Nói xong là viền tắt, nên màu không bao giờ nằm yên trên màn hình để
+   tranh chú ý với slide.
+   Cách vẽ: nền gradient hình nón, rồi dùng mask khoét ruột để chỉ còn lại đúng
+   đường viền — không cần thêm phần tử hay ảnh nào. */
+@property --voice-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.voice[data-live="true"] {
+  box-shadow: 0 1px 2px rgb(23 23 23 / 0.04), 0 8px 28px rgb(99 102 241 / 0.12);
+}
+.voice[data-live="true"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--voice-angle),
+    #818cf8 0deg,
+    #2dd4bf 100deg,
+    #c084fc 200deg,
+    #38bdf8 290deg,
+    #818cf8 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: voice-spin 4.5s linear infinite;
+  pointer-events: none;
+}
+@keyframes voice-spin {
+  to { --voice-angle: 360deg; }
+}
+
 /* Chữ lấp lánh lúc agent đang làm việc — kiểu "Working…" của ảnh tham chiếu.
    Chuyển động nói "đang chạy" mà không cần thêm một vòng xoay nào. */
 .shimmer {
@@ -87,4 +143,6 @@
   .mark.focused { animation: none; }
   .shimmer { animation: none; color: #737373; background: none; }
   .cover { animation: none; }
+  /* Viền vẫn còn màu để biết câu nào đang được đọc, chỉ thôi quay. */
+  .voice[data-live="true"]::before { animation: none; }
 }

@@ -27,6 +27,7 @@ from fastapi.responses import FileResponse
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 from pydantic import BaseModel
+from starlette.websockets import WebSocketState
 
 from app.adapters.knowledge.local import load_lesson
 from app.adapters.knowledge.pdf import Deck, attach_descriptions, deck_slug, load_deck
@@ -409,6 +410,23 @@ async def teach_back_session(ws: WebSocket):
     turn_index = 0
     review_spans: list[str] = []
 
+    async def tell(payload: dict) -> None:
+        """Gửi cho học viên, im lặng bỏ qua nếu họ đã đóng tab.
+
+        Đường phục hồi lỗi chạy SAU khi một thứ khác đã hỏng, và lý do hay gặp
+        nhất chính là học viên đóng tab giữa phiên. Lúc đó socket đã đóng,
+        `send_json` ném RuntimeError, và câu báo lỗi lại làm sập luôn handler —
+        quan sát thật trên bản deploy rạng sáng 18/9, hai lần trong một log.
+
+        Không nuốt lỗi bừa: chỉ bỏ qua đúng trường hợp phía kia đã đi.
+        """
+        if ws.application_state is not WebSocketState.CONNECTED:
+            return
+        try:
+            await ws.send_json(payload)
+        except (WebSocketDisconnect, RuntimeError):
+            log.info("Học viên đã rời phiên, bỏ qua tin %r", payload.get("type"))
+
     async def partial_to_client(text: str) -> None:
         """Chữ chạy lên màn hình khi học viên còn đang nói — không có cái này
         thì họ nói vào khoảng không, không biết mic có ăn hay không."""
@@ -427,7 +445,7 @@ async def teach_back_session(ws: WebSocket):
         xong, ngập ngừng vài giây là bị cắt lời.
         """
         turn = TurnState[state]
-        await ws.send_json(
+        await tell(
             {
                 "type": "state",
                 "state": state,
@@ -609,7 +627,7 @@ async def teach_back_session(ws: WebSocket):
                 # lại mãi trong khi vấn đề nằm ở phía mình. Gặp thật 17/9: API
                 # trả 429 credit_balance_exhausted giữa lúc đang đo golden set.
                 log.exception("Provider không dùng được ở phiên %s", session_id)
-                await ws.send_json(
+                await tell(
                     {
                         "type": "error",
                         "message": (
@@ -631,7 +649,7 @@ async def teach_back_session(ws: WebSocket):
                 # học viên không nhận được lời nào. Thà mất một lượt còn hơn
                 # mất cả phiên — trả về lượt nói để họ thử lại.
                 log.exception("Lượt %d của phiên %s hỏng", turn_index, session_id)
-                await ws.send_json(
+                await tell(
                     {"type": "error", "message": "Mình nghe chưa rõ, bạn nói lại giúp mình nhé."}
                 )
                 turn_state = TurnState.STUDENT_TEACHING.name
@@ -644,7 +662,7 @@ async def teach_back_session(ws: WebSocket):
                 if last_grade is not None:
                     profile.absorb(lesson.concept, last_grade)
                     await profiles.save(profile)
-                await ws.send_json(
+                await tell(
                     {
                         "type": "session_end",
                         "outcome": turn_state,
