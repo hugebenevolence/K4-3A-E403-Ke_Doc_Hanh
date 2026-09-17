@@ -16,6 +16,10 @@ function intersects([ax0, ay0, ax1, ay1], [bx0, by0, bx1, by1]) {
   return ax0 < bx1 && bx0 < ax1 && ay0 < by1 && by0 < ay1;
 }
 
+function area([x0, y0, x1, y1]) {
+  return (x1 - x0) * (y1 - y0);
+}
+
 function contains([x0, y0, x1, y1], [px, py]) {
   return px >= x0 && px <= x1 && py >= y0 && py <= y1;
 }
@@ -115,7 +119,13 @@ export default function SlideView({
     return [(e.clientX - r.left) / scale, (e.clientY - r.top) / scale];
   }
 
-  const blockAt = (pt) => blocks.find((b) => contains(b.bbox, pt));
+  // Điểm nằm trong nhiều ô (chữ đặt đè lên hình) thì chọn ô NHỎ nhất: ảnh
+  // timeline phủ gần cả trang ở slide 5–9, lấy ô đầu tiên là cú bấm nào vào chữ
+  // cũng thành chọn cả hình.
+  const blockAt = (pt) =>
+    blocks
+      .filter((b) => contains(b.bbox, pt))
+      .sort((a, b) => area(a.bbox) - area(b.bbox))[0];
 
   function onPointerDown(e) {
     if (!selectable || !scale || e.button !== 0) return;
@@ -180,9 +190,12 @@ export default function SlideView({
           {/* Khi đang chọn: viền mờ quanh mọi ô chọn được, để học viên thấy
               slide được chia thành những ô nào trước khi kéo. */}
           {selectable &&
-            blocks.map((b) => {
+            // Hình vẽ trước (nằm dưới), ô chữ vẽ sau (nằm trên): ô chữ đặt đè lên
+            // hình vẫn nhìn thấy viền của chính nó.
+            [...blocks].sort((a, b) => (a.kind === "figure" ? -1 : 0) - (b.kind === "figure" ? -1 : 0)).map((b) => {
               const on = selectedIds.has(b.span_id);
               const hover = b.span_id === hovered;
+              const figure = b.kind === "figure";
               return (
                 <div
                   key={b.span_id}
@@ -192,9 +205,23 @@ export default function SlideView({
                       ? "border-neutral-900 bg-neutral-900/7"
                       : hover
                         ? "border-neutral-600 bg-neutral-900/4"
-                        : "border-dashed border-neutral-400/60"
+                        : figure
+                          ? "border-dotted border-neutral-500/70"
+                          : "border-dashed border-neutral-400/60"
                   }`}
-                />
+                >
+                  {/* Nhãn "Hình": sơ đồ và ảnh cũng giảng được, không chỉ chữ —
+                      và nhìn là biết ô này là cả hình, không phải một dòng chữ. */}
+                  {figure && (
+                    <span
+                      className={`absolute top-1 left-1 rounded px-1.5 py-0.5 text-[10px] leading-none font-medium ${
+                        on || hover ? "bg-neutral-900 text-white" : "bg-white/90 text-neutral-600 ring-1 ring-neutral-300"
+                      }`}
+                    >
+                      Hình
+                    </span>
+                  )}
+                </div>
               );
             })}
 

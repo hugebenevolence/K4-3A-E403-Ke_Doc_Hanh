@@ -29,6 +29,10 @@ class Span:
     # Định vị trong code: khoảng dòng, đánh số từ 1, bao gồm cả hai đầu
     lines: tuple[int, int] | None = None
 
+    # "text" hoặc "figure" (ảnh / sơ đồ trên slide) — để giao diện hiện khác đi
+    # và để biết nội dung là mô tả hình chứ không phải chữ trích từ slide.
+    kind: str = "text"
+
 
 def normalize_span_id(raw: str) -> str:
     """Dạng so khớp: bỏ ngoặc, khoảng trắng, hoa thường.

@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.adapters.knowledge.local import load_lesson
-from app.adapters.knowledge.pdf import Deck, load_deck
+from app.adapters.knowledge.pdf import Deck, attach_descriptions, load_deck
 from app.adapters.knowledge.selection import lesson_from_selection
 from app.adapters.llm.mock import MockLLM
 from app.adapters.store.jsonl import JsonlSessionLog, JsonProfileStore
@@ -96,7 +96,11 @@ def _current_deck() -> Deck | None:
 def _deck(path: str, mtime: float) -> Deck:
     # Đọc cả bộ slide mất vài giây; cache theo thời điểm sửa file để thay slide
     # là tự đọc lại, không phải khởi động lại server.
-    return load_deck(Path(path))
+    try:
+        descriptions = json.loads(settings.figures_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        descriptions = {}
+    return attach_descriptions(load_deck(Path(path)), descriptions)
 
 
 def _lesson_file():
@@ -228,7 +232,7 @@ async def slides_blocks():
     """
     deck = _require_deck()
     return [
-        {"span_id": s.span_id, "page": s.page, "bbox": list(s.bbox), "text": s.text}
+        {"span_id": s.span_id, "page": s.page, "bbox": list(s.bbox), "text": s.text, "kind": s.kind}
         for s in deck.spans
         if s.bbox
     ]

@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     # Bài thật nằm ngoài repo (data pack không commit được). Khi USE_MOCKS=true
     # thì dùng bài demo tự bịa trong fixtures/ để repo chạy được ngay.
     lesson_file: Path = REPO_ROOT / "knowledge" / "lesson.json"
+    # Mô tả hình trên slide, sinh bằng scripts/describe_figures.py.
+    figures_file: Path = REPO_ROOT / "knowledge" / "figures.json"
     demo_lesson_file: Path = BACKEND_DIR / "fixtures" / "demo_lesson.json"
     demo_code_lesson_file: Path = BACKEND_DIR / "fixtures" / "demo_code_lesson.json"
 

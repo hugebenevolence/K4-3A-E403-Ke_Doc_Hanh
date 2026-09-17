@@ -32,11 +32,12 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pymupdf
 
+from app.adapters.knowledge.figures import Shape, find_figures
 from app.domain.span import Span
 from app.domain.terms import extract_terms
 
@@ -91,6 +92,19 @@ def _raw_lines(page: pymupdf.Page) -> list[Line]:
                 size = max(span["size"] for span in line["spans"])
                 lines.append(Line(text, tuple(line["bbox"]), size))
     return lines
+
+
+_ROUNDED_RECT = {"l": 4, "c": 32}
+"""Dáng khung bo góc mà công cụ làm slide của khoá vẽ ra — đo trên cả bộ slide."""
+
+
+def _raw_shapes(page: pymupdf.Page) -> list[Shape]:
+    shapes = [Shape(tuple(info["bbox"]), "image") for info in page.get_image_info()]
+    for drawing in page.get_drawings():
+        ops = Counter(item[0] for item in drawing["items"])
+        kind = "rect" if dict(ops) in (_ROUNDED_RECT, {"re": 1}) else "path"
+        shapes.append(Shape(tuple(drawing["rect"]), kind))
+    return shapes
 
 
 def _read_deck(path: Path) -> tuple[list[list[Line]], list[float]]:
@@ -179,15 +193,51 @@ class Deck:
     pages: int
 
 
-def _spans_of(pages, heights, slug: str, min_words: int) -> list[Span]:
+FIGURE_LABEL_PREFIX = "Hình minh hoạ."
+
+
+def _page_figures(path: Path) -> list[tuple[list[Shape], tuple[float, float]]]:
+    with pymupdf.open(path) as doc:
+        return [(_raw_shapes(page), (page.rect.width, page.rect.height)) for page in doc]
+
+
+def _spans_of(pages, heights, slug: str, min_words: int, figures=None) -> list[Span]:
     spans = []
     for page_number, (lines, height) in enumerate(zip(pages, heights, strict=True), 1):
-        cards = [_to_card(g) for g in _group(lines, height)]
+        regions = []
+        if figures is not None:
+            shapes, size = figures[page_number - 1]
+            regions = find_figures(shapes, [(ln.text, ln.bbox) for ln in lines], size)
+        # Nhãn chữ nằm trong hình thuộc về hình, không thành ô chữ riêng — nếu không
+        # sơ đồ vòng tròn ở slide 3 vỡ thành hàng chục ô tí hon.
+        # Tiêu đề trang không bao giờ là nhãn của hình: ảnh timeline phủ gần cả
+        # trang (slide 5–9) từng nuốt luôn tiêu đề "Lịch sử AI 70 năm".
+        title = {id(ln) for ln in _title_lines(lines, height)}
+        regions = [
+            replace(r, labels=tuple(i for i in r.labels if id(lines[i]) not in title))
+            for r in regions
+        ]
+        taken = {i for r in regions for i in r.labels}
+        text_lines = [ln for i, ln in enumerate(lines) if i not in taken]
+
+        cards = [_to_card(g) for g in _group(text_lines, height)]
         spans += [
             Span(span_id=f"[{slug}-p{page_number}-{i:02d}]", text=text, page=page_number, bbox=bbox)
             for i, (text, bbox) in enumerate(cards, 1)
             if len(text.split()) >= min_words
         ]
+        for k, region in enumerate(regions, 1):
+            labels = " · ".join(lines[i].text for i in region.labels)
+            text = f"{FIGURE_LABEL_PREFIX} Nhãn trong hình: {labels}." if labels else f"{FIGURE_LABEL_PREFIX}"
+            spans.append(
+                Span(
+                    span_id=f"[{slug}-p{page_number}-f{k:02d}]",
+                    text=text,
+                    page=page_number,
+                    bbox=tuple(round(v, 1) for v in region.bbox),
+                    kind="figure",
+                )
+            )
     return spans
 
 
@@ -208,7 +258,7 @@ def _slug(path: Path) -> str:
 def load_deck(path: Path, *, min_words: int = 4) -> Deck:
     pages, heights = _read_deck(path)
     return Deck(
-        spans=tuple(_spans_of(pages, heights, _slug(path), min_words)),
+        spans=tuple(_spans_of(pages, heights, _slug(path), min_words, _page_figures(path))),
         titles=_titles_of(pages, heights),
         # Rút từ CẢ bộ slide, không chỉ trang đang học: học viên hay nhắc tới
         # thuật ngữ ở trang khác khi giải thích.
@@ -238,3 +288,21 @@ def parse_slide(path: Path, page_number: int, *, min_words: int = 4) -> list[Spa
     if not 1 <= page_number <= count:
         raise ValueError(f"{path.name} chỉ có {count} trang, không có trang {page_number}")
     return [sp for sp in parse_deck(path, min_words=min_words) if sp.page == page_number]
+
+
+def attach_descriptions(deck: Deck, descriptions: dict[str, str]) -> Deck:
+    """Ghép mô tả hình (sinh sẵn bằng model có thị giác) vào các ô hình.
+
+    Không có mô tả thì ô hình giữ nguyên "Hình minh hoạ. Nhãn trong hình: …" —
+    vẫn chọn được, chỉ là nguồn chấm mỏng, và vùng chọn mỏng thì giao diện tự
+    mở rộng ra cả trang.
+    """
+    if not descriptions:
+        return deck
+    spans = tuple(
+        replace(s, text=s.text.replace(FIGURE_LABEL_PREFIX, f"Hình: {desc}", 1))
+        if s.kind == "figure" and (desc := descriptions.get(s.span_id))
+        else s
+        for s in deck.spans
+    )
+    return replace(deck, spans=spans)
