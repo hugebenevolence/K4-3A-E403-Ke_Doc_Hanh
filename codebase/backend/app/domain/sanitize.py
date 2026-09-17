@@ -46,3 +46,19 @@ def _unwrap_json_envelope(text: str) -> str:
         if isinstance(parsed.get(field), str):
             return parsed[field]
     return text
+
+
+# Hai từ HOA liền nhau trở lên, mỗi từ từ 4 chữ cái: "REWARD MODEL",
+# "ARTIFICIAL INTELLIGENCE". Viết tắt ngắn (LLM, AI, RLHF) không lọt vào vì
+# ngắn hơn, hoặc vì đứng một mình.
+_SHOUTING = re.compile(r"\b[A-Z]{4,}(?:[ \-][A-Z]{4,})+\b")
+
+
+def tame_shouting(text: str) -> str:
+    """Hạ chữ HOA của cả cụm tiếng Anh về chữ thường.
+
+    Model chép nguyên cách viết của slide ("REWARD MODEL") vào câu nói, đọc lên
+    như đang quát, và trái với văn phong đã quy định. Prompt dặn rồi mà vẫn
+    lọt, nên chặn thêm bằng luật.
+    """
+    return _SHOUTING.sub(lambda m: m.group(0).lower(), text)

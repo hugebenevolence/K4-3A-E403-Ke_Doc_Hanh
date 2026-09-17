@@ -28,6 +28,7 @@ from app.api.session import TALKER_VERSION, run_turn
 from app.config import settings
 from app.domain.lesson import Lesson
 from app.domain.log import TurnLog
+from app.domain.sanitize import sanitize_spoken, tame_shouting
 from app.domain.session import TurnState
 from app.domain.verdict import Evidence, GradeResult, Verdict
 from app.graph.build import build_graph
@@ -287,6 +288,9 @@ async def teach_back_session(ws: WebSocket):
             llm, spans, list(lesson.source_span_ids), profile.recurring_gaps,
             lesson.concept, lesson.code,
         )
+        # Câu mở bài không đi qua run_turn nên phải tự lọc; đo được thật: lọt
+        # "REWARD MODEL" viết hoa y như slide.
+        opening = tame_shouting(sanitize_spoken(opening))
         await ws.send_json(
             {"type": "transcript", "role": "agent", "text": opening, "filler": False}
         )
@@ -382,6 +386,7 @@ async def teach_back_session(ws: WebSocket):
                     "student_id": student_id,
                     "concept": lesson.concept,
                     "source_span_ids": list(lesson.source_span_ids),
+                    "vocabulary": list(lesson.vocabulary),
                     "followups_asked": 0,
                     "recurring_gaps": dict(profile.recurring_gaps),
                     "code": live_code,

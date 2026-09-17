@@ -7,8 +7,16 @@ trực tiếp, để test node mà không cần provider thật.
 from __future__ import annotations
 
 import logging
+import re
 
-from app.domain.leak import about_source, leaked_terms, leaks_answer, suggests_fix
+from app.domain.leak import (
+    about_source,
+    confirms_answer,
+    leaked_terms,
+    leaks_answer,
+    looks_english,
+    suggests_fix,
+)
 from app.domain.session import TeachBackSession, TurnState
 from app.domain.span import normalize_span_id
 from app.domain.verbatim import is_verbatim_paste, quotes_source
@@ -23,7 +31,7 @@ log = logging.getLogger(__name__)
 
 GRADER_VERSION = "v2"
 GRADER_CODE_VERSION = "v1"
-PERSONA_VERSION = "v1"
+PERSONA_VERSION = "v2"
 OPENER_VERSION = "v2"
 
 
@@ -193,23 +201,36 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
     return grade
 
 
-def _reanchor(state: TeachBackState) -> str:
+_REANCHORS = (
+    "Mình chưa theo kịp đoạn vừa rồi. Bạn thử bắt đầu từ ý bạn chắc chắn nhất được không?",
+    "Chỗ này mình vẫn còn mơ hồ. Bạn lấy thử một ví dụ cụ thể giúp mình nhé?",
+    "Nếu phải nói gọn trong một câu thôi, thì bạn sẽ nói phần này là gì?",
+)
+
+
+# Dùng khi đã có vài ý "mình hiểu là" hiện ngay phía trên: nói "mình chưa theo
+# kịp" lúc đó là tự mâu thuẫn với chính mấy gạch đầu dòng vừa liệt kê.
+_CONTINUES = (
+    "Tới đó thì mình theo được rồi. Phần tiếp theo diễn ra thế nào vậy bạn?",
+    "Mấy ý đó mình nắm rồi. Còn chỗ nào trong phần này mà bạn thấy quan trọng nữa không?",
+    "Ừ, mình hiểu tới đây. Bạn nói tiếp giúp mình, sau đó thì sao?",
+)
+
+
+def _reanchor(state: TeachBackState, heard: bool = False) -> str:
     """Câu hỏi dùng khi viết lại vẫn lộ đáp án.
 
-    Câu chung chung ("bạn giải thích thêm chỗ đó được không?") là câu tệ nhất:
-    học viên không biết "chỗ đó" là chỗ nào, và quan sát thật cho thấy nó rơi
-    đúng vào lúc học viên đang lạc đề — tức lúc họ cần được neo lại nhất.
+    Đổi câu theo số lần đã hỏi. Bản trước chỉ có đúng MỘT câu, và quan sát thật
+    là học viên nghe y nguyên câu "Thật ra mình vẫn chưa nối được chỗ bạn vừa
+    nói với <tên slide>…" hai ba lần liền — nghe như máy, và tên slide dài thì
+    câu đọc lên rất gượng.
 
-    Nhắc tên khái niệm KHÔNG phải là lộ đáp án: nó đang hiện sẵn trên màn hình.
-    Lộ là nói ra phần NỘI DUNG học viên còn thiếu.
+    Mỗi câu vẫn là lời mời cụ thể (bắt đầu từ ý chắc nhất / một ví dụ / một
+    câu tóm) chứ không phải "bạn giải thích thêm được không" chung chung.
     """
-    concept = (state.get("concept") or "").strip()
-    if not concept:
-        return "Bạn kể lại cho mình từ đầu được không, mình chưa bắt kịp."
-    return (
-        f"Thật ra mình vẫn chưa nối được chỗ bạn vừa nói với {concept}. "
-        "Bạn thử kể lại từ đầu giúp mình nhé?"
-    )
+    asked = len(state.get("asked_questions") or [])
+    variants = _CONTINUES if heard else _REANCHORS
+    return variants[asked % len(variants)]
 
 
 def _uncovered_text(state: TeachBackState, source) -> str:
@@ -272,8 +293,13 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
         # ra từ khoá của đúng phần học viên còn thiếu thì học viên chỉ cần gật
         # đầu là xong — mất sạch ý nghĩa của việc hỏi ngược.
         uncovered = _uncovered_text(state, source)
-        if uncovered and leaks_answer(out.question, uncovered, state["student_text"]):
-            leaked = leaked_terms(out.question, uncovered, state["student_text"])
+        visible = state.get("concept") or ""
+        # Giữ lại phần "mình hiểu là" của lần viết đầu: nếu câu hỏi phải thay bằng
+        # câu dự phòng thì học viên vẫn thấy mình được nghe, thay vì nhận một câu
+        # chung chung sau khi đã giảng được kha khá.
+        first_heard = out.understood
+        if uncovered and leaks_answer(out.question, uncovered, state["student_text"], visible):
+            leaked = leaked_terms(out.question, uncovered, state["student_text"], visible)
             log.warning("Câu hỏi ngược làm lộ đáp án (%s), hỏi lại", sorted(leaked))
             out = await llm.structured(
                 system=system,
@@ -285,9 +311,29 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
                 schema=FollowupOutput,
                 tier=ModelTier.STANDARD,
             )
-            if leaks_answer(out.question, uncovered, state["student_text"]):
+            if leaks_answer(out.question, uncovered, state["student_text"], visible):
                 log.warning("Viết lại vẫn lộ, dùng câu hỏi neo lại khái niệm")
-                out = FollowupOutput(question=_reanchor(state), cites_span_id=None)
+                out = FollowupOutput(question=_reanchor(state, heard=bool(first_heard)), understood=first_heard, cites_span_id=None)
+
+        # Câu hỏi "có phải X không" đưa sẵn X cho học viên gật đầu, dù X không
+        # trùng chữ nào với nguồn — bộ lọc từ khoá ở trên không thấy được.
+        if confirms_answer(out.question):
+            log.warning("Câu hỏi ngược dạng 'có phải… không', hỏi lại: %s", out.question)
+            out = await llm.structured(
+                system=system,
+                user=(
+                    f"{user}\n\nCÂU BẠN VỪA VIẾT LÀ CÂU 'CÓ PHẢI … KHÔNG' — nó đưa sẵn "
+                    "câu trả lời cho học viên gật đầu. Viết lại thành câu hỏi mở "
+                    "(vì sao / thế nào / điều gì), không nêu sẵn phương án nào."
+                ),
+                schema=FollowupOutput,
+                tier=ModelTier.STANDARD,
+            )
+            if confirms_answer(out.question) or (
+                uncovered and leaks_answer(out.question, uncovered, state["student_text"], visible)
+            ):
+                log.warning("Viết lại vẫn là câu xác nhận hoặc vẫn lộ, dùng câu hỏi neo lại")
+                out = FollowupOutput(question=_reanchor(state, heard=bool(first_heard)), understood=first_heard, cites_span_id=None)
 
         # Với bài code, lộ đáp án mang hình dạng khác: mách cách sửa. Phải bắt
         # riêng, vì phần code học viên chưa nói tới KHÔNG phải thứ cấm nhắc —
@@ -307,7 +353,7 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
             )
             if suggests_fix(out.question):
                 log.warning("Viết lại vẫn mách cách sửa, dùng câu hỏi neo lại")
-                out = FollowupOutput(question=_reanchor(state), cites_span_id=None)
+                out = FollowupOutput(question=_reanchor(state, heard=bool(first_heard)), understood=first_heard, cites_span_id=None)
 
         # Trích dẫn bịa còn tệ hơn không trích: frontend sẽ dùng mã này để
         # highlight vùng trên slide, trỏ sai là học viên mất niềm tin ngay.
@@ -318,6 +364,9 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
 
         return {
             "agent_says": out.question,
+            "agent_understood": _heard(
+                out.understood, uncovered, state["student_text"], visible, state.get("vocabulary")
+            ),
             "cites_span_id": cites,
             "asked_questions": [out.question],
             "turn_state": TurnState.STUDENT_RESPONDING.name,
@@ -326,13 +375,63 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
     return ask_followup
 
 
+MAX_UNDERSTOOD = 3
+
+_LATIN = re.compile(r"(?<![^\W\d_])[A-Za-z][A-Za-z0-9]{2,}(?![^\W\d_])")
+
+
+def _latin_words(text: str) -> list[str]:
+    """Từ viết bằng chữ Latin không dấu, từ 3 ký tự — tức gần như chắc là tiếng Anh."""
+    return _LATIN.findall(text or "")
+
+
+def _heard(
+    points: list[str],
+    uncovered: str,
+    student_text: str,
+    visible: str = "",
+    vocabulary: list[str] | None = None,
+) -> list[str]:
+    """Chỉ giữ những ý "mình nghe hiểu" không nói hộ phần học viên còn thiếu.
+
+    Prompt dặn phần này chỉ được chứa điều học viên đã nói, nhưng đây đúng là
+    chỗ dễ lộ nhất: model "diễn đạt lại cho gọn" bằng chính từ khoá của nguồn mà
+    học viên chưa hề nói ra. Dòng nào lộ thì bỏ hẳn dòng đó — thiếu một gạch đầu
+    dòng không sao, lộ đáp án thì mất ý nghĩa của cả buổi.
+    """
+    known = {w.lower() for w in (vocabulary or ())} | {w.lower() for w in _latin_words(visible)}
+    kept = []
+    for point in points:
+        # "chấm/điểm", "cộng/trừ": gộp hai chữ bằng gạch chéo đọc lên như ghi
+        # chú nháp, không phải câu nói.
+        point = " ".join(point.replace("/", " hoặc ").split())
+        if not point:
+            continue
+        # Chữ tiếng Anh không có trong từ vựng của bài gần như luôn là chữ máy
+        # nghe nhầm bị chép lại: "JSON", "button" khi học viên nói "model".
+        # Prompt cấm hai lần mà model vẫn chép, nên bỏ cả dòng — chép lại lỗi
+        # của máy là làm học viên tưởng mình nói sai.
+        # Viết tắt THẬT của bài (LLM, RLHF) đã nằm sẵn trong từ vựng, nên không
+        # cần miễn trừ chữ viết HOA — miễn trừ là lọt đúng "JSON".
+        strange = [w for w in _latin_words(point) if looks_english(w) and w.lower() not in known]
+        if vocabulary is not None and strange:
+            log.warning("Bỏ ý 'mình hiểu là' vì chép chữ lạ có thể do nghe nhầm %s: %s", strange, point)
+            continue
+        if uncovered and leaks_answer(point, uncovered, student_text, visible):
+            log.warning("Bỏ ý 'mình hiểu là' vì nói hộ phần còn thiếu: %s", point)
+            continue
+        kept.append(point)
+    return kept[:MAX_UNDERSTOOD]
+
+
 async def close_taught(state: TeachBackState) -> TeachBackState:
     # Trích lại chính ý học viên vừa dạy được: đây là lúc trích dẫn có giá trị
     # nhất và an toàn tuyệt đối — họ đã tự nói ra ý đó rồi, không lộ gì cả, mà
     # lại thấy công mình vừa bỏ ra ứng với đúng chỗ nào trên slide.
     covered = [e["span_id"] for e in (state.get("evidence") or []) if e.get("covered_by_student")]
     return {
-        "agent_says": "À mình hiểu rồi! Cảm ơn bạn, giờ mình thấy rõ chỗ đó rồi.",
+        "agent_says": "À, giờ thì mình hiểu rồi. Cảm ơn bạn đã giảng kỹ cho mình.",
+        "agent_understood": [],
         "cites_span_id": covered[0] if covered else None,
         "turn_state": TurnState.TAUGHT.name,
     }
@@ -351,6 +450,7 @@ async def close_review(state: TeachBackState) -> TeachBackState:
             "Cảm ơn bạn đã giảng cho mình. Mình vẫn còn lấn cấn một chỗ — "
             "bạn xem lại giúp mình đoạn được đánh dấu rồi mình học lại nhé."
         ),
+        "agent_understood": [],
         "cites_span_id": review[0] if review else None,
         "turn_state": TurnState.SUGGEST_REVIEW.name,
     }

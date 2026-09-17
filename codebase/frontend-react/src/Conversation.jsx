@@ -107,6 +107,28 @@ function AgentTurn({ turn, span, onOpen, final }) {
           <AgentTrail agents={agentsOf(turn.worked.steps)} />
         </p>
       )}
+      {/* Nhắc lại những ý học viên đã nói — để họ thấy mình được nghe hiểu, và
+          thấy rõ phần nào đã ổn trước khi bị hỏi phần còn hổng. Chỉ hiện chữ,
+          không đọc thành tiếng. */}
+      {turn.understood?.length > 0 && (
+        <div className="rounded-xl bg-neutral-50 px-3.5 py-2.5">
+          <p className="m-0 text-[12px] font-medium text-neutral-500">Mình hiểu là</p>
+          <ul className="m-0 mt-1 list-none space-y-1 p-0">
+            {turn.understood.map((point, i) => (
+              <motion.li
+                key={point}
+                initial={{ opacity: 0, x: -4, filter: "blur(3px)" }}
+                animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
+                transition={{ duration: 0.35, delay: i * 0.06, ease: EASE }}
+                className="flex gap-2 text-[13px] leading-relaxed text-neutral-700"
+              >
+                <span className="mt-[9px] size-1 shrink-0 rounded-full bg-neutral-400" />
+                {point}
+              </motion.li>
+            ))}
+          </ul>
+        </div>
+      )}
       <p className="m-0 text-[14px] leading-relaxed text-neutral-800">
         <WordsIn text={turn.text} />
       </p>

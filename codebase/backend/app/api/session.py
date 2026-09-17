@@ -24,7 +24,7 @@ from time import perf_counter
 from typing import Any, Literal
 
 from app.config import settings
-from app.domain.sanitize import sanitize_spoken
+from app.domain.sanitize import sanitize_spoken, tame_shouting
 from app.ports.llm import LLMClient, ModelTier
 from app.ports.tts import TextToSpeech
 from app.prompts import registry
@@ -153,12 +153,17 @@ async def run_turn(
         # Không có timeout thì provider treo là học viên ngồi im vô hạn, không
         # có cách nào thoát ngoài tự tải lại trang. Thà mất một lượt.
         result = await asyncio.wait_for(reasoner, timeout=reasoner_timeout_s)
-        said = sanitize_spoken(result["agent_says"])
+        said = tame_shouting(sanitize_spoken(result["agent_says"]))
+        understood = [tame_shouting(sanitize_spoken(p)) for p in result.get("agent_understood") or []]
         yield Event(
             "transcript",
             {
                 "role": "agent",
                 "text": said,
+                # Hiện thành gạch đầu dòng trên màn hình, KHÔNG đọc thành tiếng:
+                # nghe thêm vài câu nhắc lại trước câu hỏi là học viên phải chờ
+                # lâu hơn đúng lúc họ đang muốn trả lời.
+                "understood": understood,
                 "filler": False,
                 # Span agent tự trích trong câu nói. An toàn để hiện nguyên văn:
                 # persona bị cấm trích đúng ý học viên đang thiếu, nên cái nó

@@ -16,6 +16,9 @@ class TeachBackState(TypedDict, total=False):
     student_id: str
     concept: str
     source_span_ids: list[str]
+    # Thuật ngữ của bài (tiếng Anh trên slide). Dùng để nhận ra chữ tiếng Anh LẠ
+    # trong lời agent — thường là chữ máy nghe nhầm bị chép lại ("JSON").
+    vocabulary: list[str]
 
     student_text: str  # lời học viên vừa nói (đã STT final)
     followups_asked: int
@@ -37,6 +40,10 @@ class TeachBackState(TypedDict, total=False):
     was_verbatim: bool
 
     agent_says: str  # câu agent sẽ nói ra (hỏi ngược / chốt / gợi ý xem lại)
+    # Những ý học viên đã nói mà agent nghe hiểu, hiện thành gạch đầu dòng trên
+    # màn hình (không đọc thành tiếng). Node nào đặt agent_says cũng phải đặt
+    # lại trường này, không thì gạch đầu dòng của lượt trước dính sang lượt sau.
+    agent_understood: list[str]
     cites_span_id: str | None
     review_span_ids: list[str]
     turn_state: str  # tên TurnState sau lượt này — frontend dựa vào đây mở/đóng mic

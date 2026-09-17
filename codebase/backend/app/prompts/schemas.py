@@ -47,6 +47,13 @@ class GradeOutput(BaseModel):
 
 
 class FollowupOutput(BaseModel):
+    understood: list[str] = Field(
+        default_factory=list,
+        description=(
+            "0–3 ý ngắn học viên ĐÃ nói, diễn đạt lại gọn. Không thêm ý nào từ "
+            "nguồn mà học viên chưa nói. Rỗng nếu học viên chưa nói được ý nào."
+        ),
+    )
     question: str = Field(description="Một câu hỏi ngược, dưới 40 từ, không lộ đáp án")
     cites_span_id: str | None = Field(
         default=None, description="Span được trích trong câu hỏi, nếu có — để frontend highlight"
