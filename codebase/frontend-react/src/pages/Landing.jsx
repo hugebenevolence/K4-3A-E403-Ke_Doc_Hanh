@@ -1,38 +1,37 @@
-// Trang giới thiệu: nói sản phẩm làm gì trong một câu, cho xem nó chạy, rồi
-// đưa thẳng vào thư viện slide.
+// Trang giới thiệu: một câu nói sản phẩm làm gì, cho xem nó chạy, rồi vào học.
 //
-// Nội dung minh hoạ (khái niệm overfitting, câu hỏi của học trò) là ví dụ tự
-// viết, CỐ Ý không lấy từ slide của khoá: trang này công khai, còn tài liệu
-// khoá học chỉ nằm sau đăng nhập.
+// Cố ý ngắn. Người mở trang là thành viên được gửi link để thử, không phải
+// khách cần thuyết phục — mỗi đoạn chữ thêm vào là thêm một thứ đứng giữa họ
+// và nút "Bắt đầu học".
+//
+// Nội dung minh hoạ (overfitting) là ví dụ tự viết, CỐ Ý không lấy từ slide của
+// khoá: trang này công khai, tài liệu khoá học chỉ nằm sau đăng nhập.
 
 import {
   AnimatePresence,
-  LayoutGroup,
   motion,
   useInView,
   useMotionValueEvent,
   useReducedMotion,
   useScroll,
-  useTransform,
 } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth";
 import { blurIn, EASE } from "../motion";
-import { Brand, DotGrid, LinkButton, Reveal } from "../site";
-import { Kbd, LevelMeter, RotatingWords, WordsIn } from "../ui";
+import { Brand, LinkButton, Reveal } from "../site";
+import { Kbd, LevelMeter, Stepper } from "../ui";
 
-const TERMS = ["attention", "overfitting", "token", "embedding", "context window", "RLHF"];
+const STAGES = ["Chọn", "Giảng", "Trả lời", "Xem lại"];
 
 export default function Landing() {
   return (
     <div className="min-h-screen bg-white font-sans text-neutral-900 antialiased">
       <Nav />
-      <Hero />
-      <HowItWorks />
-      <Statement />
-      <Research />
-      <Principles />
-      <Cta />
+      <main>
+        <Hero />
+        <Steps />
+        <Principles />
+      </main>
       <Footer />
     </div>
   );
@@ -46,34 +45,28 @@ function Nav() {
 
   return (
     <header
-      className={`sticky top-0 z-40 border-b bg-white/80 backdrop-blur-md transition-colors ${
+      className={`sticky top-0 z-40 border-b bg-white/85 backdrop-blur-md transition-colors ${
         scrolled ? "border-neutral-200" : "border-transparent"
       }`}
     >
-      <div className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4 sm:px-6">
+      <div className="mx-auto flex h-14 max-w-6xl items-center gap-8 px-4 sm:px-6">
         <Brand />
-        <nav className="hidden items-center gap-1 md:flex">
-          {[
-            ["#how", "Cách hoạt động"],
-            ["#why", "Vì sao hiệu quả"],
-            ["#rules", "Nguyên tắc"],
-          ].map(([href, label]) => (
-            <a
-              key={href}
-              href={href}
-              className="rounded-full px-3 py-1.5 text-[13px] text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
-            >
-              {label}
-            </a>
-          ))}
+        <nav className="hidden items-center gap-6 text-[13px] text-neutral-500 md:flex">
+          <a href="#how" className="transition-colors hover:text-neutral-900">
+            Cách hoạt động
+          </a>
+          <a href="#principles" className="transition-colors hover:text-neutral-900">
+            Nguyên tắc
+          </a>
         </nav>
-        <div className="ml-auto flex items-center gap-1.5">
-          {status !== "in" && (
-            <LinkButton to="/login" variant="quiet" className="hidden sm:inline-flex">
+        <div className="ml-auto">
+          {status === "in" ? (
+            <LinkButton to="/library">Vào thư viện</LinkButton>
+          ) : (
+            <LinkButton to="/login" variant="normal">
               Đăng nhập
             </LinkButton>
           )}
-          <LinkButton to="/library">{status === "in" ? "Vào thư viện" : "Học thử"}</LinkButton>
         </div>
       </div>
     </header>
@@ -82,66 +75,44 @@ function Nav() {
 
 function Hero() {
   return (
-    <section className="relative overflow-hidden">
-      <DotGrid className="h-[640px]" />
-      <div className="relative mx-auto max-w-4xl px-4 pt-16 text-center sm:px-6 sm:pt-24">
-        <motion.span
-          {...blurIn}
-          className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-3 py-1 text-[12px] text-neutral-600 shadow-[0_1px_2px_rgb(0_0_0/0.04)]"
-        >
-          <span className="pulse size-1.5 rounded-full bg-neutral-900" data-mode="listening" />
-          Bản thử nghiệm nội bộ · Mini Hackathon AI Batch 04
-        </motion.span>
-
+    <section className="px-4 pt-20 sm:px-6 sm:pt-28">
+      <div className="mx-auto max-w-3xl text-center">
         <motion.h1
-          initial={{ opacity: 0, y: 12, filter: "blur(10px)" }}
+          initial={{ opacity: 0, y: 10, filter: "blur(8px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          transition={{ duration: 0.8, delay: 0.05, ease: EASE }}
-          className="m-0 mt-6 text-[34px] leading-[1.08] font-semibold tracking-[-0.035em] text-balance sm:text-[64px] sm:leading-[1.05]"
+          transition={{ duration: 0.8, ease: EASE }}
+          className="m-0 text-[40px] leading-[1.04] font-semibold tracking-[-0.04em] text-balance sm:text-[64px]"
         >
-          Giảng lại <RotatingWords words={TERMS} className="text-neutral-400" />
-          <br />
-          cho đến khi hiểu thật.
+          Hiểu bài bằng cách giảng lại.
         </motion.h1>
-
         <motion.p
           initial={{ opacity: 0, y: 8, filter: "blur(6px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          transition={{ duration: 0.7, delay: 0.2, ease: EASE }}
-          className="mx-auto mt-5 mb-0 max-w-xl text-[16px] leading-relaxed text-pretty text-neutral-500 sm:text-[17px]"
+          transition={{ duration: 0.7, delay: 0.12, ease: EASE }}
+          className="mx-auto mt-5 mb-0 max-w-xl text-[16px] leading-relaxed text-balance text-neutral-500 sm:text-[18px]"
         >
-          Chọn một phần trên slide và nói lại bằng lời của bạn. Học trò AI nghe, hỏi ngược đúng chỗ bạn giảng
-          còn mỏng — và không bao giờ giảng hộ.
+          Chọn một phần trong slide và giảng lại bằng lời của bạn. Học trò AI hỏi vào đúng chỗ bạn chưa nắm chắc.
         </motion.p>
-
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.32, ease: EASE }}
-          className="mt-8 flex flex-wrap items-center justify-center gap-2.5"
+          transition={{ duration: 0.6, delay: 0.24, ease: EASE }}
+          className="mt-9 flex flex-wrap items-center justify-center gap-2.5"
         >
           <LinkButton to="/library" size="lg">
-            Chọn slide để học
+            Bắt đầu học
           </LinkButton>
           <LinkButton href="#how" variant="normal" size="lg">
-            Xem cách hoạt động
+            Cách hoạt động
           </LinkButton>
         </motion.div>
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.45 }}
-          className="m-0 mt-4 flex items-center justify-center gap-1.5 text-[12px] text-neutral-400"
-        >
-          Giữ <Kbd>Space</Kbd> để nói · đang ngồi trong lớp thì gõ chữ
-        </motion.p>
       </div>
 
       <motion.div
-        initial={{ opacity: 0, y: 40, filter: "blur(12px)" }}
+        initial={{ opacity: 0, y: 32, filter: "blur(10px)" }}
         animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-        transition={{ duration: 1, delay: 0.35, ease: EASE }}
-        className="relative mx-auto mt-14 max-w-5xl px-4 pb-8 sm:mt-16 sm:px-6"
+        transition={{ duration: 1, delay: 0.3, ease: EASE }}
+        className="mx-auto mt-16 max-w-5xl sm:mt-20"
       >
         <HeroDemo />
       </motion.div>
@@ -150,14 +121,12 @@ function Hero() {
 }
 
 // ---------------------------------------------------------------------------
-// Bản chạy thử trong khung trình duyệt: một vòng Feynman đầy đủ, lặp lại.
+// Bản chạy thử: một vòng giảng đầy đủ, dựng đúng bằng giao diện của app.
 
-/** Thời lượng từng cảnh (ms): chọn vùng · mở bài · học viên giảng · đối chiếu ·
- *  học trò hỏi ngược · mở lại nguồn. */
-const SCENES = [2000, 1700, 2800, 1600, 3800, 2600];
-
-const PHASES = ["Chọn vùng", "Giảng lại", "Học trò hỏi", "Mở lại nguồn"];
-const PHASE_OF_SCENE = [0, 1, 1, 2, 2, 3];
+/** Thời lượng từng cảnh (ms): chọn vùng · câu mở đầu · học viên giảng · đối
+ *  chiếu · học trò hỏi lại · mở lại nguồn. */
+const SCENES = [2200, 1800, 3000, 1500, 3800, 2600];
+const STAGE_OF_SCENE = [0, 1, 1, 2, 2, 3];
 
 function useScene(ref) {
   const inView = useInView(ref, { margin: "-10% 0px" });
@@ -180,78 +149,24 @@ function HeroDemo() {
   const scene = useScene(ref);
 
   return (
-    <div ref={ref}>
-      <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-[0_40px_100px_-40px_rgb(0_0_0/0.3)]">
-        <div className="flex h-10 items-center gap-1.5 border-b border-neutral-200 bg-neutral-50 px-4">
-          <span className="size-2.5 rounded-full bg-neutral-200" />
-          <span className="size-2.5 rounded-full bg-neutral-200" />
-          <span className="size-2.5 rounded-full bg-neutral-200" />
-          <span className="mx-auto rounded-md bg-white px-3 py-0.5 text-[11px] text-neutral-400 ring-1 ring-neutral-200">
-            Giảng lại · Slide 7
-          </span>
+    <div
+      ref={ref}
+      className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-[0_1px_2px_rgb(0_0_0/0.04),0_40px_80px_-40px_rgb(0_0_0/0.25)]"
+    >
+      <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+        <div className="order-2 h-[360px] border-neutral-200 md:order-none md:h-[420px] md:border-r">
+          <DemoConversation scene={scene} />
         </div>
-        <div className="grid md:grid-cols-[170px_minmax(0,1fr)_minmax(0,1.1fr)]">
-          <DemoSidebar />
-          <div className="order-2 h-[330px] border-neutral-200 md:order-none md:h-[380px] md:border-r">
-            <DemoConversation scene={scene} />
+        <div className="order-1 flex flex-col border-b border-neutral-200 bg-neutral-50 md:order-none md:border-b-0">
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4">
+            <span className="text-[13px] font-medium text-neutral-900">Overfitting</span>
+            <span className="text-[12px] tabular-nums text-neutral-400">7 / 12</span>
           </div>
-          <div className="order-1 border-b border-neutral-200 bg-neutral-50/60 p-4 sm:p-6 md:order-none md:border-b-0">
-            <p className="m-0 text-[13px] font-semibold text-neutral-900">Overfitting</p>
-            <p className="m-0 mb-3 text-[11px] text-neutral-400">Bài ví dụ · trang 7</p>
+          <div className="grid flex-1 place-items-center p-5 sm:p-8">
             <DemoSlide scene={scene} />
           </div>
         </div>
       </div>
-
-      <LayoutGroup id="demo-phases">
-        <div className="mt-5 flex flex-wrap justify-center gap-1">
-          {PHASES.map((label, i) => {
-            const on = PHASE_OF_SCENE[scene] === i;
-            return (
-              <span
-                key={label}
-                className={`relative rounded-full px-3 py-1 text-[12px] transition-colors duration-300 ${on ? "text-white" : "text-neutral-400"}`}
-              >
-                {on && (
-                  <motion.span
-                    layoutId="demo-phase"
-                    className="absolute inset-0 rounded-full bg-neutral-900"
-                    transition={{ duration: 0.45, ease: EASE }}
-                  />
-                )}
-                <span className="relative tabular-nums">
-                  {i + 1}. {label}
-                </span>
-              </span>
-            );
-          })}
-        </div>
-      </LayoutGroup>
-    </div>
-  );
-}
-
-function DemoSidebar() {
-  return (
-    <div className="hidden border-r border-neutral-200 bg-neutral-50/70 p-3 md:block">
-      <p className="m-0 px-1.5 text-[11px] font-medium text-neutral-400">Slide</p>
-      <ol className="m-0 mt-1.5 list-none space-y-0.5 p-0">
-        {[62, 80, 54, 70, 48, 76, 58, 66].map((w, i) => {
-          const active = i === 6;
-          return (
-            <li
-              key={i}
-              className={`flex items-center gap-2 rounded-md px-1.5 py-1.5 ${active ? "bg-white shadow-sm ring-1 ring-neutral-200" : ""}`}
-            >
-              <span className="w-3 text-right text-[10px] tabular-nums text-neutral-400">{i + 1}</span>
-              <span
-                className={`h-1.5 rounded-full ${active ? "bg-neutral-800" : "bg-neutral-200"}`}
-                style={{ width: `${w}%` }}
-              />
-            </li>
-          );
-        })}
-      </ol>
     </div>
   );
 }
@@ -283,15 +198,14 @@ function DemoSlide({ scene }) {
             </div>
             <AnimatePresence>
               {scene === 0 && (
-                // Khung kéo "mọc" từ góc trên-trái xuống góc dưới-phải, như lúc
-                // học viên kéo chuột thật.
+                // Khung kéo mọc từ góc trên-trái xuống góc dưới-phải, như lúc kéo chuột thật.
                 <motion.div
                   key="drag"
-                  className="absolute -inset-2 rounded-md border-[1.5px] border-dashed border-neutral-900 bg-neutral-900/[0.04]"
+                  className="absolute -inset-2 rounded-md border border-neutral-900 bg-neutral-900/[0.04]"
                   initial={{ clipPath: "inset(0% 100% 100% 0%)" }}
                   animate={{ clipPath: "inset(0% 0% 0% 0%)" }}
                   exit={{ opacity: 0 }}
-                  transition={{ duration: 1.1, delay: 0.35, ease: EASE }}
+                  transition={{ duration: 1.1, delay: 0.4, ease: EASE }}
                 />
               )}
               {covered && (
@@ -324,8 +238,7 @@ function DemoSlide({ scene }) {
   );
 }
 
-/** Hình minh hoạ tự vẽ: lỗi trên dữ liệu huấn luyện giảm mãi, lỗi trên dữ liệu
- *  mới giảm rồi tăng lại. */
+/** Hình tự vẽ: lỗi trên dữ liệu huấn luyện giảm mãi, lỗi trên dữ liệu mới giảm rồi tăng. */
 function DemoChart() {
   return (
     <svg viewBox="0 0 120 80" className="h-full w-full" aria-hidden="true">
@@ -338,7 +251,6 @@ function DemoChart() {
         strokeWidth="2"
         strokeLinecap="round"
       />
-      <path d="M62 10 V70" stroke="#171717" strokeWidth="1" strokeDasharray="2 3" opacity="0.4" />
     </svg>
   );
 }
@@ -355,74 +267,61 @@ function DemoConversation({ scene }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-10 shrink-0 items-center border-b border-neutral-200 px-4 text-[12px] font-medium text-neutral-900">
-        {scene === 0 ? "Phiên giảng mới" : "Overfitting"}
+      <div className="shrink-0 border-b border-neutral-200 px-4 pt-3 pb-2.5">
+        <Stepper steps={STAGES} current={STAGE_OF_SCENE[scene]} />
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_22%)]">
-        <div className="absolute inset-x-0 bottom-0 space-y-3 p-4">
+      <div className="relative min-h-0 flex-1 overflow-hidden [mask-image:linear-gradient(to_bottom,transparent,black_18%)]">
+        <div className="absolute inset-x-0 bottom-0 space-y-4 p-4">
           <AnimatePresence mode="popLayout" initial={false}>
             {scene === 0 && (
-              <motion.p key="hint" {...blurIn} className="m-0 text-[13px] text-neutral-400">
-                Kéo khung trên slide để chọn phần bạn muốn giảng.
-              </motion.p>
+              <motion.div key="ready" {...blurIn} className="space-y-3">
+                <div>
+                  <p className="m-0 text-[12px] text-neutral-400">Slide 7 · 2 phần đã chọn</p>
+                  <p className="m-0 mt-0.5 text-[16px] font-semibold tracking-tight text-neutral-900">Overfitting</p>
+                </div>
+                <span className="inline-flex h-9 items-center gap-2 rounded-lg bg-neutral-900 px-3.5 text-[13px] font-medium text-white">
+                  Bắt đầu giảng
+                </span>
+              </motion.div>
             )}
             {scene >= 1 && (
-              <motion.div key="opener" layout {...blurIn} className="space-y-1">
-                <p className="m-0 text-[11px] text-neutral-400">
-                  Đã nghĩ trong 2s · <span className="font-medium text-neutral-600">Học trò AI</span>
-                </p>
-                <p className="m-0 text-[13px] leading-relaxed text-neutral-800">
-                  Mình chưa hiểu phần này lắm. Bạn giảng giúp mình: overfitting là gì vậy?
-                </p>
-              </motion.div>
+              <motion.p key="opener" layout {...blurIn} className="m-0 text-[14px] leading-relaxed text-neutral-800">
+                Overfitting là gì vậy bạn? Mình chưa hình dung được.
+              </motion.p>
             )}
             {scene >= 2 && (
               <motion.div key="student" layout {...blurIn} className="flex justify-end">
-                <p className="m-0 max-w-[88%] rounded-2xl rounded-br-md bg-neutral-100 px-3 py-2 text-[13px] leading-relaxed text-neutral-900">
-                  <WordsIn text="Là khi mô hình học thuộc lòng dữ liệu huấn luyện, nên gặp dữ liệu mới thì đoán sai." />
+                <p className="m-0 max-w-[88%] rounded-2xl rounded-br-md bg-neutral-100 px-3.5 py-2.5 text-[14px] leading-relaxed text-neutral-900">
+                  Là khi mô hình học thuộc dữ liệu huấn luyện, nên gặp dữ liệu mới thì đoán sai.
                 </p>
               </motion.div>
             )}
             {scene === 3 && (
-              <motion.p key="thinking" layout {...blurIn} className="m-0 flex items-center gap-2 text-[11px]">
-                <span className="shimmer font-medium">Đang đối chiếu với slide…</span>
-                <span className="text-neutral-400">Người đối chiếu</span>
+              <motion.p key="thinking" layout {...blurIn} className="m-0 text-[12px]">
+                <span className="shimmer font-medium">Đối chiếu với slide</span>
               </motion.p>
             )}
             {scene >= 4 && (
-              <motion.div key="reply" layout {...blurIn} className="space-y-2">
-                <p className="m-0 text-[11px] text-neutral-400">
-                  Đã nghĩ trong 3s · <span className="font-medium text-neutral-600">Người đối chiếu</span>
-                  <span className="text-neutral-300"> → </span>
-                  <span className="font-medium text-neutral-600">Học trò AI</span>
-                </p>
-                <div className="rounded-lg bg-neutral-50 px-3 py-2">
-                  <p className="m-0 text-[11px] font-medium text-neutral-500">Mình hiểu là</p>
-                  <ul className="m-0 mt-0.5 list-none space-y-0.5 p-0 text-[12px] text-neutral-700">
-                    <li>· Mô hình nhớ quá kỹ dữ liệu huấn luyện</li>
-                    <li>· Nên đoán kém trên dữ liệu mới</li>
-                  </ul>
+              <motion.div key="reply" layout {...blurIn} className="space-y-3">
+                <div className="border-l-2 border-neutral-200 pl-3">
+                  <p className="m-0 text-[12px] text-neutral-400">Mình hiểu là</p>
+                  <p className="m-0 mt-0.5 text-[13px] text-neutral-600">Mô hình nhớ quá kỹ dữ liệu huấn luyện.</p>
                 </div>
-                <p className="m-0 text-[13px] leading-relaxed text-neutral-800">
-                  Nhưng vì sao nhớ kỹ lại làm đoán kém đi? Mình tưởng nhớ càng nhiều càng tốt chứ?
+                <p className="m-0 text-[14px] leading-relaxed text-neutral-800">
+                  Nhưng vì sao nhớ kỹ lại làm đoán kém đi?
                 </p>
-                <div className="flex items-center gap-2.5 rounded-lg border border-neutral-200 bg-white p-2">
-                  <span className="grid size-7 place-items-center rounded-md bg-neutral-100 text-[11px] font-semibold text-neutral-700">
+                <div className="flex items-center gap-2.5 rounded-xl border border-neutral-200 p-2">
+                  <span className="grid size-8 place-items-center rounded-lg bg-neutral-100 text-[12px] font-semibold tabular-nums text-neutral-700">
                     7
                   </span>
-                  <span className="min-w-0 flex-1 leading-tight">
-                    <span className="block text-[12px] font-medium text-neutral-900">Slide 7</span>
-                    <span className="block truncate text-[11px] text-neutral-500">Chỗ học trò đang thắc mắc</span>
-                  </span>
+                  <span className="min-w-0 flex-1 text-[13px] text-neutral-700">Chỗ cần xem lại</span>
                   <span
-                    className={`rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors duration-300 ${
-                      scene === 5
-                        ? "border-neutral-900 bg-neutral-900 text-white"
-                        : "border-neutral-200 text-neutral-700"
+                    className={`rounded-md border px-2 py-0.5 text-[12px] font-medium transition-colors duration-300 ${
+                      scene === 5 ? "border-neutral-900 bg-neutral-900 text-white" : "border-neutral-200 text-neutral-700"
                     }`}
                   >
-                    Mở
+                    Xem
                   </span>
                 </div>
               </motion.div>
@@ -431,9 +330,14 @@ function DemoConversation({ scene }) {
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-neutral-200 p-3">
-        <div className="flex h-9 items-center justify-between rounded-xl border border-neutral-200 px-3 text-[12px] text-neutral-400">
-          {talking ? <LevelMeter level={level} /> : <span>Giữ để nói</span>}
+      {/* Ô trả lời chỉ có khi đã vào phiên, giống app. */}
+      <div className={`shrink-0 border-t border-neutral-200 p-3 transition-opacity duration-300 ${scene === 0 ? "opacity-0" : ""}`}>
+        <div
+          className={`flex h-10 items-center justify-between rounded-xl border px-3 text-[13px] transition-colors ${
+            talking ? "border-neutral-900" : "border-neutral-200 text-neutral-400"
+          }`}
+        >
+          {talking ? <LevelMeter level={level} /> : <span>Nhập câu trả lời</span>}
           <Kbd>Space</Kbd>
         </div>
       </div>
@@ -443,68 +347,51 @@ function DemoConversation({ scene }) {
 
 // ---------------------------------------------------------------------------
 
-function SectionHead({ eyebrow, title, children }) {
+function SectionHead({ eyebrow, title }) {
   return (
-    <Reveal className="mx-auto max-w-2xl text-center">
+    <Reveal>
       <p className="m-0 text-[13px] font-medium text-neutral-400">{eyebrow}</p>
-      <h2 className="m-0 mt-2 text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
+      <h2 className="m-0 mt-2 max-w-xl text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] text-balance sm:text-[40px]">
         {title}
       </h2>
-      {children && (
-        <p className="m-0 mt-4 text-[15px] leading-relaxed text-pretty text-neutral-500 sm:text-[16px]">{children}</p>
-      )}
     </Reveal>
   );
 }
 
 const STEPS = [
   {
-    title: "Chọn phần muốn giảng",
-    body: "Mở slide, kéo khung quanh đúng đoạn — chữ hay sơ đồ đều được. Không chọn gì thì giảng cả trang.",
+    title: "Chọn nội dung",
+    body: "Kéo chọn một đoạn chữ hoặc sơ đồ. Phần đã chọn được che lại.",
     visual: <SelectVisual />,
   },
   {
-    title: "Giảng khi phần đó bị che",
-    body: "Vùng đã chọn được che lại. Bạn giảng bằng lời của mình, không nhìn slide mà đọc.",
-    visual: <CoverVisual />,
+    title: "Giảng lại",
+    body: "Nói hoặc gõ lời giải thích của bạn, không nhìn slide.",
+    visual: <SpeakVisual />,
   },
   {
-    title: "Học trò hỏi đúng chỗ hổng",
-    body: "Học trò AI nhắc lại ý bạn nói, rồi hỏi một câu “vì sao” hoặc “như thế nào” ở chỗ còn mỏng.",
-    visual: <QuestionVisual />,
-  },
-  {
-    title: "Mở lại nguồn, giảng lại",
-    body: "Bí thì mở đúng vị trí trên slide mà học trò đang thắc mắc, đọc lại, rồi giảng lại lần nữa.",
+    title: "Trả lời câu hỏi",
+    body: "Học trò hỏi vào chỗ còn thiếu và chỉ ra vị trí cần xem lại.",
     visual: <SourceVisual />,
   },
 ];
 
-function HowItWorks() {
+function Steps() {
   return (
-    <section id="how" className="scroll-mt-16 px-4 py-24 sm:px-6 sm:py-32">
-      <SectionHead eyebrow="Cách hoạt động" title="Kỹ thuật Feynman, gói trong một màn hình">
-        Đọc lại cho ta cảm giác đã hiểu. Giảng lại mới cho ta biết mình hiểu tới đâu — và học trò AI chỉ ra chỗ nào
-        chưa tới.
-      </SectionHead>
-
-      <div className="mx-auto mt-14 grid max-w-6xl gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {STEPS.map((step, i) => (
-          <Reveal key={step.title} delay={i * 0.08}>
-            <motion.div
-              whileHover={{ y: -3 }}
-              transition={{ duration: 0.25, ease: EASE }}
-              className="flex h-full flex-col rounded-2xl border border-neutral-200 bg-white p-5 transition-shadow hover:shadow-[0_12px_40px_-16px_rgb(0_0_0/0.18)]"
-            >
-              <div className="grid h-36 place-items-center overflow-hidden rounded-xl bg-neutral-50 ring-1 ring-inset ring-neutral-100">
-                {step.visual}
+    <section id="how" className="scroll-mt-14 px-4 py-24 sm:px-6 sm:py-32">
+      <div className="mx-auto max-w-5xl">
+        <SectionHead eyebrow="Cách hoạt động" title="Ba bước để biết mình hiểu tới đâu." />
+        <div className="mt-12 grid gap-4 md:grid-cols-3">
+          {STEPS.map((step, i) => (
+            <Reveal key={step.title} delay={i * 0.08}>
+              <div className="h-full rounded-2xl border border-neutral-200 p-5">
+                <div className="grid h-40 place-items-center rounded-xl bg-neutral-50">{step.visual}</div>
+                <h3 className="m-0 mt-5 text-[16px] font-semibold tracking-tight">{step.title}</h3>
+                <p className="m-0 mt-1 text-[14px] leading-relaxed text-neutral-500">{step.body}</p>
               </div>
-              <p className="m-0 mt-5 text-[12px] font-medium tabular-nums text-neutral-400">0{i + 1}</p>
-              <h3 className="m-0 mt-1 text-[16px] font-semibold tracking-tight">{step.title}</h3>
-              <p className="m-0 mt-1.5 text-[14px] leading-relaxed text-neutral-500">{step.body}</p>
-            </motion.div>
-          </Reveal>
-        ))}
+            </Reveal>
+          ))}
+        </div>
       </div>
     </section>
   );
@@ -512,12 +399,12 @@ function HowItWorks() {
 
 function SelectVisual() {
   return (
-    <div className="relative w-36 space-y-3">
+    <div className="w-40 space-y-3">
       <Bars widths={[80, 60]} />
       <div className="relative">
         <Bars widths={[100, 92, 70]} />
         <motion.div
-          className="absolute -inset-2 rounded-md border-[1.5px] border-dashed border-neutral-900 bg-neutral-900/[0.04]"
+          className="absolute -inset-2 rounded-md border border-neutral-900 bg-neutral-900/[0.04]"
           initial={{ clipPath: "inset(0% 100% 100% 0%)" }}
           whileInView={{ clipPath: ["inset(0% 100% 100% 0%)", "inset(0% 0% 0% 0%)", "inset(0% 0% 0% 0%)"] }}
           transition={{ duration: 2.6, times: [0, 0.45, 1], repeat: Infinity, repeatDelay: 0.6, ease: EASE }}
@@ -528,12 +415,12 @@ function SelectVisual() {
   );
 }
 
-function CoverVisual() {
+function SpeakVisual() {
   return (
-    <div className="w-36 space-y-3">
-      <div className="cover h-12 rounded-md" />
-      <div className="flex h-8 items-center justify-center gap-[3px] rounded-lg bg-white ring-1 ring-neutral-200">
-        {Array.from({ length: 12 }, (_, i) => (
+    <div className="w-40 space-y-3">
+      <div className="cover h-11 rounded-md" />
+      <div className="flex h-9 items-center justify-center gap-[3px] rounded-lg bg-white ring-1 ring-neutral-900">
+        {Array.from({ length: 14 }, (_, i) => (
           <motion.span
             key={i}
             className="w-[3px] rounded-full bg-neutral-900"
@@ -546,19 +433,6 @@ function CoverVisual() {
   );
 }
 
-function QuestionVisual() {
-  return (
-    <div className="w-44 space-y-2">
-      <div className="ml-auto w-32 rounded-xl rounded-br-sm bg-white px-2.5 py-2 ring-1 ring-neutral-200">
-        <Bars widths={[100, 70]} />
-      </div>
-      <p className="m-0 text-[12px] leading-snug text-neutral-800">
-        <span className="shimmer font-medium">Vì sao</span> nhớ kỹ lại làm đoán kém đi?
-      </p>
-    </div>
-  );
-}
-
 function SourceVisual() {
   return (
     <div className="w-44 space-y-2">
@@ -566,14 +440,14 @@ function SourceVisual() {
         <Bars widths={[70, 100, 84]} />
         <motion.div
           className="absolute inset-x-1.5 top-[38%] bottom-1.5 rounded ring-2 ring-neutral-900"
-          animate={{ opacity: [0.25, 1, 0.25] }}
-          transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut" }}
+          animate={{ opacity: [0.2, 1, 0.2] }}
+          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
         />
       </div>
       <div className="flex items-center gap-2 rounded-md bg-white p-1.5 ring-1 ring-neutral-200">
         <span className="grid size-5 place-items-center rounded bg-neutral-100 text-[10px] font-semibold">7</span>
-        <span className="flex-1 text-[10px] text-neutral-500">Slide 7</span>
-        <span className="rounded bg-neutral-900 px-1.5 text-[10px] font-medium text-white">Mở</span>
+        <span className="flex-1 text-[10px] text-neutral-500">Chỗ cần xem lại</span>
+        <span className="rounded bg-neutral-900 px-1.5 text-[10px] font-medium text-white">Xem</span>
       </div>
     </div>
   );
@@ -581,123 +455,36 @@ function SourceVisual() {
 
 // ---------------------------------------------------------------------------
 
-const STATEMENT =
-  "Đọc lại slide cho ta cảm giác đã hiểu. Chỉ khi phải giảng cho một người chưa biết gì, ta mới thấy mình hiểu tới đâu.";
-
-/** Câu chữ sáng dần theo nhịp cuộn — người đọc đi cùng câu chữ, không lướt qua. */
-function Statement() {
-  const ref = useRef(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start 0.85", "end 0.5"] });
-  const words = STATEMENT.split(" ");
-
-  return (
-    <section ref={ref} className="border-y border-neutral-100 bg-neutral-50/50 px-4 py-24 sm:px-6 sm:py-32">
-      <p className="m-0 mx-auto max-w-4xl text-[28px] leading-[1.2] font-semibold tracking-[-0.03em] text-balance sm:text-[44px]">
-        {words.map((word, i) => (
-          <Word key={i} progress={scrollYProgress} range={[i / words.length, (i + 1) / words.length]}>
-            {word}
-          </Word>
-        ))}
-      </p>
-    </section>
-  );
-}
-
-function Word({ children, progress, range }) {
-  const opacity = useTransform(progress, range, [0.15, 1]);
-  return <motion.span style={{ opacity }}>{children} </motion.span>;
-}
-
-// ---------------------------------------------------------------------------
-
-const STUDIES = [
-  {
-    cite: "Rozenblit & Keil, 2002 · Cognitive Science",
-    title: "Ảo giác hiểu sâu",
-    body: "Người ta thường tin mình hiểu một cơ chế rõ hơn thực tế — cho tới khi phải giải thích nó từng bước.",
-  },
-  {
-    cite: "Chase, Chin, Oppezzo & Schwartz, 2009 · J. Sci. Educ. Technol.",
-    title: "Hiệu ứng người được dạy",
-    body: "Học viên chịu bỏ công nhiều hơn khi học để dạy lại cho một agent, so với khi chỉ học cho bản thân.",
-  },
-  {
-    cite: "Chi & Wylie, 2014 · Educational Psychologist",
-    title: "Khung ICAP",
-    body: "Từ thụ động, chủ động, kiến tạo tới tương tác: mức tham gia càng cao thì hiểu càng sâu. Giảng lại và bị hỏi ngược nằm ở mức tương tác.",
-  },
-  {
-    cite: "Jin, Lee, Shin & Kim, 2024 · CHI",
-    title: "Học trò AI biết hỏi",
-    body: "Một học trò dùng LLM được giữ ở đúng mức hiểu biết và chủ động đặt câu hỏi giúp người dạy nói ra nhiều lập luận hơn.",
-  },
+const PRINCIPLES = [
+  ["Không trả lời thay", "Kể cả khi được hỏi thẳng, học trò chỉ đặt câu hỏi."],
+  ["Bám sát tài liệu", "Lời giảng được đối chiếu với đúng phần slide bạn chọn."],
+  ["Không lộ đáp án", "Học trò chỉ ra chỗ cần xem lại, không trích nguyên văn."],
+  ["Chỉ thu âm khi bạn nói", "Mic chỉ hoạt động khi bạn giữ nút nói."],
 ];
 
-function Research() {
-  return (
-    <section id="why" className="scroll-mt-16 px-4 py-24 sm:px-6 sm:py-32">
-      <SectionHead eyebrow="Vì sao hiệu quả" title="Dựa trên nghiên cứu về học bằng cách dạy" />
-      <div className="mx-auto mt-14 grid max-w-5xl gap-4 md:grid-cols-2">
-        {STUDIES.map((study, i) => (
-          <Reveal key={study.title} delay={i * 0.06}>
-            <div className="h-full rounded-2xl border border-neutral-200 p-6 transition-colors hover:border-neutral-300">
-              <p className="m-0 text-[12px] text-neutral-400">{study.cite}</p>
-              <h3 className="m-0 mt-3 text-[18px] font-semibold tracking-tight">{study.title}</h3>
-              <p className="m-0 mt-2 text-[14px] leading-relaxed text-neutral-500">{study.body}</p>
-            </div>
-          </Reveal>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-const RULES = [
-  ["Không bao giờ giảng hộ", "Kể cả khi bạn hỏi thẳng đáp án, học trò chỉ hỏi lại — phần hiểu phải là của bạn."],
-  ["Chấm theo tài liệu khoá học", "Lời giảng được so với đúng vùng slide bạn chọn, không theo hiểu biết chung của mô hình."],
-  ["Chỉ vị trí, không trích đáp án", "Học trò trỏ tới chỗ trên slide nó đang thắc mắc; bạn tự mở ra xem khi đã thử giảng."],
-  ["Nhấn để nói", "Mic chỉ thu khi bạn giữ phím. Ngồi trong lớp thì bật chế độ im lặng và gõ chữ."],
+const REFERENCES = [
+  "Rozenblit & Keil, 2002",
+  "Chase và cộng sự, 2009",
+  "Chi & Wylie, 2014",
+  "Jin và cộng sự, CHI 2024",
 ];
 
 function Principles() {
   return (
-    <section id="rules" className="scroll-mt-16 border-t border-neutral-100 px-4 py-24 sm:px-6 sm:py-32">
-      <SectionHead eyebrow="Nguyên tắc" title="Học trò AI được thiết kế để không làm bài hộ bạn" />
-      <div className="mx-auto mt-14 grid max-w-5xl gap-x-10 sm:grid-cols-2">
-        {RULES.map(([title, body], i) => (
-          <Reveal key={title} delay={i * 0.06} className="border-t border-neutral-200 py-6">
-            <div className="flex gap-4">
-              <span className="pt-0.5 text-[13px] tabular-nums text-neutral-400">0{i + 1}</span>
-              <div>
-                <h3 className="m-0 text-[16px] font-semibold tracking-tight">{title}</h3>
-                <p className="m-0 mt-1.5 text-[14px] leading-relaxed text-neutral-500">{body}</p>
-              </div>
-            </div>
-          </Reveal>
-        ))}
+    <section id="principles" className="scroll-mt-14 border-t border-neutral-200 px-4 py-24 sm:px-6 sm:py-32">
+      <div className="mx-auto grid max-w-5xl gap-12 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <SectionHead eyebrow="Nguyên tắc" title="Bạn tự hiểu. AI không làm thay." />
+        <dl className="m-0 grid gap-x-10 gap-y-8 sm:grid-cols-2">
+          {PRINCIPLES.map(([title, body], i) => (
+            <Reveal key={title} delay={i * 0.06} className="border-t border-neutral-900 pt-4">
+              <dt className="text-[15px] font-semibold tracking-tight">{title}</dt>
+              <dd className="m-0 mt-1 text-[14px] leading-relaxed text-neutral-500">{body}</dd>
+            </Reveal>
+          ))}
+        </dl>
       </div>
-    </section>
-  );
-}
-
-function Cta() {
-  return (
-    <section className="px-4 pb-24 sm:px-6">
-      <Reveal className="relative mx-auto max-w-6xl overflow-hidden rounded-3xl bg-neutral-900 px-6 py-16 text-center text-white sm:py-20">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(rgb(255_255_255/0.12)_1px,transparent_1px)] [background-size:22px_22px] [mask-image:radial-gradient(ellipse_at_center,black_10%,transparent_65%)]"
-        />
-        <h2 className="relative m-0 text-[30px] leading-[1.1] font-semibold tracking-[-0.03em] sm:text-[44px]">
-          Chọn một slide.
-          <br />
-          <span className="text-neutral-400">Giảng thử hai phút.</span>
-        </h2>
-        <div className="relative mt-8">
-          <LinkButton to="/library" variant="inverse" size="lg">
-            Vào thư viện slide
-          </LinkButton>
-        </div>
+      <Reveal className="mx-auto mt-20 max-w-5xl text-[13px] text-neutral-400">
+        Cơ sở nghiên cứu: {REFERENCES.join(" · ")}
       </Reveal>
     </section>
   );
@@ -706,10 +493,9 @@ function Cta() {
 function Footer() {
   return (
     <footer className="border-t border-neutral-200">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 text-[12px] text-neutral-500 sm:flex-row sm:items-center sm:px-6">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-3 px-4 py-8 text-[13px] text-neutral-500 sm:px-6">
         <Brand />
-        <p className="m-0 sm:ml-4">Nhóm Kẻ Độc Hành · phòng E403 · Mini Hackathon AI Batch 04, VinUni AI20k</p>
-        <p className="m-0 sm:ml-auto">Bản thử nghiệm nội bộ</p>
+        <p className="m-0 sm:ml-auto">Kẻ Độc Hành · VinUni AI20k</p>
       </div>
     </footer>
   );

@@ -5,7 +5,6 @@
 // lệch đó là thứ làm giao diện trông nghiệp dư.
 
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
 import { blurIn, EASE } from "./motion";
 
 const BASE =
@@ -153,32 +152,6 @@ export function Stepper({ steps, current }) {
         </li>
       ))}
     </ol>
-  );
-}
-
-/** Luân phiên vài cụm từ tại cùng một chỗ, cụm cũ nhoè đi, cụm mới nhoè vào. */
-export function RotatingWords({ words, interval = 2600, className = "" }) {
-  const [i, setI] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setI((n) => (n + 1) % words.length), interval);
-    return () => clearInterval(id);
-  }, [words.length, interval]);
-
-  return (
-    <span className={`relative inline-grid ${className}`}>
-      <AnimatePresence mode="popLayout" initial={false}>
-        <motion.span
-          key={words[i]}
-          className="col-start-1 row-start-1 whitespace-nowrap"
-          initial={{ opacity: 0, filter: "blur(10px)", y: 8 }}
-          animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
-          exit={{ opacity: 0, filter: "blur(10px)", y: -8 }}
-          transition={{ duration: 0.6, ease: EASE }}
-        >
-          {words[i]}
-        </motion.span>
-      </AnimatePresence>
-    </span>
   );
 }
 
