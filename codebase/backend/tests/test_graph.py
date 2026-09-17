@@ -184,3 +184,36 @@ def test_chi_o_da_duoc_cham_la_da_noi_toi_moi_sinh_dinh():
         assert bao_cao["đã làm"] == {"thêm mới": ["token"]}
 
     asyncio.run(main())
+
+
+def test_o_cu_bi_danh_sai_khong_xoa_y_vua_giang_lai_dung():
+    """Một đỉnh gom nhiều ô qua nhiều buổi. Chỉ cần một ô CŨ bị đánh dấu nói
+    trái mà xoá luôn mệnh đề họ vừa giảng lại đúng ở ô khác thì học viên mất
+    thành quả vì một lỗi họ đã sửa xong."""
+    import asyncio
+
+    from app.adapters.knowledge.local import InMemorySpanStore
+    from app.api.graph_sync import absorb_turn
+    from app.domain.span import Span
+
+    async def main():
+        store = InMemorySpanStore([Span(TOKEN[0], TOKEN[1]), Span(*ATTENTION)])
+        g = KnowledgeGraph(student_id="nhan")
+        g.absorb(Claim("token", "Mỗi token là một từ", (ATTENTION[0],), ("phien-0",)))
+
+        bao_cao = await absorb_turn(
+            g,
+            store,
+            student_text="Máy băm câu ra thành từng miếng nhỏ, mỗi miếng đó người ta gọi là token",
+            evidence=[
+                # Vừa giảng lại ĐÚNG ở ô này…
+                {"span_id": TOKEN[0], "covered_by_student": True, "contradicted_by_student": False},
+                # …trong khi ô cũ vẫn bị đánh dấu là nói trái.
+                {"span_id": ATTENTION[0], "covered_by_student": False, "contradicted_by_student": True},
+            ],
+            session_id="phien-1",
+        )
+        assert "token" in g.claims, bao_cao
+        assert "gỡ" not in bao_cao["đã làm"]
+
+    asyncio.run(main())

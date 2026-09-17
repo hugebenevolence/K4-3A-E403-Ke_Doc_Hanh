@@ -33,10 +33,15 @@ describe("bố cục đồ thị", () => {
     }
   });
 
-  it("hai đỉnh có nối thì gần nhau hơn hai đỉnh không nối", () => {
-    const pos = layout(NODES, LINKS, { width: 900, height: 600 });
-    const d = (a, b) => Math.hypot(pos.get(a).x - pos.get(b).x, pos.get(a).y - pos.get(b).y);
-    expect(d("token", "attention")).toBeLessThan(d("token", "context"));
+  it("CẠNH thật sự kéo hai đỉnh lại gần nhau", () => {
+    // So với chính đồ thị đó khi BỎ HẾT CẠNH, chứ không so hai cặp đỉnh khác
+    // nhau. Bản test đầu so cặp-với-cặp và vẫn xanh khi lực lò xo hỏng hoàn
+    // toàn — nó chỉ đang đo chỗ ngồi ban đầu do hàm băm sinh ra, nên bug "cạnh
+    // không có tác dụng gì" lọt qua.
+    const co = layout(NODES, LINKS, { width: 900, height: 600 });
+    const khong = layout(NODES, [], { width: 900, height: 600 });
+    const d = (p, a, b) => Math.hypot(p.get(a).x - p.get(b).x, p.get(a).y - p.get(b).y);
+    expect(d(co, "token", "attention")).toBeLessThan(d(khong, "token", "attention"));
   });
 
   it("đồ thị rỗng không làm vỡ gì", () => {
