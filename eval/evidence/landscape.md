@@ -79,7 +79,7 @@ Sáu trục này được chọn vì đổi giá trị trên trục nào cũng �
 | Bộ chấm LLM dễ cho "đủ" khi học viên nói toàn từ khoá hoặc đọc slide lộn xộn | Cao, đánh thẳng vào S3 | Guard đọc nguyên văn; case A01, A02 trong golden set; siết prompt chấm sau lượt đo 1 |
 | Nhận dạng giọng nói tiếng Việt trộn thuật ngữ tiếng Anh | Trung bình | Từ điển theo vùng; chữ nhận dạng hiện ngay để học viên sửa; gõ dự phòng |
 | Độ trễ vài giây mỗi lượt | Trung bình | Chỉ báo tiến trình; service tier nhanh |
-| Học viên có động lực thấp chỉ muốn đáp án | Trung bình | Chính OpenAI thừa nhận Study mode "cần học sinh thật sự muốn học". Sản phẩm nằm trong luồng học của khoá chứ không phải app phải tự tìm tới, nhưng chưa đo được tỉ lệ dùng |
+| Học viên có động lực thấp chỉ muốn đáp án | Trung bình | TechCrunch nhận xét Study mode chỉ có tác dụng với học sinh "thật sự muốn học", và OpenAI xác nhận không có cách khoá học sinh ở chế độ này. Sản phẩm nằm trong luồng học của khoá chứ không phải app phải tự tìm tới, nhưng chưa đo được tỉ lệ dùng |
 | Chưa có bằng chứng hiệu quả học của chính sản phẩm | Cao | Vòng validation ≥5 người; chưa đủ thời gian cho đo trước/sau |
 | Chỉ đối chiếu slide, chưa dùng transcript bài giảng | Thấp | Ngoài lát cắt hiện tại |
 
