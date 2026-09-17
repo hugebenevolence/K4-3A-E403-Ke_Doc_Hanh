@@ -91,7 +91,14 @@ export default function Learn() {
     () => selectedHere.reduce((n, id) => n + (byId.get(id)?.text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0), 0),
     [selectedHere, byId],
   );
-  const thin = selectedHere.length > 0 && selectedWords < MIN_TEACH_WORDS;
+  // Ngưỡng chữ chỉ áp cho ô CHỮ. Một sơ đồ gần như không có chữ trong PDF
+  // nhưng lại là nguyên một ý để giảng — đếm chữ thì slide nào cũng bị coi là
+  // "quá ngắn" và bị mở ra cả trang.
+  const hasFigure = useMemo(
+    () => selectedHere.some((id) => byId.get(id)?.kind === "figure"),
+    [selectedHere, byId],
+  );
+  const thin = selectedHere.length > 0 && !hasFigure && selectedWords < MIN_TEACH_WORDS;
 
   /** Bắt đầu giảng: vùng đã chọn, hoặc cả trang đang mở nếu chưa chọn gì hay
    *  vùng chọn quá mỏng. */
