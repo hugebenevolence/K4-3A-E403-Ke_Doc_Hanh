@@ -2,7 +2,7 @@
 //
 // Cố ý ngắn. Người mở trang là thành viên được gửi link để thử, không phải
 // khách cần thuyết phục — mỗi đoạn chữ thêm vào là thêm một thứ đứng giữa họ
-// và nút "Bắt đầu học".
+// và nút "Bắt đầu giảng".
 //
 // Nội dung minh hoạ (overfitting) là ví dụ tự viết, CỐ Ý không lấy từ slide của
 // khoá: trang này công khai, tài liệu khoá học chỉ nằm sau đăng nhập.
@@ -83,15 +83,19 @@ function Hero() {
           transition={{ duration: 0.8, ease: EASE }}
           className="m-0 text-[40px] leading-[1.04] font-semibold tracking-[-0.04em] text-balance sm:text-[64px]"
         >
-          Hiểu bài bằng cách giảng lại.
+          Giảng được, mới là hiểu.
         </motion.h1>
         <motion.p
           initial={{ opacity: 0, y: 8, filter: "blur(6px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
           transition={{ duration: 0.7, delay: 0.12, ease: EASE }}
-          className="mx-auto mt-5 mb-0 max-w-xl text-[16px] leading-relaxed text-balance text-neutral-500 sm:text-[18px]"
+          className="mx-auto mt-6 mb-0 max-w-3xl text-[16px] leading-relaxed text-pretty text-neutral-500 sm:text-[18px]"
         >
-          Chọn một phần trong slide và giảng lại bằng lời của bạn. Học trò AI hỏi vào đúng chỗ bạn chưa nắm chắc.
+          {/* Mỗi câu một dòng trên màn hình rộng; "Học trò AI" không bị ngắt đôi. */}
+          <span className="sm:block">Trình bày lại bất kỳ phần nào trong slide bằng ngôn ngữ của chính bạn.</span>{" "}
+          <span className="sm:block">
+            Học&nbsp;trò&nbsp;AI lắng nghe và đặt câu hỏi đúng vào những chỗ bạn chưa thật sự vững.
+          </span>
         </motion.p>
         <motion.div
           initial={{ opacity: 0, y: 8 }}
@@ -100,10 +104,10 @@ function Hero() {
           className="mt-9 flex flex-wrap items-center justify-center gap-2.5"
         >
           <LinkButton to="/library" size="lg">
-            Bắt đầu học
+            Bắt đầu giảng
           </LinkButton>
           <LinkButton href="#how" variant="normal" size="lg">
-            Cách hoạt động
+            Xem cách hoạt động
           </LinkButton>
         </motion.div>
       </div>
@@ -360,18 +364,18 @@ function SectionHead({ eyebrow, title }) {
 
 const STEPS = [
   {
-    title: "Chọn nội dung",
-    body: "Kéo chọn một đoạn chữ hoặc sơ đồ. Phần đã chọn được che lại.",
+    title: "Chọn trọng tâm",
+    body: "Khoanh vùng một đoạn chữ hoặc sơ đồ. Nội dung được che lại để bạn trình bày bằng hiểu biết của mình.",
     visual: <SelectVisual />,
   },
   {
-    title: "Giảng lại",
-    body: "Nói hoặc gõ lời giải thích của bạn, không nhìn slide.",
+    title: "Giảng bằng lời của bạn",
+    body: "Nói hoặc gõ phần giải thích, như đang giảng cho một người lần đầu nghe về chủ đề này.",
     visual: <SpeakVisual />,
   },
   {
-    title: "Trả lời câu hỏi",
-    body: "Học trò hỏi vào chỗ còn thiếu và chỉ ra vị trí cần xem lại.",
+    title: "Lấp đầy khoảng trống",
+    body: "Học trò AI hỏi đúng vào chỗ còn thiếu và chỉ ra vị trí cần xem lại trên slide.",
     visual: <SourceVisual />,
   },
 ];
@@ -380,7 +384,7 @@ function Steps() {
   return (
     <section id="how" className="scroll-mt-14 px-4 py-24 sm:px-6 sm:py-32">
       <div className="mx-auto max-w-5xl">
-        <SectionHead eyebrow="Cách hoạt động" title="Ba bước để biết mình hiểu tới đâu." />
+        <SectionHead eyebrow="Cách hoạt động" title="Ba bước để kiến thức thật sự thuộc về bạn." />
         <div className="mt-12 grid gap-4 md:grid-cols-3">
           {STEPS.map((step, i) => (
             <Reveal key={step.title} delay={i * 0.08}>
@@ -456,10 +460,10 @@ function SourceVisual() {
 // ---------------------------------------------------------------------------
 
 const PRINCIPLES = [
-  ["Không trả lời thay", "Kể cả khi được hỏi thẳng, học trò chỉ đặt câu hỏi."],
-  ["Bám sát tài liệu", "Lời giảng được đối chiếu với đúng phần slide bạn chọn."],
-  ["Không lộ đáp án", "Học trò chỉ ra chỗ cần xem lại, không trích nguyên văn."],
-  ["Chỉ thu âm khi bạn nói", "Mic chỉ hoạt động khi bạn giữ nút nói."],
+  ["Không bao giờ giảng hộ", "Kể cả khi được hỏi thẳng, học trò AI chỉ gợi mở bằng câu hỏi. Lời giải luôn đến từ bạn."],
+  ["Bám sát tài liệu khóa học", "Mọi phản hồi đều đối chiếu với đúng phần slide bạn chọn, không dựa vào phỏng đoán của mô hình."],
+  ["Chỉ đường, không lộ đáp án", "Học trò AI chỉ ra vị trí cần xem lại, không trích sẵn nội dung cho bạn."],
+  ["Tôn trọng quyền riêng tư", "Micro chỉ hoạt động khi bạn giữ nút nói."],
 ];
 
 const REFERENCES = [
@@ -473,7 +477,15 @@ function Principles() {
   return (
     <section id="principles" className="scroll-mt-14 border-t border-neutral-200 px-4 py-24 sm:px-6 sm:py-32">
       <div className="mx-auto grid max-w-5xl gap-12 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
-        <SectionHead eyebrow="Nguyên tắc" title="Bạn tự hiểu. AI không làm thay." />
+        <SectionHead
+          eyebrow="Nguyên tắc thiết kế"
+          title={
+            <>
+              <span className="block">AI đặt câu hỏi.</span>
+              <span className="block">Bạn tìm ra câu trả lời.</span>
+            </>
+          }
+        />
         <dl className="m-0 grid gap-x-10 gap-y-8 sm:grid-cols-2">
           {PRINCIPLES.map(([title, body], i) => (
             <Reveal key={title} delay={i * 0.06} className="border-t border-neutral-900 pt-4">
@@ -484,7 +496,7 @@ function Principles() {
         </dl>
       </div>
       <Reveal className="mx-auto mt-20 max-w-5xl text-[13px] text-neutral-400">
-        Cơ sở nghiên cứu: {REFERENCES.join(" · ")}
+        Xây dựng trên các nghiên cứu về học qua giảng dạy: {REFERENCES.join(" · ")}
       </Reveal>
     </section>
   );
