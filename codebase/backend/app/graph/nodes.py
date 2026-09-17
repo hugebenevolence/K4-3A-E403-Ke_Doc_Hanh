@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from app.domain.leak import leaked_terms, leaks_answer
+from app.domain.leak import leaked_terms, leaks_answer, suggests_fix
 from app.domain.session import TeachBackSession, TurnState
 from app.domain.span import normalize_span_id
 from app.domain.verbatim import is_verbatim_paste, quotes_source
@@ -33,6 +33,7 @@ async def open_session(
     lesson_span_ids: list[str],
     recurring_gaps: dict,
     concept: str = "khái niệm này",
+    code: str = "",
 ) -> str:
     """Câu mở bài: mời học viên dạy, neo vào một chỗ cụ thể trong nguồn.
 
@@ -48,7 +49,19 @@ async def open_session(
         if any(recurring_gaps.get(s) for s in lesson_span_ids)
         else ""
     )
-    system = registry.compose_system("opener", OPENER_VERSION, source)
+    if code:
+        # Quan sát thật: mở bài cho bài code lại đi mách luôn cách sửa — "tại
+        # sao vòng trong vẫn duyệt từ đầu thay vì CHỈ TỪ i+1?" — tức là đưa sẵn
+        # tối ưu mà học viên phải tự tìm ra. Prompt mở bài dùng chung không có
+        # luật này vì bài slide không có "cách sửa" để mà lỡ miệng.
+        hint += (
+            "\n\nĐây là buổi giải thích CODE. Hỏi về những gì code ĐANG làm, "
+            "tuyệt đối không gợi ý nó NÊN làm gì: không nêu cách sửa, không "
+            "nhắc tên thuật toán hay cấu trúc dữ liệu tốt hơn, không nói 'thay "
+            "vì', 'lẽ ra', 'chỉ cần'. Học viên phải tự tìm ra."
+        )
+
+    system = registry.compose_system("opener", OPENER_VERSION, source, code=code)
     body = "\n".join(s.text for s in source)
 
     for attempt in range(2):
@@ -68,6 +81,15 @@ async def open_session(
                 "\n\nCÂU BẠN VỪA VIẾT ĐÃ TRÍCH NGUYÊN VĂN ĐOẠN NGUỒN. Viết lại, "
                 "chỉ nêu HIỆN TƯỢNG bằng lời của bạn, tuyệt đối không chép chữ "
                 "nào liền mạch từ nguồn."
+            )
+            continue
+        if code and suggests_fix(out.question):
+            log.warning("Câu mở bài mách cách sửa, viết lại (lần %d)", attempt + 1)
+            hint += (
+                "\n\nCÂU BẠN VỪA VIẾT ĐÃ MÁCH CÁCH SỬA. Chỉ hỏi về những gì code "
+                "ĐANG làm — không so sánh với cách làm khác, không dùng 'thay vì', "
+                "'lẽ ra', 'chỉ cần', và không nhắc tới chỉ số hay cấu trúc nào "
+                "mà code hiện chưa dùng."
             )
             continue
         return out.question
@@ -259,6 +281,27 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
             if leaks_answer(out.question, uncovered, state["student_text"]):
                 log.warning("Viết lại vẫn lộ, dùng câu hỏi neo lại khái niệm")
                 out = FollowupOutput(question=_reanchor(state), cites_span_id=None)
+
+        # Với bài code, lộ đáp án mang hình dạng khác: mách cách sửa. Phải bắt
+        # riêng, vì phần code học viên chưa nói tới KHÔNG phải thứ cấm nhắc —
+        # cấm là nói ra cách làm tốt hơn, mà cách nói đó không trùng từ nào với
+        # nguồn nên bộ lọc từ khoá ở trên không thấy.
+        if code and suggests_fix(out.question):
+            log.warning("Câu hỏi ngược mách cách sửa, hỏi lại")
+            out = await llm.structured(
+                system=system,
+                user=(
+                    f"{user}\n\nCÂU BẠN VỪA VIẾT ĐÃ MÁCH CÁCH SỬA. Chỉ hỏi về "
+                    "những gì code ĐANG làm — không so sánh với cách làm khác, "
+                    "không dùng 'thay vì', 'lẽ ra', 'chỉ cần', 'tốt hơn'."
+                ),
+                schema=FollowupOutput,
+                tier=ModelTier.STANDARD,
+            )
+            if suggests_fix(out.question):
+                log.warning("Viết lại vẫn mách cách sửa, dùng câu hỏi neo lại")
+                out = FollowupOutput(question=_reanchor(state), cites_span_id=None)
+
         # Trích dẫn bịa còn tệ hơn không trích: frontend sẽ dùng mã này để
         # highlight vùng trên slide, trỏ sai là học viên mất niềm tin ngay.
         canonical = {normalize_span_id(s.span_id): s.span_id for s in source}

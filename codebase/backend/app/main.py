@@ -192,7 +192,8 @@ async def teach_back_session(ws: WebSocket):
     # cả phiên vì một lượt gọi LLM trục trặc.
     try:
         opening = await open_session(
-            llm, spans, list(lesson.source_span_ids), profile.recurring_gaps, lesson.concept
+            llm, spans, list(lesson.source_span_ids), profile.recurring_gaps,
+            lesson.concept, lesson.code,
         )
         await ws.send_json(
             {"type": "transcript", "role": "agent", "text": opening, "filler": False}
