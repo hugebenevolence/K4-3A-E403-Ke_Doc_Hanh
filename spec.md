@@ -207,36 +207,48 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
   điền được — số dưới đây là D1+D2, tức là chặn trên của nó. Cả 5 lượt đều được
   chấm lại bằng bộ chấm hiện tại để so sánh cùng một thước.
 
-  | Lượt | Giờ 17/9 | Bản build | D1 | D2 | D1+D2 | Điều kiện cứng | File |
+  | Lượt | Giờ | Bản build | D1 | D2 | D1+D2 | Điều kiện cứng | File |
   |---|---|---|---|---|---|---|---|
   | 1 | 19:16 | grader v2 | 14/26 | 26/26 | 14/26 (54%) | ĐẠT | [run-20260917-1919](eval/results/run-20260917-1919.md) |
   | 2 | 19:31 | grader v3 | 23/26 | 24/26 | 21/26 (81%) | **trượt** — O03 | [run-20260917-1933](eval/results/run-20260917-1933.md) |
   | 3 | 19:33 | grader v3 | 22/26 | 25/26 | 21/26 (81%) | **trượt** — O03 | [run-20260917-1936](eval/results/run-20260917-1936.md) |
   | 4 | 19:45 | v3 + chặn nhại lại | 20/26 | 23/26 | 17/26 (65%) | **trượt** — O01, O02, O03 | [run-20260917-1945](eval/results/run-20260917-1945.md) |
   | 5 | 19:55 | v3 + chặn tuột vai | 20/26 | **26/26** | 20/26 (77%) | **ĐẠT** | [run-20260917-1958](eval/results/run-20260917-1958.md) |
+  | 6 | 18/9 01:47 | v4 + sàn lượng lời giảng + mâu thuẫn theo từng ý · **3 lượt/case** | 21/26 | 25/26 | 21/26 (81%) | **ĐẠT** | [run-20260918-0153](eval/results/run-20260918-0153.md) |
+  | 7 | 18/9 01:55 | lượt 6 + bắt chép đúng mã đoạn · **3 lượt/case** | 23/26 | **26/26** | **23/26 (88%)** | **ĐẠT** | [run-20260918-0200](eval/results/run-20260918-0200.md) |
 
-  **Đọc bảng này thế nào.** Lượt 5 là lần đầu D2 sạch tuyệt đối và điều kiện cứng
-  đạt: không case nào ở lớp ③④ bị lộ đáp án, không case INCORRECT nào bị chấm
-  SUFFICIENT. Nhưng **77% vẫn dưới bar 80%**, và bar đã chốt nên không sửa.
+  **Đọc bảng này thế nào.** Lượt 1–5 mỗi lượt chỉ chạy bộ case ĐÚNG MỘT LẦN, mà
+  dao động giữa các lượt là có thật: cùng một bản build, D1 chạy 20–23/26 qua các
+  lượt 2–5. Một con số đơn lẻ vì thế là một lần tung đồng xu. Từ lượt 6, mỗi case
+  chạy **3 lần** và bảng ghi trung vị, nên con số so được với nhau.
 
-  **Dao động giữa các lượt là có thật**: cùng một bản build, D1 chạy 20–23/26 qua
-  các lượt 2–5. Nên đọc một con số đơn lẻ là đọc sai; chỗ đáng tin là những case
-  hỏng lặp lại.
+  Lượt 7 là bản đang chạy: **23/26 (88%)** — từng lượt 24, 23, 23 — D2 sạch tuyệt
+  đối cả 26 case, và điều kiện cứng đạt (không case ③④ nào lộ đáp án, không case
+  INCORRECT nào bị chấm SUFFICIENT). Quality bar đòi **≥21/26 đạt cả ba chiều**;
+  con số 23 ở đây mới là D1+D2, tức chặn trên — D3 vẫn chờ người chấm.
 
-  **Ba chỗ hỏng lặp lại — rủi ro D1 lớn nhất còn mở**:
-  - **F03 hỏng 4/4 lượt**: giải thích thiếu cơ chế bị chấm INCORRECT thay vì
-    INCOMPLETE. Chấm nặng tay hơn mức đáng bị — học viên không sai, chỉ chưa đủ.
-  - **M01 hỏng 4/4 lượt**: "đặt temperature = 0 thì model hết bịa" bị chấm
-    INCOMPLETE thay vì INCORRECT. Bộ chấm không bắt được mâu thuẫn khi câu sai
-    nghe hợp lý và dùng đúng từ khoá của slide. Đây là kiểu hỏng đắt nhất: học
-    viên mang một hiểu lầm ra khỏi buổi học.
-  - **A01, M02, N06 mỗi case hỏng 2/4 lượt**: cùng một lời giảng, lượt được lượt
-    không — ranh giới "đủ / chưa đủ" của bộ chấm chưa ổn định.
+  **Đã đóng được (lượt 7 so với lượt 5)**:
+  - **M01 và M02 — kiểu hỏng đắt nhất, học viên mang hiểu lầm ra khỏi buổi học.**
+    M01 hỏng 4/4 lượt trước đây; giờ cả M01–M04 đúng 3/3. Sửa bằng cách hỏi mâu
+    thuẫn theo TỪNG Ý (`contradicted_by_student`) thay cho một ô văn xuôi chung —
+    ô chung hay bị model mô tả chỗ sai trong `gap_summary` rồi để rỗng.
+  - **A01 và N08 — cho qua oan.** Lời giảng cụt lủn được chấm "đã đủ"; giờ 3/3 nhờ
+    sàn 20 từ cộng dồn cả buổi (§4, `domain/substance.py`).
+
+  **Còn mở, theo thứ tự ưu tiên**:
+  - **N06 hỏng 3/3 lượt**: kể được hai công đoạn đầu của cách luyện LLM là đã được
+    chấm đủ, trong khi nguồn còn công đoạn sau. Bộ chấm đang rộng tay với những
+    nguồn liệt kê nhiều bước.
+  - **F03 hỏng 3/3 lượt**: giải thích bằng một cơ chế KHÁC bị chấm INCORRECT thay
+    vì INCOMPLETE. Chấm nặng tay hơn mức đáng bị — ranh giới "nói cơ chế khác" và
+    "nói trái nguồn" vẫn chưa đủ sắc, dù đã có ví dụ riêng trong grader v4.
+  - **N04 và M03 mỗi case dao động 1/3 lượt**: ranh giới vẫn chưa ổn định, nhưng
+    đã tốt hơn nhiều so với 5/26 case dao động ở lượt 6.
 
   Đo trước khi có golden set, không tính vào bar, chỉ là căn cứ thiết kế:
   - Nhận dạng thuật ngữ trên 20 câu nói thật: không từ điển 11/20 → từ điển cũ 15/20 → từ điển theo vùng chọn + cụm nhiều từ 19/20. Thêm cách phát âm do LLM sinh thì tụt còn 15/20, nên đã tắt.
   - Tìm đúng đoạn slide (retrieval): BM25 hit@3 67–72%; MiniLM hit@1 56%, hit@3 89%.
-  - Lỗi đã thấy trên LLM thật, là nguồn của các guard: câu mở bài hỏi lạc slide; câu hỏi dạng "có phải…" lộ đáp án; trích dẫn slide nằm ngay dưới câu hỏi thành đáp án; bộ chấm cho "đủ" khi học viên đọc slide lộn xộn hoặc nói toàn từ khoá. Lỗi cuối **còn mở**, là rủi ro lớn nhất cho D1.
+  - Lỗi đã thấy trên LLM thật, là nguồn của các guard: câu mở bài hỏi lạc slide; câu hỏi dạng "có phải…" lộ đáp án; trích dẫn slide nằm ngay dưới câu hỏi thành đáp án; bộ chấm cho "đủ" khi học viên đọc slide lộn xộn hoặc nói toàn từ khoá. Lỗi cuối **đã đóng ở lượt 7** bằng sàn lượng lời giảng và sàn nội dung vùng nguồn — xem hai dòng 17/9 21:40 và 22:00 ở §9.
 
 ## §8. Phân công & kế hoạch
 
@@ -292,3 +304,13 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
 | 17/9 19:55 | Dò cụm cấm của D2 giữ nguyên dấu tiếng Việt | M03 bị ghi là lộ "thực ra" vì câu sạch "kết thúc ra sao" mất dấu thành "thuc ra" |
 | 17/9 20:05 | Chặn bằng luật hai kiểu tuột vai: học trò nhận sẽ giảng, và học trò bám theo câu lạc đề | Lượt 3 hỏng cả ba case lớp ③ (O01, O02, O03) dù prompt đã cấm sẵn — đúng chỗ prompt suông không giữ được |
 | 17/9 20:50 | Khai phạm vi mở rộng: trí nhớ xuyên phiên của học trò dựng thành knowledge graph (§4c) | Học trò đang quên sạch sau mỗi phiên, nên học viên không thật sự dạy nó — mất protégé effect, là cơ chế chính của D3 |
+| 17/9 21:40 | Vùng nguồn phải có nội dung mới mở được phiên: đếm chữ sau khi trừ tiêu đề trang, mỏng thì nới ra cả trang, cả trang vẫn mỏng thì từ chối | Phiên thật `2e6d52f3`: học viên mở TRANG BÌA, "ý cốt lõi" của nguồn hoá ra là chính dòng tiêu đề nên 9 chữ cũng đóng phiên TAUGHT. Ngưỡng 24 từ đo trên 58 trang của 2 bộ slide (trang bìa 16 và 18 từ, trang nội dung mỏng nhất 29) |
+| 17/9 22:00 | Sàn lượng lời giảng: dưới 20 từ cộng dồn cả buổi thì không thể ra SUFFICIENT | Đo lại 4 lượt chạy trong `eval/results/`: mọi lượt SUFFICIENT đúng đều ≥27 từ, mọi lượt cho qua oan đều ≤16 từ (A01 13, N08 16, A03 4) |
+| 17/9 22:15 | Bộ chấm nhận CẢ BUỔI chứ không chỉ lượt cuối, kèm câu hỏi ngược đang được trả lời (grader v4) | Mảnh trả lời cho một câu hỏi hẹp bị đem đối chiếu với toàn bộ đoạn nguồn; và người giảng đủ ý qua hai lượt trước đây không bao giờ đạt được vì lượt sau không nhớ lượt trước |
+| 17/9 22:20 | Mâu thuẫn hỏi theo TỪNG Ý (`contradicted_by_student`) thay cho một ô văn xuôi chung; trái ý chính → INCORRECT, trái chi tiết phụ → INCOMPLETE | M01 hỏng 4/4 lượt, M02 2/4: model mô tả chỗ sai trong `gap_summary` rồi để ô mâu thuẫn rỗng. Thấy cả trên phiên thật `5eaa59a3` — câu sai được chấm là ĐỦ |
+| 17/9 22:30 | Phiên đạt không còn hiện thẻ "Cần xem lại"; chưa đạt thì thẻ trỏ vào ý chính còn thiếu HOẶC ý đã nói sai | Phiên `2e6d52f3` đóng bằng "Học trò đã hiểu phần này" mà ngay dưới vẫn hiện thẻ "Cần xem lại · 1" trỏ vào một dòng tiêu đề |
+| 18/9 00:30 | Hồ sơ học viên ghi MỘT LẦN mỗi buổi thay vì mỗi lượt; ghi nguyên tử; hồ sơ hỏng thì dẹp sang bên kèm mốc thời gian | `recurring_gaps` khai là "số buổi đã vấp" nhưng cộng theo lượt, nên học trò nói "buổi trước bạn cũng chưa thông chỗ này" ngay trong buổi đầu tiên |
+| 18/9 00:50 | Golden set chạy được nhiều lượt (`--repeat`), báo trung vị + từng lượt + danh sách case dao động | Một lượt chạy là một lần tung đồng xu: cùng bản build, D1 đã đo được 20–23/26 qua các lượt (§7) |
+| 18/9 01:10 | Lỗi nhà cung cấp được nói thật ("lỗi phía hệ thống, không phải do bạn") thay vì "mình nghe chưa rõ", và nổi lên ngay thay vì sau 20 giây | Gặp thật khi đang đo: API trả 429 hết hạn mức, nhưng graph hỏng không đẩy tín hiệu kết thúc nên lượt treo tới hết timeout rồi báo sai nguyên nhân — đổ lỗi cho giọng học viên |
+| 18/9 01:30 | Rà soát chéo toàn bộ đợt sửa: trả bộ lọc lộ đáp án về xét theo từng lượt | Nới "đã nói" ra cả buổi làm guard yếu dần: một từ khoá buột ra ở lượt 1 cho phép agent nói thẳng nó ở lượt 3. "Không lộ đáp án" là điều kiện cứng, không đánh đổi khi chưa đo được |
+| 18/9 02:10 | Bắt bộ chấm chép đúng mã đoạn của nguồn (mô tả ngay trong schema), và báo lỗi to khi một lượt mất sạch căn cứ | Lượt đo 3× bắt được: model tự đặt mã `s1..s4` thay cho mã có sẵn, bộ lọc mã bịa ném sạch evidence, F01 và F02 trượt 0/3 vì bộ chấm hỏng chứ không phải vì lời giảng. Sau khi sửa: cả hai đạt 3/3 |
