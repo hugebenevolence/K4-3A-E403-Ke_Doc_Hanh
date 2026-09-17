@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from app.domain.leak import leaked_terms, leaks_answer, suggests_fix
+from app.domain.leak import about_source, leaked_terms, leaks_answer, suggests_fix
 from app.domain.session import TeachBackSession, TurnState
 from app.domain.span import normalize_span_id
 from app.domain.verbatim import is_verbatim_paste, quotes_source
@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 GRADER_VERSION = "v2"
 GRADER_CODE_VERSION = "v1"
 PERSONA_VERSION = "v1"
-OPENER_VERSION = "v1"
+OPENER_VERSION = "v2"
 
 
 async def open_session(
@@ -81,6 +81,13 @@ async def open_session(
                 "\n\nCÂU BẠN VỪA VIẾT ĐÃ TRÍCH NGUYÊN VĂN ĐOẠN NGUỒN. Viết lại, "
                 "chỉ nêu HIỆN TƯỢNG bằng lời của bạn, tuyệt đối không chép chữ "
                 "nào liền mạch từ nguồn."
+            )
+            continue
+        if not code and not about_source(out.question, body):
+            log.warning("Câu mở bài không nói gì về vùng đã chọn, viết lại (lần %d)", attempt + 1)
+            hint += (
+                "\n\nCÂU BẠN VỪA VIẾT KHÔNG NÓI GÌ VỀ ĐOẠN NGUỒN — nó nói về một chủ "
+                "đề khác. Chỉ hỏi về đúng nội dung trong đoạn nguồn bên trên."
             )
             continue
         if code and suggests_fix(out.question):

@@ -30,7 +30,8 @@ _STOPWORDS = frozenset(
 )
 
 
-def _terms(text: str) -> set[str]:
+def content_terms(text: str) -> set[str]:
+    """Từ mang nội dung: bỏ hư từ và âm tiết quá ngắn."""
     text = unicodedata.normalize("NFC", text).lower()
     words = re.sub(r"[^\w\s]", " ", text, flags=re.UNICODE).split()
     return {w for w in words if len(w) >= MIN_TERM_LEN and w not in _STOPWORDS}
@@ -41,7 +42,7 @@ def leaked_terms(question: str, uncovered_source: str, student_text: str) -> set
 
     Trừ đi những gì học viên đã tự nói: nhắc lại lời học viên thì không phải lộ.
     """
-    return _terms(question) & (_terms(uncovered_source) - _terms(student_text))
+    return content_terms(question) & (content_terms(uncovered_source) - content_terms(student_text))
 
 
 def leaks_answer(question: str, uncovered_source: str, student_text: str) -> bool:
@@ -75,3 +76,17 @@ def suggests_fix(question: str) -> bool:
     """Câu hỏi có đang mách cách sửa không (chỉ áp cho bài code)."""
     lowered = question.lower()
     return any(marker in lowered for marker in _PRESCRIPTIVE)
+
+
+def about_source(question: str, source: str) -> bool:
+    """Câu hỏi có nói về chính đoạn nguồn không — ít nhất một từ nội dung chung.
+
+    Đo được thật: nguồn chỉ là một dòng tiêu đề ("Sinh văn bản = đoán → nối vào
+    câu → đoán tiếp") thì câu mở bài lại hỏi "nói rất chắc mà thông tin sai
+    cùng tồn tại kiểu gì" — chép nguyên ví dụ mẫu trong prompt, về một slide
+    khác hẳn. Học viên chọn slide 12 mà bị hỏi về slide 20.
+
+    Ngưỡng một từ là cố ý thấp: câu hỏi hay thì nêu hiện tượng bằng lời khác,
+    không được bắt nó trùng nhiều chữ với nguồn — trùng nhiều là trích nguyên văn.
+    """
+    return bool(content_terms(question) & content_terms(source))
