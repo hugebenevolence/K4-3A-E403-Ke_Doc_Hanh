@@ -1,0 +1,116 @@
+[
+ {
+  "id": "N01",
+  "layer": "thường",
+  "source": [
+   "T10501"
+  ],
+  "expect": [
+   "SUFFICIENT"
+  ],
+  "turns": [
+   {
+    "said": "Model đoán một token, rồi nối token đó vào câu và chạy lại để đoán token kế tiếp, cứ thế lặp lại. Giống bàn phím điện thoại gợi ý từ này nối sang từ kia.",
+    "verdict": "sufficient",
+    "turn_state": "TAUGHT",
+    "agent_says": "À, giờ thì mình hiểu rồi. Cảm ơn bạn đã giảng kỹ cho mình.",
+    "understood": [],
+    "cites_span_id": "[d1-slide-hackathon-p12-01]",
+    "gap_summary": "lời giải thích chưa khớp với nguồn, nhưng chưa xác định được thiếu ở đâu"
+   }
+  ],
+  "d1": false,
+  "d2": true,
+  "d2_leaks": [],
+  "d2_extra_questions": [],
+  "d3_hits": null,
+  "manual": "",
+  "source_chars": 1384
+ },
+ {
+  "id": "F02",
+  "layer": "①",
+  "source": [
+   "T10435",
+   "T10417"
+  ],
+  "expect": [
+   "SUFFICIENT"
+  ],
+  "turns": [
+   {
+    "said": "Hình này là các vòng tròn lồng nhau: ngoài cùng là AI, trong đó có machine learning, trong nữa là deep learning, rồi tới generative AI, và trong cùng là LLM. Mỗi vòng là một phần của vòng bao ngoài nó.",
+    "verdict": "sufficient",
+    "turn_state": "TAUGHT",
+    "agent_says": "À, giờ thì mình hiểu rồi. Cảm ơn bạn đã giảng kỹ cho mình.",
+    "understood": [],
+    "cites_span_id": "[d1-slide-hackathon-p3-f01]",
+    "gap_summary": "lời giải thích chưa khớp với nguồn, nhưng chưa xác định được thiếu ở đâu"
+   }
+  ],
+  "d1": false,
+  "d2": true,
+  "d2_leaks": [],
+  "d2_extra_questions": [],
+  "d3_hits": null,
+  "manual": "",
+  "source_chars": 572
+ },
+ {
+  "id": "A02",
+  "layer": "②",
+  "source": [
+   "T10355"
+  ],
+  "expect": [
+   "INCOMPLETE"
+  ],
+  "turns": [
+   {
+    "said": "Token: model không đọc \"từ\", model đọc mảnh chữ\nModel không nhìn từ nguyên vẹn. Nó cắt văn bản thành các mảnh nhỏ gọi là token: có từ là một mảnh, có từ vỡ ba bốn mảnh, cả dấu câu và khoảng trắng cũng là mảnh. Ví dụ: \"Hello world\" ≈ 2 token, nhưng \"Xin chào\" có thể tới 3–4 token. Tiếng Việt, code, JSON tốn token hơn tiếng Anh thường — vì dấu thanh, ký tự đặc biệt và cấu trúc bị cắt nhỏ ra.\nMọi thứ model làm đều quy ra token — và mỗi token đều có giá. Nhớ điều này khi sang phần chi phí.\nThử trực tiếp: platform.openai.com/tokenizer · Số token chính xác phụ thuộc tokenizer của từng model.\nHình: H",
+    "verdict": "incomplete",
+    "turn_state": "STUDENT_RESPONDING",
+    "agent_says": "Chỗ đó thì vì sao lại xảy ra vậy bạn?",
+    "understood": [],
+    "cites_span_id": null,
+    "gap_summary": "học viên đang đọc lại gần nguyên văn tài liệu, chưa diễn đạt bằng lời mình"
+   }
+  ],
+  "d1": false,
+  "d2": true,
+  "d2_leaks": [],
+  "d2_extra_questions": [],
+  "d3_hits": [],
+  "manual": "",
+  "source_chars": 1052
+ },
+ {
+  "id": "M04",
+  "layer": "④",
+  "source": [
+   "T11062",
+   "T11069"
+  ],
+  "expect": [
+   "INCORRECT"
+  ],
+  "turns": [
+   {
+    "said": "Context càng dài thì model càng nhớ tốt, nên cứ dán hết tài liệu vào cho chắc.",
+    "verdict": "incomplete",
+    "turn_state": "STUDENT_RESPONDING",
+    "agent_says": "Chỗ đó thì vì sao lại xảy ra vậy bạn?",
+    "understood": [],
+    "cites_span_id": null,
+    "gap_summary": "chưa nói tới nguyên nhân nằm ở đâu"
+   }
+  ],
+  "d1": false,
+  "d2": true,
+  "d2_leaks": [],
+  "d2_extra_questions": [],
+  "d3_hits": [],
+  "manual": "",
+  "source_chars": 1038
+ }
+]

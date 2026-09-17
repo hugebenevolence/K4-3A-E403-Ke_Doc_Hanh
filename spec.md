@@ -180,9 +180,35 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
 - **Quality bar** (chốt 17/9 trước 21:00, giữ nguyên sau đó): **"Đạt khi ≥ 80% case (≥ 21/26) đạt cả ba chiều D1–D3, và 0 case vi phạm D2 ở lớp ③ và ④ (không lộ đáp án, không xác nhận ý sai), và 0 case có kỳ vọng INCORRECT bị chấm SUFFICIENT."**
 - **Kết quả các lượt chạy**:
 
-  | Lượt | Ngày | Bản build | % đạt cả 3 chiều | D1 | D2 | D3 | Điều kiện cứng | So với bar |
-  |---|---|---|---|---|---|---|---|---|
-  | 1 | *trước CP5* | — | — | — | — | — | — | — |
+  Máy chấm được D1 và D2; **D3 còn chờ người chấm** nên cột "đạt cả 3 chiều" chưa
+  điền được — số dưới đây là D1+D2, tức là chặn trên của nó. Cả 5 lượt đều được
+  chấm lại bằng bộ chấm hiện tại để so sánh cùng một thước.
+
+  | Lượt | Giờ 17/9 | Bản build | D1 | D2 | D1+D2 | Điều kiện cứng | File |
+  |---|---|---|---|---|---|---|---|
+  | 1 | 19:16 | grader v2 | 14/26 | 26/26 | 14/26 (54%) | ĐẠT | [run-20260917-1919](eval/results/run-20260917-1919.md) |
+  | 2 | 19:31 | grader v3 | 23/26 | 24/26 | 21/26 (81%) | **trượt** — O03 | [run-20260917-1933](eval/results/run-20260917-1933.md) |
+  | 3 | 19:33 | grader v3 | 22/26 | 25/26 | 21/26 (81%) | **trượt** — O03 | [run-20260917-1936](eval/results/run-20260917-1936.md) |
+  | 4 | 19:45 | v3 + chặn nhại lại | 20/26 | 23/26 | 17/26 (65%) | **trượt** — O01, O02, O03 | [run-20260917-1945](eval/results/run-20260917-1945.md) |
+  | 5 | 19:55 | v3 + chặn tuột vai | 20/26 | **26/26** | 20/26 (77%) | **ĐẠT** | [run-20260917-1958](eval/results/run-20260917-1958.md) |
+
+  **Đọc bảng này thế nào.** Lượt 5 là lần đầu D2 sạch tuyệt đối và điều kiện cứng
+  đạt: không case nào ở lớp ③④ bị lộ đáp án, không case INCORRECT nào bị chấm
+  SUFFICIENT. Nhưng **77% vẫn dưới bar 80%**, và bar đã chốt nên không sửa.
+
+  **Dao động giữa các lượt là có thật**: cùng một bản build, D1 chạy 20–23/26 qua
+  các lượt 2–5. Nên đọc một con số đơn lẻ là đọc sai; chỗ đáng tin là những case
+  hỏng lặp lại.
+
+  **Ba chỗ hỏng lặp lại — rủi ro D1 lớn nhất còn mở**:
+  - **F03 hỏng 4/4 lượt**: giải thích thiếu cơ chế bị chấm INCORRECT thay vì
+    INCOMPLETE. Chấm nặng tay hơn mức đáng bị — học viên không sai, chỉ chưa đủ.
+  - **M01 hỏng 4/4 lượt**: "đặt temperature = 0 thì model hết bịa" bị chấm
+    INCOMPLETE thay vì INCORRECT. Bộ chấm không bắt được mâu thuẫn khi câu sai
+    nghe hợp lý và dùng đúng từ khoá của slide. Đây là kiểu hỏng đắt nhất: học
+    viên mang một hiểu lầm ra khỏi buổi học.
+  - **A01, M02, N06 mỗi case hỏng 2/4 lượt**: cùng một lời giảng, lượt được lượt
+    không — ranh giới "đủ / chưa đủ" của bộ chấm chưa ổn định.
 
   Đo trước khi có golden set, không tính vào bar, chỉ là căn cứ thiết kế:
   - Nhận dạng thuật ngữ trên 20 câu nói thật: không từ điển 11/20 → từ điển cũ 15/20 → từ điển theo vùng chọn + cụm nhiều từ 19/20. Thêm cách phát âm do LLM sinh thì tụt còn 15/20, nên đã tắt.
@@ -226,3 +252,8 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
 | 17/9 16:14 | Nhận ra hình và sơ đồ, cho chọn giảng cả hình | Vùng chỉ có sơ đồ trước đây không chọn được (F02) |
 | 17/9 18:21 | Thanh tiến trình thay đoạn hướng dẫn; "Giảng lại" / "Slide tiếp theo" khi hết phiên | Rà UX: hướng dẫn chỉ có ích lần đầu (G1) |
 | 17/9 18:57 | Viết spec §1–§9, chốt golden set 26 case + quality bar | Hạn chốt spec CP4 (21:00 17/9) |
+| 17/9 19:25 | Bộ chấm tách Ý CHÍNH khỏi chi tiết phụ, chỉ đòi phủ ý chính (grader v3) | Lượt 1: 6/9 case "thường" bị chấm thiếu dù đã nói đúng cơ chế — bắt học viên đọc đủ mọi gạch đầu dòng là trái với "giảng bằng lời của mình" (§4) |
+| 17/9 19:45 | Học trò không nhại lại lời học viên nữa; câu lạc đề được trả lời "mình chịu" rồi mời quay lại phần đang giảng | O03 lượt 2: học viên hỏi chen về link GitHub, học trò hỏi lại đúng câu đó — biến câu lạc đề thành chủ đề buổi học |
+| 17/9 19:50 | Harness golden set mở rộng vùng chọn quá mỏng ra cả trang, đúng như frontend | A03 ghi rõ "mở rộng ra cả trang" nhưng harness chạy trên mỗi dòng tiêu đề — dựng ra phiên mà sản phẩm không tạo được |
+| 17/9 19:55 | Dò cụm cấm của D2 giữ nguyên dấu tiếng Việt | M03 bị ghi là lộ "thực ra" vì câu sạch "kết thúc ra sao" mất dấu thành "thuc ra" |
+| 17/9 20:05 | Chặn bằng luật hai kiểu tuột vai: học trò nhận sẽ giảng, và học trò bám theo câu lạc đề | Lượt 3 hỏng cả ba case lớp ③ (O01, O02, O03) dù prompt đã cấm sẵn — đúng chỗ prompt suông không giữ được |

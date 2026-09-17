@@ -4,7 +4,7 @@
 
 ## 👥 Thành viên nhóm & Phân công vai trò
 
-**Lớp:** 3A · **Phòng:** E403 · **Cụm:** ____ · **Track:** D — Học tập thích ứng & tương tác (D1 · lớp học mô phỏng đa tác tử, tương tác bằng giọng nói)
+**Lớp:** 3A · **Phòng:** E403 · **Cụm:** ____ · **Track:** D — Học tập thích ứng & tương tác (D3 · học bằng cách dạy, tương tác bằng giọng nói)
 
 | Họ và Tên | Mã Học Viên | Vai trò chính | Phần việc đảm nhiệm trong dự án |
 |---|---|---|---|
