@@ -86,3 +86,9 @@ def test_tu_tieng_viet_khong_dau_khong_bi_coi_la_chu_la():
     # Bản đầu coi mọi chữ không dấu là tiếng Anh, bỏ nhầm một ý hoàn toàn đúng.
     point = "Điểm chấm người ta cộng cho câu đúng và trừ cho câu sai"
     assert _heard([point], "", "", vocabulary=VOCAB) == [point]
+
+
+def test_ha_chu_hoa_khi_di_kem_viet_tat_ngan():
+    # Đo được thật: "GENERATIVE AI" lọt qua bản đầu vì "AI" chỉ có 2 ký tự.
+    assert tame_shouting("vòng GENERATIVE AI nằm ngoài LLM") == "vòng generative AI nằm ngoài LLM"
+    assert tame_shouting("dữ liệu dạng JSON") == "dữ liệu dạng JSON"
