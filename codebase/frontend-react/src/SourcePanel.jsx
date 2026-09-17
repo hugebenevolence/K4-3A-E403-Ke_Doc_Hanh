@@ -1,9 +1,9 @@
-// Khung phải: tài liệu nguồn — ở đây là slide, về sau thêm lời giảng viên.
+// Khung phải: slide đang học.
 //
 // Hai chế độ, tuỳ đang ở đâu trong vòng Feynman:
 // - Chưa giảng: kéo khung (hoặc bấm vào một ô) để chọn phần muốn giảng.
-// - Đang giảng: vùng đã chọn bị gập lại; bấm "Mở" trong hội thoại hoặc bấm vào
-//   vùng gập thì mở ra đúng chỗ — đó là bước quay lại nguồn.
+// - Đang giảng: vùng đã chọn bị che lại; bấm "Xem" trong hội thoại hoặc bấm vào
+//   vùng che thì mở ra đúng chỗ — đó là bước quay lại nguồn.
 
 import { AnimatePresence, motion, useAnimate } from "motion/react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -13,6 +13,15 @@ import SlideView from "./SlideView";
 import { Badge, Button, Separator } from "./ui";
 
 const ZOOM_STEPS = [0.75, 1, 1.25, 1.5, 2];
+const COACHED_KEY = "giang-lai-coached";
+
+function wasCoached() {
+  try {
+    return localStorage.getItem(COACHED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 export default function SourcePanel({
   deck,
@@ -32,7 +41,6 @@ export default function SourcePanel({
   setRevealed,
   focusedSpan,
   focusKey,
-  teachingPages,
   sourcePage,
   onSelect,
   onAbandon,
@@ -40,17 +48,32 @@ export default function SourcePanel({
 }) {
   const [scope, animate] = useAnimate();
   const source = useMemo(() => deckPdf(deck.slug), [deck.slug]);
-  const title = outline.find((row) => row.page === page)?.title;
+  const title = outline.find((row) => row.page === page)?.title || `Slide ${page}`;
   const inSession = !selectable;
+
   const [emptyHint, setEmptyHint] = useState(false);
   const hintTimer = useRef(null);
-
   function showEmptyHint() {
     setEmptyHint(true);
     clearTimeout(hintTimer.current);
-    hintTimer.current = setTimeout(() => setEmptyHint(false), 2800);
+    hintTimer.current = setTimeout(() => setEmptyHint(false), 2400);
   }
   useEffect(() => () => clearTimeout(hintTimer.current), []);
+
+  // Lời nhắc "kéo để chọn" chỉ hiện tới lần chọn đầu tiên trên máy này: người
+  // đã chọn được một lần thì không cần được nhắc nữa.
+  const [coached, setCoached] = useState(wasCoached);
+  function select(ids) {
+    if (ids.length && !coached) {
+      setCoached(true);
+      try {
+        localStorage.setItem(COACHED_KEY, "1");
+      } catch {
+        // Không lưu được thì lần sau nhắc lại, không sao.
+      }
+    }
+    onSelect(ids);
+  }
 
   // Đổi trang thì nội dung nhoè rồi rõ lại, thay vì giật sang trang mới —
   // nhưng KHÔNG gỡ SlideView ra lắp lại, vì như thế là tải lại cả file PDF.
@@ -63,43 +86,55 @@ export default function SourcePanel({
     );
   }, [page, animate, scope]);
 
+  const hint = emptyHint
+    ? "Vùng này không có nội dung để chọn"
+    : selectable && !coached && selectedIds.size === 0
+      ? "Kéo trên slide để chọn phần muốn giảng"
+      : null;
+
   return (
-    <section className={`flex min-h-0 min-w-0 flex-col bg-neutral-50/40 ${spotlight ? "spotlight" : ""}`}>
-      <div className="flex h-12 shrink-0 items-end gap-1 border-b border-neutral-200 bg-neutral-50/70 px-3">
-        {/* Một tab duy nhất — đủ để nói "đây là tài liệu đang mở", không giả
-            vờ có nhiều tài liệu khi chưa có. */}
-        <div className="-mb-px flex h-9 items-center gap-2 rounded-t-lg border border-b-0 border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-900">
-          Slide {page}
-          <span className="text-neutral-300">/</span>
-          <span className="font-normal text-neutral-400">{pages || "–"}</span>
-        </div>
-        {inSession && page !== sourcePage && (
-          <Button variant="quiet" size="sm" className="mb-1.5 ml-auto" onClick={() => setPage(sourcePage)}>
-            Về trang đang giảng
-          </Button>
-        )}
-      </div>
+    <section className={`flex min-h-0 min-w-0 flex-col bg-neutral-50 ${spotlight ? "spotlight" : ""}`}>
+      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-neutral-200 bg-white px-4">
+        <h2 className="m-0 min-w-0 truncate text-[13px] font-medium text-neutral-900">{title}</h2>
+        {inSession && page === sourcePage && <Badge>Đang giảng</Badge>}
 
-      <div className="shrink-0 px-6 pt-5 pb-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <h2 className="m-0 min-w-0 truncate text-[18px] font-semibold tracking-tight text-neutral-900">
-            {title || `Slide ${page}`}
-          </h2>
-          {teachingPages.has(page) && <Badge>{inSession ? "Đang giảng" : "Đã chọn"}</Badge>}
-        </div>
-        <p className="m-0 mt-0.5 text-[12px] text-neutral-500">
-          {deck.title} · trang {page}
-        </p>
-
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <Button size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
-            Trước
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {inSession && page !== sourcePage && (
+            <Button variant="quiet" size="sm" onClick={() => setPage(sourcePage)}>
+              Về trang đang giảng
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="quiet"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            aria-label="Trang trước"
+            title="Trang trước (←)"
+          >
+            ←
           </Button>
-          <Button size="sm" onClick={() => setPage((p) => Math.min(pages || 1, p + 1))} disabled={page >= pages}>
-            Sau
+          <span className="min-w-14 text-center text-[12px] tabular-nums text-neutral-500">
+            {page} / {pages || "–"}
+          </span>
+          <Button
+            size="sm"
+            variant="quiet"
+            onClick={() => setPage((p) => Math.min(pages || 1, p + 1))}
+            disabled={page >= pages}
+            aria-label="Trang sau"
+            title="Trang sau (→)"
+          >
+            →
           </Button>
           <Separator />
-          <Button size="sm" variant="quiet" onClick={() => setZoomIndex((z) => Math.max(0, z - 1))}>
+          <Button
+            size="sm"
+            variant="quiet"
+            onClick={() => setZoomIndex((z) => Math.max(0, z - 1))}
+            disabled={zoomIndex === 0}
+            aria-label="Thu nhỏ"
+          >
             −
           </Button>
           <span className="w-10 text-center text-[12px] tabular-nums text-neutral-500">
@@ -109,52 +144,41 @@ export default function SourcePanel({
             size="sm"
             variant="quiet"
             onClick={() => setZoomIndex((z) => Math.min(ZOOM_STEPS.length - 1, z + 1))}
+            disabled={zoomIndex === ZOOM_STEPS.length - 1}
+            aria-label="Phóng to"
           >
             +
           </Button>
-          <Separator />
-          {inSession ? (
-            <>
+        </div>
+      </header>
+
+      {/* Công cụ chỉ có nghĩa khi đang giảng: xem phần bị che, làm mờ phần còn
+          lại, hoặc bỏ phiên để chọn chỗ khác. */}
+      <AnimatePresence initial={false}>
+        {inSession && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="shrink-0 overflow-hidden border-b border-neutral-200 bg-white"
+          >
+            <div className="flex items-center gap-1.5 px-4 py-2">
               <Button size="sm" pressed={revealed} onClick={() => setRevealed((r) => !r)}>
-                {revealed ? "Gập vùng đang giảng" : "Xem lại vùng đang giảng"}
+                {revealed ? "Che lại" : "Xem phần đang giảng"}
               </Button>
-              <Button size="sm" pressed={spotlight} onClick={() => setSpotlight((s) => !s)}>
+              <Button size="sm" pressed={spotlight} onClick={() => setSpotlight((s) => !s)} title="Phím F">
                 Làm mờ phần khác
               </Button>
-              {/* Chọn nhầm chỗ, hoặc muốn đổi sang trang khác giảng: bỏ vùng che
-                  và quay về chế độ chọn, không phải đợi hết phiên. */}
-              <Button size="sm" variant="quiet" onClick={onAbandon}>
-                Bỏ che, chọn vùng khác
+              <Button size="sm" variant="quiet" className="ml-auto" onClick={onAbandon}>
+                Chọn phần khác
               </Button>
-            </>
-          ) : selectedIds.size ? (
-            <>
-              <Badge tone="strong">{selectedIds.size} ô đã chọn</Badge>
-              <Button size="sm" variant="quiet" onClick={() => onSelect([])}>
-                Bỏ chọn
-              </Button>
-            </>
-          ) : (
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.span
-                key={emptyHint ? "empty" : "hint"}
-                {...blurIn}
-                // Lời nhắc phải hiện ngay khi thả chuột, không đợi hiệu ứng dài.
-                transition={{ duration: 0.18, ease: EASE }}
-                // Một dòng, cắt bớt nếu hẹp: lời nhắc mà xuống dòng thì đẩy slide
-                // trôi xuống ngay lúc học viên đang kéo khung trên nó.
-                className={`min-w-0 flex-1 truncate text-[12px] ${emptyHint ? "font-medium text-neutral-900" : "text-neutral-500"}`}
-              >
-                {emptyHint
-                  ? "Vùng vừa kéo không có chữ — chữ nằm trong hình thì không chọn được"
-                  : "Kéo khung, hoặc bấm vào một ô viền đứt, để chọn phần muốn giảng"}
-              </motion.span>
-            </AnimatePresence>
-          )}
-        </div>
-      </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <div className="min-h-0 flex-1 overflow-auto px-6 pb-6">
+      <div className="relative min-h-0 flex-1 overflow-auto p-6">
         <div ref={scope}>
           <SlideView
             source={source}
@@ -167,12 +191,29 @@ export default function SourcePanel({
             revealed={revealed}
             focusedSpan={focusedSpan}
             focusKey={focusKey}
-            onSelect={onSelect}
+            onSelect={select}
             onEmptyDrag={showEmptyHint}
             onReveal={() => setRevealed(true)}
             onPages={onPages}
           />
         </div>
+
+        {/* Lời nhắc nổi trên slide thay vì một câu dài trên thanh công cụ: nằm
+            đúng chỗ cần làm, và biến mất khi đã làm được. */}
+        <AnimatePresence>
+          {hint && (
+            <motion.div
+              key={hint}
+              {...blurIn}
+              transition={{ duration: 0.25, ease: EASE }}
+              className="pointer-events-none sticky bottom-2 z-10 mt-4 flex justify-center"
+            >
+              <span className="rounded-full bg-neutral-900 px-3.5 py-2 text-[13px] font-medium text-white shadow-[0_8px_24px_rgb(0_0_0/0.2)]">
+                {hint}
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </section>
   );

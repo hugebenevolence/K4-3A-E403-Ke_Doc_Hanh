@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { api } from "../api";
 import Conversation from "../Conversation";
-import { rememberPage } from "../decks";
+import { markTaught, rememberPage, taughtPages } from "../decks";
 import Sidebar from "../Sidebar";
 import SourcePanel from "../SourcePanel";
 import { useSession } from "../useSession";
@@ -38,6 +38,7 @@ export default function Learn() {
   // nhau: đang giảng dở mà lật sang trang khác xem thì không được mất vùng cũ.
   const [selection, setSelection] = useState({ page: null, ids: [] });
   const [active, setActive] = useState([]);
+  const [taught, setTaught] = useState(() => taughtPages(slug));
   const [revealed, setRevealed] = useState(false);
   const spaceHeld = useRef(false);
 
@@ -111,6 +112,23 @@ export default function Learn() {
     setSelection({ page: null, ids: [] });
   }, [session]);
 
+  /** Giảng lại đúng phần vừa giảng: che lại và mở phiên mới. */
+  const retry = useCallback(() => {
+    session.reset();
+    setRevealed(false);
+    setFocus((f) => ({ id: null, n: f.n }));
+    setPage(sessionPage);
+    session.start(active);
+  }, [session, active, sessionPage]);
+
+  // Giảng được thì ghi lại, để thanh bên và thư viện hiện tiến độ.
+  const outcome = session.ended?.outcome;
+  useEffect(() => {
+    if (outcome !== "TAUGHT") return;
+    markTaught(slug, sessionPage);
+    setTaught(taughtPages(slug));
+  }, [outcome, slug, sessionPage]);
+
   const open = useCallback(
     (span) => {
       const where = byId.get(span.span_id) ?? span;
@@ -170,7 +188,7 @@ export default function Learn() {
       <div className="grid min-h-screen place-items-center bg-white px-4 font-sans">
         <div className="text-center">
           <p className="m-0 text-[15px] font-medium text-neutral-900">
-            {deck.error === "missing" ? "Không tìm thấy bộ slide này" : deck.error}
+            {deck.error === "missing" ? "Không tìm thấy bài học này" : deck.error}
           </p>
           <Link to="/library" className="mt-3 inline-block text-[13px] text-neutral-500 underline hover:text-neutral-900">
             Về thư viện
@@ -190,7 +208,14 @@ export default function Learn() {
     thin,
     hasSlides: blocks.length > 0,
   };
-  const concept = titleOf(active.length ? sessionPage : page);
+  // Giảng xong một trang thì đi tiếp được ngay, không phải tìm lại trong dàn ý.
+  const next =
+    sessionPage < pages
+      ? () => {
+          restart();
+          setPage(sessionPage + 1);
+        }
+      : null;
 
   return (
     <div className="grid h-screen grid-cols-[240px_minmax(380px,460px)_minmax(0,1fr)] bg-white font-sans text-neutral-900 antialiased">
@@ -200,16 +225,18 @@ export default function Learn() {
         pages={pages}
         page={page}
         teachingPages={teachingPages}
+        taught={taught}
         onPage={setPage}
       />
       <Conversation
         session={session}
-        concept={concept}
         target={target}
         spanById={byId}
         onTeach={teach}
         onClearSelection={() => setSelection({ page: null, ids: [] })}
         onRestart={restart}
+        onRetry={retry}
+        onNext={next}
         onOpen={open}
       />
       <SourcePanel
@@ -230,7 +257,6 @@ export default function Learn() {
         setRevealed={setRevealed}
         focusedSpan={focus.id}
         focusKey={focus.n}
-        teachingPages={teachingPages}
         sourcePage={sessionPage}
         onSelect={select}
         onAbandon={restart}

@@ -56,9 +56,14 @@ export function Badge({ children, tone = "neutral" }) {
   );
 }
 
-export function Kbd({ children }) {
+export function Kbd({ children, tone = "light" }) {
+  // Nằm trên nút đen thì phải sáng lên, không thì thành một mảng trắng chói.
+  const look =
+    tone === "dark" ? "border-white/20 bg-white/10 text-white/70" : "border-neutral-200 bg-white text-neutral-500";
   return (
-    <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded border border-b-2 border-neutral-200 bg-white px-1 font-sans text-[11px] text-neutral-500">
+    <kbd
+      className={`inline-flex h-5 min-w-5 items-center justify-center rounded border border-b-2 px-1 font-sans text-[11px] ${look}`}
+    >
       {children}
     </kbd>
   );
@@ -114,6 +119,40 @@ export function WordsIn({ text, className = "" }) {
         ),
       )}
     </span>
+  );
+}
+
+/** Tiến trình của một vòng giảng: Chọn · Giảng · Trả lời · Xem lại.
+ *
+ *  Thay cho đoạn hướng dẫn nhiều bước: nhìn là biết mình đang ở đâu và bước
+ *  sau là gì, và nó vẫn còn có ích sau lần đầu — đoạn hướng dẫn thì không. */
+export function Stepper({ steps, current }) {
+  return (
+    <ol
+      className="m-0 grid list-none gap-2 p-0"
+      style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
+      aria-label="Tiến trình"
+    >
+      {steps.map((label, i) => (
+        <li key={label} className="min-w-0" aria-current={i === current ? "step" : undefined}>
+          <span className="block h-[3px] overflow-hidden rounded-full bg-neutral-200">
+            <motion.span
+              className="block h-full rounded-full bg-neutral-900"
+              initial={false}
+              animate={{ width: i <= current ? "100%" : "0%" }}
+              transition={{ duration: 0.5, ease: EASE }}
+            />
+          </span>
+          <span
+            className={`mt-1.5 block truncate text-[11px] transition-colors duration-300 ${
+              i === current ? "font-medium text-neutral-900" : i < current ? "text-neutral-500" : "text-neutral-400"
+            }`}
+          >
+            {label}
+          </span>
+        </li>
+      ))}
+    </ol>
   );
 }
 

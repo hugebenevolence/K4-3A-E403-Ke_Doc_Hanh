@@ -177,7 +177,7 @@ export default function SlideView({
   return (
     <div
       ref={frame}
-      className={`relative w-fit select-none overflow-hidden rounded-xl border border-neutral-200 bg-white leading-0 shadow-[0_1px_3px_rgb(0_0_0/0.04),0_8px_24px_rgb(0_0_0/0.04)] ${
+      className={`group/slide relative mx-auto w-fit select-none overflow-hidden rounded-xl border border-neutral-200 bg-white leading-0 shadow-[0_1px_3px_rgb(0_0_0/0.04),0_8px_24px_rgb(0_0_0/0.04)] ${
         selectable ? "cursor-crosshair" : ""
       }`}
       onPointerDown={onPointerDown}
@@ -189,8 +189,9 @@ export default function SlideView({
 
       {scale > 0 && (
         <div className="pointer-events-none absolute inset-0">
-          {/* Khi đang chọn: viền mờ quanh mọi ô chọn được, để học viên thấy
-              slide được chia thành những ô nào trước khi kéo. */}
+          {/* Khi đang chọn: viền quanh mọi ô chọn được, để học viên thấy slide
+              được chia thành những ô nào. Chỉ hiện khi rê chuột vào slide —
+              viền đứt phủ kín cả trang lúc chỉ đang đọc thì rối mắt. */}
           {selectable &&
             // Hình vẽ trước (nằm dưới), ô chữ vẽ sau (nằm trên): ô chữ đặt đè lên
             // hình vẫn nhìn thấy viền của chính nó.
@@ -198,11 +199,12 @@ export default function SlideView({
               const on = selectedIds.has(b.span_id);
               const hover = b.span_id === hovered;
               const figure = b.kind === "figure";
+              const idle = !on && !hover;
               return (
                 <div
                   key={b.span_id}
                   style={style(b.bbox)}
-                  className={`absolute rounded-md border transition-colors duration-150 ${
+                  className={`absolute rounded-md border transition duration-200 ${
                     on
                       ? "border-neutral-900 bg-neutral-900/7"
                       : hover
@@ -210,7 +212,7 @@ export default function SlideView({
                         : figure
                           ? "border-dotted border-neutral-500/70"
                           : "border-dashed border-neutral-400/60"
-                  }`}
+                  } ${idle ? "opacity-0 group-hover/slide:opacity-100" : ""}`}
                 >
                   {/* Nhãn "Hình": sơ đồ và ảnh cũng giảng được, không chỉ chữ —
                       và nhìn là biết ô này là cả hình, không phải một dòng chữ. */}
@@ -266,7 +268,7 @@ export default function SlideView({
               exit={{ opacity: 0, clipPath: "inset(0 0 0 100% round 6px)" }}
               transition={{ duration: 0.45, ease: EASE }}
               onClick={onReveal}
-              title="Đang che phần bạn giảng — bấm để xem lại"
+              title="Bấm để xem lại phần này"
               className="cover absolute grid place-items-center overflow-hidden rounded-md"
             >
               {/* Nhãn chỉ hiện trên ô đủ rộng. Slide sơ đồ có hàng chục nhãn
@@ -274,7 +276,7 @@ export default function SlideView({
                   chi chít đè lên nhau. Ô nhỏ chỉ cần sọc là đủ nhận ra. */}
               {(b.bbox[2] - b.bbox[0]) * scale >= 150 && (b.bbox[3] - b.bbox[1]) * scale >= 26 && (
                 <span className="rounded-full bg-neutral-900 px-2.5 py-1 text-[11px] leading-none font-medium whitespace-nowrap text-white shadow-sm">
-                  Đang che · bấm để xem
+                  Bấm để xem
                 </span>
               )}
             </motion.button>

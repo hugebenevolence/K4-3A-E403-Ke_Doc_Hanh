@@ -236,6 +236,9 @@ export function useSession(deck) {
     };
     socket.onclose = (e) => {
       if (e.code === CLOSE_UNAUTHORIZED) dispatchEvent(new Event(AUTH_EXPIRED));
+      // "Giảng lại" đóng kết nối cũ và mở ngay kết nối mới: tin đóng của kết
+      // nối cũ về sau không được tắt mic của phiên mới.
+      if (ws.current !== socket) return;
       setTurnState(null);
       setMicOpen(false);
       setTalking(false);
@@ -301,6 +304,12 @@ export function useSession(deck) {
     [myTurn, silent, micReady],
   );
 
+  /** Chạm nhanh vào nút nói thay vì giữ: vẫn đang thu, nhưng thôi coi là giữ —
+   *  im lặng đủ lâu thì tự gửi, hoặc bấm "Xong". */
+  const releaseHold = useCallback(() => {
+    holdRef.current = false;
+  }, []);
+
   const stopTalking = useCallback(() => {
     if (!talking) return;
     holdRef.current = false;
@@ -337,6 +346,7 @@ export function useSession(deck) {
     reset,
     send,
     startTalking,
+    releaseHold,
     stopTalking,
     setSilent,
     playerRef: player,
