@@ -43,11 +43,28 @@ trên LLM thật thì trích dẫn nằm ngay dưới câu hỏi ngược chính
 Style viết bằng Tailwind. `src/styles.css` chỉ giữ overlay vẽ bằng toạ độ JS
 trên canvas PDF và các keyframe.
 
+## Luồng dùng
+
+1. **Chọn phần muốn giảng** trên slide ở khung phải: kéo khung, hoặc bấm vào
+   một ô viền đứt. Chưa chọn gì thì giảng cả trang đang mở. Chọn trúng một dòng
+   quá ngắn (như tiêu đề) thì cũng giảng cả trang — tiêu đề là tên của phần
+   giảng, không phải nội dung để giảng.
+2. **Giảng**: vùng đã chọn bị gập lại, để học viên nói bằng lời của mình chứ
+   không đọc lại chữ trên slide.
+3. Học trò AI hỏi vặn; bấm **Mở** trên thẻ nguồn (hoặc bấm vào vùng gập) để xem
+   lại đúng chỗ.
+4. Hết phiên, **Giảng phần khác** để chọn vùng mới.
+
+Vùng chọn gửi lên server lúc mở phiên (`/ws/session?spans=...`), server dựng
+bài học từ đúng các ô đó.
+
 ## Phím tắt
 
 | Phím | Việc |
 | --- | --- |
 | Giữ `Space` | Nói; thả ra là gửi. Khi agent đang nói thì bấm để bỏ qua |
+| `Enter` | Bắt đầu giảng phần đã chọn |
+| `Esc` | Bỏ chọn |
 | `←` `→` | Lật slide |
-| `G` | Về trang đang dạy |
-| `F` | Bật/tắt chế độ vùng đang dạy |
+| `G` | Về trang đang giảng |
+| `F` | Làm mờ phần khác |
