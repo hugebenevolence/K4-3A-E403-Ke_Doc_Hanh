@@ -52,7 +52,11 @@ push image kèm dữ liệu lên registry công khai.
 
 ```bash
 docker build -t giang-lai codebase
-docker run -p 8000:8000 --env-file codebase/backend/.env   -e SLIDES_DIR=/data/slides   -v "$PWD/brief/data/vlearn-pack/slides:/data/slides:ro"   -v "$PWD/knowledge:/app/knowledge:ro"   giang-lai
+docker run -p 8000:8000 --env-file codebase/backend/.env \
+  -e SLIDES_DIR=/data/slides \
+  -v "$PWD/brief/data/vlearn-pack/slides:/data/slides:ro" \
+  -v "$PWD/knowledge:/app/knowledge:ro" \
+  giang-lai
 ```
 
 ## Cấu trúc (ports & adapters)
