@@ -9,6 +9,7 @@ import json
 import logging
 import uuid
 from functools import lru_cache
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -159,6 +160,24 @@ async def slides():
     if not path or not path.is_file():
         raise HTTPException(404, "Chưa cấu hình SLIDES_PDF trong .env")
     return FileResponse(path, media_type="application/pdf")
+
+
+@app.get("/slides/outline")
+async def slides_outline():
+    """Tiêu đề từng trang slide cho thanh bên."""
+    path = settings.slides_pdf
+    if not path or not path.is_file():
+        raise HTTPException(404, "Chưa cấu hình SLIDES_PDF trong .env")
+    return _outline(str(path), path.stat().st_mtime)
+
+
+@lru_cache(maxsize=4)
+def _outline(path: str, mtime: float) -> list[dict]:
+    # Đọc cả bộ slide mất vài giây; cache theo thời điểm sửa file để thay slide
+    # là tự đọc lại, không phải khởi động lại server.
+    from app.adapters.knowledge.pdf import deck_outline
+
+    return deck_outline(Path(path))
 
 
 @app.websocket("/ws/session")

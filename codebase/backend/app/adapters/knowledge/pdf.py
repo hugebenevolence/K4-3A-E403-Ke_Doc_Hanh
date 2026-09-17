@@ -114,15 +114,20 @@ def _read_deck(path: Path) -> tuple[list[list[Line]], list[float]]:
     return content, heights
 
 
+def _title_lines(lines: list[Line], page_height: float) -> list[Line]:
+    """Dòng tiêu đề trang: chữ to nhất ở phần trên cùng, to hơn hẳn phần thân."""
+    top = [ln for ln in lines if ln.bbox[1] < page_height * TITLE_ZONE]
+    body_size = max((ln.size for ln in lines if ln not in top), default=0.0)
+    title_size = max((ln.size for ln in top), default=0.0)
+    return [ln for ln in top if ln.size == title_size and title_size > body_size + TITLE_SIZE_MARGIN]
+
+
 def _group(lines: list[Line], page_height: float) -> list[list[Line]]:
     """Ghép các dòng thành ô nội dung. Tiêu đề trang (nếu có) luôn là nhóm đầu."""
     if not lines:
         return []
 
-    top = [ln for ln in lines if ln.bbox[1] < page_height * TITLE_ZONE]
-    body_size = max((ln.size for ln in lines if ln not in top), default=0.0)
-    title_size = max((ln.size for ln in top), default=0.0)
-    title = [ln for ln in top if ln.size == title_size and title_size > body_size + TITLE_SIZE_MARGIN]
+    title = _title_lines(lines, page_height)
 
     groups: list[list[Line]] = []
     for line in sorted(
@@ -169,6 +174,22 @@ def deck_terms(path: Path) -> tuple[str, ...]:
     """
     pages, _ = _read_deck(path)
     return extract_terms(*(line.text for lines in pages for line in lines))
+
+
+def deck_outline(path: Path) -> list[dict]:
+    """Dàn ý cả bộ slide: mỗi trang một dòng tiêu đề, để thanh bên liệt kê được
+    "Slide 20 · Giới hạn bẩm sinh…" thay vì một cột số trang vô nghĩa.
+
+    Trang không nhận ra được tiêu đề thì lấy dòng chữ đầu tiên — thà hơi dài
+    còn hơn để trống.
+    """
+    pages, heights = _read_deck(path)
+    outline = []
+    for number, (lines, height) in enumerate(zip(pages, heights, strict=True), 1):
+        title = _title_lines(lines, height)
+        text = " ".join(ln.text for ln in title) if title else (lines[0].text if lines else "")
+        outline.append({"page": number, "title": text})
+    return outline
 
 
 def parse_deck(path: Path, *, min_words: int = 4) -> list[Span]:
