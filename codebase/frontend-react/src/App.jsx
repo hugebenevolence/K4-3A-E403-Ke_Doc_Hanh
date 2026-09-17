@@ -1,5 +1,8 @@
 // Khung ứng dụng: thanh bên · hội thoại · tài liệu nguồn — bố cục ba cột theo
 // ảnh tham chiếu, nền trắng.
+//
+// Bài học không còn cố định: học viên chọn phần nào trên slide thì phiên giảng
+// dựng từ đúng phần đó. Chưa chọn gì thì giảng cả trang đang mở.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Conversation from "./Conversation";
@@ -8,46 +11,98 @@ import SourcePanel from "./SourcePanel";
 import { API, useSession } from "./useSession";
 import "./styles.css";
 
+const NONE = new Set();
+const EMPTY = [];
+
+/** Vùng chọn ít chữ hơn ngần này (một dòng tiêu đề) thì không đủ để giảng.
+ *
+ *  Đo được thật: chọn mỗi tiêu đề slide 12 thì nguồn chấm chỉ còn một dòng, và
+ *  câu mở bài quay sang hỏi về một slide khác hẳn. Tiêu đề là tên của phần
+ *  giảng, không phải nội dung để giảng — nên mở rộng ra cả trang. */
+const MIN_TEACH_WORDS = 12;
+
 export default function App() {
-  const [lesson, setLesson] = useState(null);
+  const [info, setInfo] = useState(null);
   const [outline, setOutline] = useState([]);
+  const [blocks, setBlocks] = useState([]);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(0);
   const [zoomIndex, setZoomIndex] = useState(1);
   const [focus, setFocus] = useState({ id: null, n: 0 });
   const [spotlight, setSpotlight] = useState(false);
+  // Vùng đang chọn (chưa giảng) và vùng của phiên đang chạy — hai thứ khác
+  // nhau: đang giảng dở mà lật sang trang khác xem thì không được mất vùng cũ.
+  const [selection, setSelection] = useState({ page: null, ids: [] });
+  const [active, setActive] = useState([]);
+  const [revealed, setRevealed] = useState(false);
   const spaceHeld = useRef(false);
 
   const session = useSession();
+  const inSession = session.started && !session.ended;
 
   useEffect(() => {
     fetch(`${API}/lesson`)
       .then((r) => r.json())
-      .then((data) => {
-        setLesson(data);
-        const first = data.spans.find((s) => s.page)?.page;
-        if (first) setPage(first);
-      })
-      .catch(() => setLesson({ concept: "(không kết nối được backend)", spans: [] }));
-    // Dàn ý chỉ để làm đẹp thanh bên: hỏng thì vẫn học được, chỉ mất tiêu đề.
+      .then(setInfo)
+      .catch(() => setInfo({ concept: "(không kết nối được backend)", spans: [], has_slides: false }));
+    // Dàn ý và các ô chỉ có khi đã cấu hình slide; thiếu thì vẫn học được bằng
+    // bài học mặc định, chỉ mất phần chọn vùng.
     fetch(`${API}/slides/outline`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setOutline)
       .catch(() => {});
+    fetch(`${API}/slides/blocks`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setBlocks)
+      .catch(() => {});
   }, []);
 
-  const spanById = useMemo(() => new Map((lesson?.spans ?? []).map((s) => [s.span_id, s])), [lesson]);
-  const teachingPages = useMemo(
-    () => new Set((lesson?.spans ?? []).map((s) => s.page).filter(Boolean)),
-    [lesson],
+  const byId = useMemo(() => new Map(blocks.map((b) => [b.span_id, b])), [blocks]);
+  const blocksOnPage = useMemo(() => blocks.filter((b) => b.page === page), [blocks, page]);
+  const titleOf = useCallback((p) => outline.find((row) => row.page === p)?.title || `Slide ${p}`, [outline]);
+
+  const selectedHere = useMemo(
+    () => (selection.page === page ? selection.ids : EMPTY),
+    [selection, page],
   );
-  const sourcePage = useMemo(() => lesson?.spans.find((s) => s.page)?.page ?? 1, [lesson]);
+  const shownIds = useMemo(() => new Set(inSession ? active : selectedHere), [inSession, active, selectedHere]);
+  const sessionPage = byId.get(active[0])?.page ?? page;
+  const selectionPage = selection.ids.length ? selection.page : null;
+  const teachingPages = useMemo(
+    () => new Set([inSession || session.ended ? sessionPage : selectionPage].filter(Boolean)),
+    [inSession, session.ended, sessionPage, selectionPage],
+  );
 
-  const open = useCallback((span) => {
-    if (span.page) setPage(span.page);
-    // Tăng bộ đếm để khung "đáp xuống" chạy lại cả khi mở lại đúng vùng cũ.
-    setFocus((f) => ({ id: span.span_id, n: f.n + 1 }));
-  }, []);
+  const select = useCallback((ids) => setSelection({ page, ids }), [page]);
+
+  const selectedWords = useMemo(
+    () => selectedHere.reduce((n, id) => n + (byId.get(id)?.text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0), 0),
+    [selectedHere, byId],
+  );
+  const thin = selectedHere.length > 0 && selectedWords < MIN_TEACH_WORDS;
+
+  /** Bắt đầu giảng: vùng đã chọn, hoặc cả trang đang mở nếu chưa chọn gì hay
+   *  vùng chọn quá mỏng. */
+  const teach = useCallback(() => {
+    const ids = selectedHere.length && !thin ? selectedHere : blocksOnPage.map((b) => b.span_id);
+    setActive(ids);
+    setSelection({ page, ids });
+    setRevealed(false);
+    setFocus((f) => ({ id: null, n: f.n }));
+    session.start(ids);
+  }, [selectedHere, thin, blocksOnPage, page, session]);
+
+  const open = useCallback(
+    (span) => {
+      const where = byId.get(span.span_id) ?? span;
+      if (where.page) setPage(where.page);
+      // Bấm "Mở" là bước quay lại nguồn của Feynman: mở vùng gập ra luôn.
+      setRevealed(true);
+      // Tăng bộ đếm để khung "đáp xuống" chạy lại cả khi mở lại đúng vùng cũ.
+      setFocus((f) => ({ id: span.span_id, n: f.n + 1 }));
+    },
+    [byId],
+  );
 
   // Phím tắt. Bỏ qua khi con trỏ đang ở ô nhập chữ — lúc đó bàn phím thuộc về
   // người đang gõ, không phải về ứng dụng.
@@ -56,7 +111,7 @@ export default function App() {
 
     function onDown(e) {
       if (typing() || e.ctrlKey || e.metaKey) return;
-      if (e.code === "Space") {
+      if (e.code === "Space" && inSession) {
         e.preventDefault();
         if (e.repeat) return;
         // Space là nút "giữ để nói". Khi agent đang nói thì nó là nút cắt lời:
@@ -66,10 +121,15 @@ export default function App() {
         return;
       }
       if (e.repeat) return;
+      // Enter trên một nút đang được focus đã tự bấm nút đó rồi — bắt đầu phiên
+      // thêm lần nữa ở đây là một phím làm hai việc.
+      const onButton = document.activeElement?.tagName === "BUTTON";
+      if (!inSession && e.code === "Enter" && !onButton && info?.has_slides) return teach();
+      if (!inSession && e.code === "Escape") return setSelection({ page: null, ids: [] });
       if (e.code === "ArrowLeft") setPage((p) => Math.max(1, p - 1));
       if (e.code === "ArrowRight") setPage((p) => Math.min(pages || 1, p + 1));
-      if (e.code === "KeyG") setPage(sourcePage);
-      if (e.code === "KeyF") setSpotlight((s) => !s);
+      if (e.code === "KeyG" && inSession) setPage(sessionPage);
+      if (e.code === "KeyF" && inSession) setSpotlight((s) => !s);
     }
 
     function onUp(e) {
@@ -84,24 +144,40 @@ export default function App() {
       removeEventListener("keydown", onDown);
       removeEventListener("keyup", onUp);
     };
-  }, [session, pages, sourcePage]);
+  }, [session, inSession, pages, sessionPage, teach, info]);
 
-  if (!lesson) {
+  if (!info) {
     return <p className="p-6 font-sans text-[13px] text-neutral-400">Đang tải…</p>;
   }
 
+  const target = {
+    page,
+    title: titleOf(page),
+    count: selectedHere.length,
+    thin,
+    hasSlides: Boolean(info.has_slides && blocks.length),
+  };
+  const concept = info.has_slides && active.length ? titleOf(sessionPage) : info.concept;
+
   return (
     <div className="grid h-screen grid-cols-[240px_minmax(380px,460px)_minmax(0,1fr)] bg-white font-sans text-neutral-900 antialiased">
-      <Sidebar
-        outline={outline}
-        pages={pages}
-        page={page}
-        teachingPages={teachingPages}
-        onPage={setPage}
+      <Sidebar outline={outline} pages={pages} page={page} teachingPages={teachingPages} onPage={setPage} />
+      <Conversation
+        session={session}
+        concept={concept}
+        target={target}
+        spanById={byId}
+        onTeach={info.has_slides ? teach : () => session.start()}
+        onClearSelection={() => setSelection({ page: null, ids: [] })}
+        onRestart={() => {
+          session.reset();
+          setRevealed(false);
+          setSpotlight(false);
+        }}
+        onOpen={open}
       />
-      <Conversation session={session} lesson={lesson} spanById={spanById} onOpen={open} />
       <SourcePanel
-        lesson={lesson}
+        hasSlides={info.has_slides}
         outline={outline}
         page={page}
         pages={pages}
@@ -110,10 +186,17 @@ export default function App() {
         setZoomIndex={setZoomIndex}
         spotlight={spotlight}
         setSpotlight={setSpotlight}
+        blocks={blocksOnPage}
+        selectable={!inSession}
+        selectedIds={shownIds}
+        coveredIds={inSession ? shownIds : NONE}
+        revealed={revealed}
+        setRevealed={setRevealed}
         focusedSpan={focus.id}
         focusKey={focus.n}
         teachingPages={teachingPages}
-        sourcePage={sourcePage}
+        sourcePage={sessionPage}
+        onSelect={select}
         onPages={setPages}
       />
 

@@ -121,7 +121,8 @@ function AgentTurn({ turn, span, onOpen, final }) {
   );
 }
 
-function Welcome({ lesson, onStart }) {
+function Welcome({ target, onTeach, onClearSelection }) {
+  const chosen = target.count > 0 && !target.thin;
   return (
     <motion.div {...blurIn} className="flex h-full flex-col justify-center px-2 py-10">
       <Eyebrow>Kỹ thuật Feynman</Eyebrow>
@@ -133,15 +134,13 @@ function Welcome({ lesson, onStart }) {
           words={["để hiểu thật", "để thấy chỗ hổng", "để nhớ lâu hơn"]}
         />
       </h2>
-      <p className="m-0 mt-3 text-[14px] leading-relaxed text-neutral-500">
-        Hôm nay: <span className="text-neutral-800">{lesson.concept}</span>
-      </p>
 
       <ol className="m-0 mt-7 list-none space-y-3 p-0">
         {[
-          ["Giảng bằng lời của bạn", "Nói hoặc gõ, như đang giảng cho một bạn học cấp 3."],
-          ["Bị hỏi vặn đúng chỗ hổng", "Học trò AI không giảng hộ — nó chỉ hỏi chỗ bạn nói còn mơ hồ."],
-          ["Mở đúng chỗ trên slide", "Xem lại đúng đoạn còn thiếu, rồi giảng lại."],
+          ["Chọn phần muốn giảng", "Kéo khung, hoặc bấm vào một ô trên slide bên phải."],
+          ["Giảng bằng lời của bạn", "Phần đã chọn sẽ gập lại — nói hoặc gõ mà không nhìn chữ."],
+          ["Bị hỏi vặn đúng chỗ hổng", "Học trò AI không giảng hộ, nó chỉ hỏi chỗ bạn nói còn mơ hồ."],
+          ["Mở đúng chỗ để xem lại", "Rồi giảng lại, cho tới khi học trò hiểu."],
         ].map(([title, body], i) => (
           <motion.li
             key={title}
@@ -161,17 +160,44 @@ function Welcome({ lesson, onStart }) {
         ))}
       </ol>
 
-      <div className="mt-8 flex items-center gap-3">
-        <Button variant="primary" size="lg" onClick={onStart}>
-          Bắt đầu phiên
+      {/* Nói rõ SẼ giảng phần nào trước khi bấm, để không ai bắt đầu một phiên
+          về chỗ mình không định giảng. */}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={`${chosen ? "chosen" : "page"}-${target.page}`}
+          {...blurIn}
+          className="mt-7 rounded-xl border border-neutral-200 bg-neutral-50 px-3.5 py-3"
+        >
+          <Eyebrow>{chosen ? `${target.count} ô đã chọn · slide ${target.page}` : `Cả slide ${target.page}`}</Eyebrow>
+          <p className="m-0 mt-0.5 truncate text-[13px] font-medium text-neutral-900">{target.title}</p>
+          {!chosen && target.hasSlides && (
+            <p className="m-0 mt-0.5 text-[12px] text-neutral-500">
+              {target.thin
+                ? "Phần đã chọn chỉ vài chữ, như một dòng tiêu đề — chưa đủ để giảng, nên sẽ giảng cả trang."
+                : "Chưa chọn vùng nào — sẽ giảng cả trang đang mở."}
+            </p>
+          )}
+        </motion.div>
+      </AnimatePresence>
+
+      <div className="mt-4 flex items-center gap-2">
+        <Button variant="primary" size="lg" onClick={onTeach}>
+          {chosen ? "Giảng phần đã chọn" : target.hasSlides ? `Giảng cả slide ${target.page}` : "Bắt đầu phiên"}
         </Button>
-        <span className="text-[12px] text-neutral-400">Không ai chấm điểm bạn — đây là buổi luyện.</span>
+        {target.count > 0 && (
+          <Button variant="quiet" onClick={onClearSelection}>
+            Bỏ chọn
+          </Button>
+        )}
+        <span className="ml-auto flex items-center gap-1 text-[12px] text-neutral-400">
+          <Kbd>Enter</Kbd> để bắt đầu
+        </span>
       </div>
     </motion.div>
   );
 }
 
-function Ending({ ended, spanById, onOpen }) {
+function Ending({ ended, spanById, onOpen, onRestart }) {
   const taught = ended.outcome === "TAUGHT";
   const review = (ended.review_spans ?? []).map((id) => spanById.get(id)).filter(Boolean);
   return (
@@ -186,6 +212,9 @@ function Ending({ ended, spanById, onOpen }) {
       {review.map((span) => (
         <SourceCard key={span.span_id} span={span} caption="Xem lại đoạn này rồi giảng lại" onOpen={onOpen} />
       ))}
+      <Button className="mt-3" onClick={onRestart}>
+        Giảng phần khác
+      </Button>
     </motion.div>
   );
 }
@@ -293,7 +322,16 @@ function Composer({ session }) {
   );
 }
 
-export default function Conversation({ session, lesson, spanById, onOpen }) {
+export default function Conversation({
+  session,
+  concept,
+  target,
+  spanById,
+  onTeach,
+  onClearSelection,
+  onRestart,
+  onOpen,
+}) {
   const bottom = useRef(null);
   const { turns, thinking, ended, connected } = session;
 
@@ -321,14 +359,14 @@ export default function Conversation({ session, lesson, spanById, onOpen }) {
     <section className="flex min-h-0 flex-col border-r border-neutral-200 bg-white">
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-neutral-200 px-4">
         <p className="m-0 min-w-0 flex-1 truncate text-[13px] font-medium text-neutral-900">
-          {connected ? lesson.concept : "Phiên giảng mới"}
+          {connected ? concept : "Phiên giảng mới"}
         </p>
         <LiveDot mode={mode} label={label} />
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
         {!connected ? (
-          <Welcome lesson={lesson} onStart={session.start} />
+          <Welcome target={target} onTeach={onTeach} onClearSelection={onClearSelection} />
         ) : (
           <div className="space-y-5">
             {turns.map((turn, i) =>
@@ -346,11 +384,18 @@ export default function Conversation({ session, lesson, spanById, onOpen }) {
             )}
             <AnimatePresence>{thinking && <Thinking key="thinking" thinking={thinking} />}</AnimatePresence>
             {session.error && (
-              <motion.p {...blurIn} className="m-0 rounded-xl bg-neutral-100 px-3.5 py-2.5 text-[13px] text-neutral-600">
+              <motion.div {...blurIn} className="rounded-xl bg-neutral-100 px-3.5 py-2.5 text-[13px] text-neutral-600">
                 {session.error}
-              </motion.p>
+                {/* Hỏng ngay từ đầu (vd vùng chọn không còn khớp slide) thì
+                    phải có đường quay lại, không thì kẹt ở một phiên rỗng. */}
+                {!turns.length && (
+                  <Button size="sm" className="mt-2 block" onClick={onRestart}>
+                    Chọn lại
+                  </Button>
+                )}
+              </motion.div>
             )}
-            {ended && <Ending ended={ended} spanById={spanById} onOpen={onOpen} />}
+            {ended && <Ending ended={ended} spanById={spanById} onOpen={onOpen} onRestart={onRestart} />}
             <div ref={bottom} />
           </div>
         )}

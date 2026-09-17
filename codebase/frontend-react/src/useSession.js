@@ -10,6 +10,24 @@ import { createVad, feedVad, levelOf, resetVad } from "./vad";
 export const API = `http://${location.hostname}:8000`;
 const SAMPLE_RATE = 16000;
 
+/** Mã học viên riêng của trình duyệt này.
+ *
+ *  Không có nó thì server dùng chung một hồ sơ "demo" cho MỌI người, và agent
+ *  nói với người lần đầu vào rằng "buổi trước bạn có nhắc chỗ này" — một sản
+ *  phẩm dạy về hallucination lại tự bịa ra trí nhớ. */
+function studentId() {
+  try {
+    let id = localStorage.getItem("giang-lai-student");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("giang-lai-student", id);
+    }
+    return id;
+  } catch {
+    return "khach";
+  }
+}
+
 /** Dự phòng khi server chưa kịp gửi ngưỡng của state hiện tại. */
 const DEFAULT_SILENCE_MS = 2000;
 
@@ -193,14 +211,17 @@ export function useSession() {
     setMicReady(false);
   }, []);
 
-  const start = useCallback(() => {
+  /** Mở phiên cho đúng các ô học viên đã chọn trên slide. */
+  const start = useCallback((spanIds = []) => {
     setTurns([]);
     setEnded(null);
     setError("");
     setStarted(true);
     beginThinking("open", "Soạn câu mở đầu");
 
-    const socket = new WebSocket(`${API.replace("http", "ws")}/ws/session`);
+    const query = new URLSearchParams({ student_id: studentId() });
+    if (spanIds.length) query.set("spans", spanIds.join(","));
+    const socket = new WebSocket(`${API.replace("http", "ws")}/ws/session?${query}`);
     socket.binaryType = "blob";
     socket.onmessage = (e) => {
       if (e.data instanceof Blob) {
@@ -217,6 +238,24 @@ export function useSession() {
     };
     ws.current = socket;
   }, [handle, playNext, beginThinking]);
+
+  /** Quay về chọn phần khác để giảng. */
+  const reset = useCallback(() => {
+    ws.current?.close();
+    ws.current = null;
+    queue.current.length = 0;
+    player.current?.pause();
+    thinkingRef.current = null;
+    setThinking(null);
+    setTurns([]);
+    setEnded(null);
+    setError("");
+    setTurnState(null);
+    setMicOpen(false);
+    setTalking(false);
+    setSpeaking(false);
+    setStarted(false);
+  }, []);
 
   const myTurn = micOpen && !speaking;
 
@@ -291,6 +330,7 @@ export function useSession() {
     started,
     connected: Boolean(turnState) || Boolean(ended) || started,
     start,
+    reset,
     send,
     startTalking,
     stopTalking,
