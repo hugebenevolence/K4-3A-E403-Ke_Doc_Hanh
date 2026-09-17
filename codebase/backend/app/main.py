@@ -59,28 +59,29 @@ def _build_deps() -> tuple[
     profiles = JsonProfileStore(settings.profile_file)
 
     if settings.use_mocks:
-        lesson, spans = load_lesson(_demo_file())
+        lesson, spans = load_lesson(_lesson_file())
         return lesson, spans, MockLLM(), MockSTT(), MockTTS(), session_log, profiles
 
-    # Bài thật nếu đã nạp, không thì vẫn dùng bài demo — để chạy LLM thật được
-    # ngay mà chưa cần đụng tới data pack.
-    lesson_file = (
-        settings.lesson_file if settings.lesson_file.is_file() else _demo_file()
-    )
+    lesson_file = _lesson_file()
     lesson, spans = load_lesson(lesson_file)
     llm, tts = _shared_providers()
     return lesson, spans, llm, _speech_to_text(lesson), tts, session_log, profiles
 
 
-def _demo_file():
-    """Bài demo theo LESSON_MODE: "slide" hay "code".
+def _lesson_file():
+    """File bài học đang chạy, theo LESSON_MODE ("slide" hay "code").
 
-    Hai chế độ dùng CHUNG toàn bộ backend — chỉ khác file bài và prompt
-    chấm. Đó là điểm của việc Span mang được cả toạ độ trang lẫn khoảng dòng."""
+    LESSON_MODE quyết định TRƯỚC: có knowledge/lesson.json (bài slide thật) mà
+    đang để mode=code thì vẫn phải ra bài code, nếu không đổi mode xong chẳng
+    thấy gì thay đổi và rất khó hiểu tại sao.
+
+    Hai chế độ dùng CHUNG toàn bộ backend — chỉ khác file bài và prompt chấm.
+    Đó là điểm của việc Span mang được cả toạ độ trang lẫn khoảng dòng."""
+    if settings.lesson_mode == "code":
+        return settings.demo_code_lesson_file
+    # Bài slide thật nếu đã nạp, không thì bài demo.
     return (
-        settings.demo_code_lesson_file
-        if settings.lesson_mode == "code"
-        else settings.demo_lesson_file
+        settings.lesson_file if settings.lesson_file.is_file() else settings.demo_lesson_file
     )
 
 
@@ -176,6 +177,7 @@ async def teach_back_session(ws: WebSocket):
     profile = await profiles.load(student_id)
 
     live: LiveTurn | None = None
+    live_code = lesson.code
     first_turn = True
     turn_index = 0
     review_spans: list[str] = []
@@ -224,6 +226,11 @@ async def teach_back_session(ws: WebSocket):
             # Đường gõ chữ không phải tạm bợ — nó test được phần sư phạm mà
             # không lẫn lỗi nhận dạng giọng nói, và là phương án dự phòng nếu
             # mic hỏng giữa buổi demo.
+            # Học viên sửa code thì lượt chấm sau phải theo bản họ đang nhìn,
+            # không phải bản gốc — nếu không agent nhận xét về code đã cũ.
+            if (edited := command.get("code")) is not None:
+                live_code = str(edited)
+
             if command.get("type") == "explanation_text":
                 if live is not None:
                     await live.abort()
@@ -276,6 +283,8 @@ async def teach_back_session(ws: WebSocket):
             # checkpointer giữ. Gửi lại followups_asked từ đây là tạo ra hai
             # nguồn sự thật cho cùng một con số, sớm muộn cũng lệch nhau.
             turn_input: dict = {"student_text": student_text}
+            if lesson.kind == "code":
+                turn_input["code"] = live_code
             if first_turn:
                 turn_input |= {
                     "session_id": session_id,
@@ -284,7 +293,7 @@ async def teach_back_session(ws: WebSocket):
                     "source_span_ids": list(lesson.source_span_ids),
                     "followups_asked": 0,
                     "recurring_gaps": dict(profile.recurring_gaps),
-                    "code": lesson.code,
+                    "code": live_code,
                 }
                 first_turn = False
 

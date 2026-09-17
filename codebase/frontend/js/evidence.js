@@ -8,7 +8,7 @@
 // Một box gọn dưới câu agent là đủ: thấy nó dựa vào chữ nào, nhảy tới được chỗ
 // đó, hết. Xem lại toàn bộ căn cứ là việc của log phiên cho giảng viên.
 
-import { focusSpan, show } from "./slides.js";
+import { focusSpan, show } from "./viewer.js";
 
 let spanIndex = new Map();
 
@@ -24,19 +24,23 @@ export function citationBox(spanId) {
   box.className = "citation";
 
   const label = document.createElement("figcaption");
-  label.textContent = span.page ? `Slide ${span.page}` : "Nguồn";
+  label.textContent = span.page
+    ? `Slide ${span.page}`
+    : span.lines
+      ? `Dòng ${span.lines[0]}–${span.lines[1]}`
+      : "Nguồn";
 
   const quote = document.createElement("blockquote");
   quote.textContent = span.text;
 
   box.append(label, quote);
 
-  if (span.page) {
+  if (span.page || span.lines) {
     const jump = document.createElement("button");
     jump.className = "jump";
-    jump.textContent = "Xem trên slide";
+    jump.textContent = span.page ? "Xem trên slide" : "Xem trong code";
     jump.addEventListener("click", () => {
-      show(span.page);
+      if (span.page) show(span.page);
       focusSpan(span.span_id);
     });
     box.append(jump);

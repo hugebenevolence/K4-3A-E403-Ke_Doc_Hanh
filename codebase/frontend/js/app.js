@@ -9,7 +9,7 @@
 // agent nói và tưởng là học viên.
 
 import { citationBox, indexSpans } from "./evidence.js";
-import { loadSlides, setZoom, show, sourcePage, step } from "./slides.js";
+import { currentCode, isCode, mount, setZoom, show, sourcePage, step } from "./viewer.js";
 
 const API = `http://${location.hostname}:8000`;
 const MIC_STATES = new Set(["STUDENT_TEACHING", "STUDENT_RESPONDING"]);
@@ -132,7 +132,7 @@ textForm.addEventListener("submit", (e) => {
   const text = textInput.value.trim();
   if (!text || !myTurn()) return;
   textInput.value = "";
-  submitTurn({ type: "explanation_text", text });
+  submitTurn({ type: "explanation_text", text, code: isCode() ? currentCode() : undefined });
 });
 
 textInput.addEventListener("keydown", (e) => {
@@ -178,7 +178,7 @@ function finishSpeaking() {
   if (!live() || !recording) return;
   recording = false;
   partialEl.hidden = true;
-  submitTurn({ type: "explanation_done" });
+  submitTurn({ type: "explanation_done", code: isCode() ? currentCode() : undefined });
 }
 
 doneBtn.addEventListener("click", () => {
@@ -294,11 +294,16 @@ fetch(`${API}/lesson`)
   .then(async (lesson) => {
     conceptEl.textContent = lesson.concept;
     indexSpans(lesson.spans);
-    if (!lesson.has_slides) {
+    if (lesson.kind === "slide" && !lesson.has_slides) {
       document.getElementById("no-slides").hidden = false;
       return;
     }
-    await loadSlides(`${API}/slides.pdf`, lesson.spans);
+    document.body.dataset.kind = lesson.kind;
+    await mount(lesson, {
+      slide: document.getElementById("slide-wrap"),
+      code: document.getElementById("code-wrap"),
+      api: API,
+    });
   })
   .catch((e) => {
     conceptEl.textContent = "(không kết nối được backend)";

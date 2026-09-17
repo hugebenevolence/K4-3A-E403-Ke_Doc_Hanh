@@ -195,6 +195,45 @@ body.spotlight .mark {
 
 .empty { color: var(--ink-3); font-size: var(--footnote); }
 
+/* ---------- code ---------- */
+.code-wrap {
+  flex: 1;
+  min-height: 320px;
+  border: 1px solid var(--hair);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+/* Vùng code agent đang bàn tới. Nền nhạt để chữ vẫn đọc được — tô đậm quá thì
+   che mất chính thứ học viên cần nhìn. */
+.code-span { background: rgba(178, 80, 0, 0.09); }
+.code-span.focused { background: rgba(10, 99, 201, 0.14); }
+
+/* Vệt lề trái: thấy được vùng đang bàn cả khi đã cuộn ra xa. */
+.code-gutter { width: 3px !important; margin-left: 4px; background: var(--warn); }
+.code-gutter.focused { background: var(--tint); }
+
+/* Bài code không có trang, không phóng to — ẩn phần thanh công cụ không dùng
+   tới thay vì để nút chết trên màn hình. */
+body[data-kind="code"] #prev-page,
+body[data-kind="code"] #next-page,
+body[data-kind="code"] #zoom-in,
+body[data-kind="code"] #zoom-out,
+body[data-kind="code"] #zoom-level,
+body[data-kind="code"] #goto-source,
+body[data-kind="code"] .counter,
+body[data-kind="code"] .sep,
+body[data-kind="code"] #focus-btn,
+body[data-kind="code"] .sidebar { display: none; }
+
+body[data-kind="code"] .layout { grid-template-columns: minmax(0, 1fr) 400px; }
+body[data-kind="code"] .slide-bar::before {
+  content: "Giải thích đoạn code này cho học trò AI";
+  font-size: var(--footnote);
+  color: var(--ink-2);
+}
+
 /* ---------- khung dạy lại ---------- */
 .rules {
   margin: 0;
