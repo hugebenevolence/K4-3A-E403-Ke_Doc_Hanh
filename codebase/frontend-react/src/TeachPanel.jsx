@@ -1,29 +1,22 @@
-// Cột phải: hội thoại dạy-lại và các nút điều khiển lượt nói.
+// Cột phải: hội thoại dạy-lại và chỗ học viên nói/gõ.
 
 import { useState } from "react";
-import { Button, Eyebrow } from "./ui";
+import { Button, Eyebrow, LevelMeter } from "./ui";
 
 function Citation({ span, onJump }) {
   if (!span) return null;
-  const where = span.page
-    ? `Slide ${span.page}`
-    : span.lines
-      ? `Dòng ${span.lines[0]}–${span.lines[1]}`
-      : "Nguồn";
 
   return (
     <figure className="mt-2 mb-0 mx-0 rounded-lg bg-neutral-100 border-l-2 border-neutral-900 px-3 py-2">
       <figcaption>
-        <Eyebrow>{where}</Eyebrow>
+        <Eyebrow>{span.page ? `Slide ${span.page}` : "Nguồn"}</Eyebrow>
       </figcaption>
-      <blockquote className="m-0 mt-1 text-[13px] text-neutral-600">
-        {span.text}
-      </blockquote>
+      <blockquote className="m-0 mt-1 text-[13px] text-neutral-600">{span.text}</blockquote>
       <button
         onClick={() => onJump(span)}
         className="mt-2 text-[13px] text-neutral-900 underline underline-offset-2 hover:text-neutral-500"
       >
-        {span.page ? "Xem trên slide" : "Xem trong code"}
+        Xem trên slide
       </button>
     </figure>
   );
@@ -42,14 +35,14 @@ function Turn({ turn, spanById, onJump }) {
 
 export default function TeachPanel({ session, spanById, onJump }) {
   const [draft, setDraft] = useState("");
-  const { turns, partial, myTurn, recording } = session;
+  const { turns, partial, myTurn, recording, silent, level } = session;
 
   function submitText(e) {
     e.preventDefault();
     const text = draft.trim();
     if (!text || !myTurn) return;
     setDraft("");
-    session.send({ type: "explanation_text", text, code: session.code });
+    session.send({ type: "explanation_text", text });
   }
 
   return (
@@ -66,6 +59,10 @@ export default function TeachPanel({ session, spanById, onJump }) {
         {turns.map((turn, i) => (
           <Turn key={i} turn={turn} spanById={spanById} onJump={onJump} />
         ))}
+        {/* Chữ chạy theo lời đang nói. Để ngay dưới các lượt đã xong, cùng cỡ
+            chữ — học viên thấy lời mình đang thành hình đúng chỗ nó sẽ nằm,
+            chứ không phải một dòng ghi chú lạc ở đáy màn hình. */}
+        {partial && <p className="m-0 mb-4 text-neutral-400">{partial}</p>}
         {session.ended && (
           <p className="m-0 font-semibold">
             {session.ended.outcome === "TAUGHT"
@@ -75,39 +72,42 @@ export default function TeachPanel({ session, spanById, onJump }) {
         )}
       </div>
 
-      {(partial || session.error) && (
+      {session.error && (
         <p className="m-0 rounded-lg bg-neutral-100 px-3 py-2 text-[13px] italic text-neutral-500">
-          {session.error || partial}
+          {session.error}
         </p>
       )}
 
-      <div className="flex items-center gap-2">
-        <Button variant="primary" onClick={session.start} disabled={session.connected}>
+      {/* Vạch mức âm đứng trước cả chữ chạy: nó nhúc nhích ngay khi có tiếng,
+          còn chữ thì mất 1–2 giây mới về. Không có nó, khoảng lặng đầu lượt là
+          lúc học viên không biết mic có ăn hay không và thường nói lại từ đầu. */}
+      {recording && (
+        <div className="flex items-center gap-3 rounded-lg border border-neutral-900 px-3 py-2">
+          <LevelMeter level={level} />
+          <span className="text-[13px] text-neutral-600">Đang nghe</span>
+          <Button className="ml-auto" onClick={() => session.send({ type: "explanation_done" })}>
+            Xong
+          </Button>
+        </div>
+      )}
+
+      {!session.connected && (
+        <Button variant="primary" onClick={session.start}>
           Bắt đầu phiên
         </Button>
-        <Button
-          onClick={async () => (await session.openMic()) && session.setRecording(true)}
-          disabled={!myTurn || recording}
-        >
-          Bật micro
-        </Button>
-        <Button
-          onClick={() => session.send({ type: "explanation_done", code: session.code })}
-          disabled={!myTurn || !recording}
-        >
-          Xong
-        </Button>
-        <kbd className="ml-auto rounded border border-b-2 border-neutral-200 px-1.5 py-0.5 text-[11px] text-neutral-400">
-          Space
-        </kbd>
-      </div>
+      )}
 
+      {/* Gõ chữ luôn có mặt, không phải chỉ khi mic hỏng: 9–16h là giờ dùng cao
+          điểm, tức đang ngồi trong lớp. Bắt buộc phải nói ra miệng là loại bỏ
+          phần lớn bối cảnh dùng thật. */}
       <form className="flex gap-2" onSubmit={submitText}>
         <textarea
           rows={2}
           value={draft}
           disabled={!myTurn}
-          placeholder="…hoặc gõ lời giải thích (Ctrl+Enter để gửi)"
+          placeholder={
+            silent ? "Gõ lời giải thích (Ctrl+Enter để gửi)" : "…hoặc gõ, nếu chỗ bạn ngồi không nói được"
+          }
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submitText(e);
@@ -118,6 +118,17 @@ export default function TeachPanel({ session, spanById, onJump }) {
           Gửi
         </Button>
       </form>
+
+      <label className="flex items-center gap-2 text-[13px] text-neutral-500">
+        <input
+          type="checkbox"
+          checked={silent}
+          onChange={(e) => session.setSilent(e.target.checked)}
+          className="accent-neutral-900"
+        />
+        Chế độ im lặng — không bật mic, chỉ gõ chữ
+        {session.micDenied && " (mic không dùng được)"}
+      </label>
     </section>
   );
 }

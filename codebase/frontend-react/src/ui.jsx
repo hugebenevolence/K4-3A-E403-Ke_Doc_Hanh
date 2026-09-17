@@ -57,3 +57,32 @@ export function LiveDot({ mode, label }) {
     </div>
   );
 }
+
+const BARS = 12;
+
+/** Vạch mức âm: bằng chứng tức thì rằng mic đang ăn.
+ *
+ *  Chữ từ STT về sau 1–2 giây, nên khoảng lặng đầu lượt là lúc học viên không
+ *  biết máy có nghe không — đo thật thì họ ngừng lại và nói lại từ đầu. Vạch
+ *  này nhúc nhích ngay từ âm đầu tiên.
+ *
+ *  Vẽ bằng ô rời chứ không phải một thanh trượt mượt: mắt bắt chuyển động rời
+ *  rạc tốt hơn nhiều, và ở bảng đơn sắc thì đây là cách duy nhất còn lại để
+ *  diễn tả cường độ mà không dùng màu. */
+export function LevelMeter({ level }) {
+  const lit = Math.round(level * BARS);
+  return (
+    <span className="flex items-end gap-0.5" aria-hidden="true">
+      {Array.from({ length: BARS }, (_, i) => (
+        <span
+          key={i}
+          className={`w-0.5 rounded-full transition-colors ${
+            i < lit ? "bg-neutral-900" : "bg-neutral-200"
+          }`}
+          // Cao dần sang phải: hình dáng nói lên "to dần" ngay cả khi đứng yên.
+          style={{ height: `${6 + i}px` }}
+        />
+      ))}
+    </span>
+  );
+}
