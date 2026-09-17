@@ -165,37 +165,21 @@ def _to_card(group: list[Line]) -> tuple[str, tuple[float, float, float, float]]
     return text, bbox
 
 
-def deck_terms(path: Path) -> tuple[str, ...]:
-    """Thuật ngữ của CẢ bộ slide, để mớm cho bộ nhận dạng giọng nói.
+@dataclass(frozen=True)
+class Deck:
+    """Cả bộ slide đã bóc, đọc file đúng MỘT lần.
 
-    Lấy toàn bộ chứ không chỉ trang đang học: học viên hay nhắc tới thuật ngữ
-    ở trang khác khi giải thích. Bỏ watermark/header trước khi rút, không thì
-    "ACTION" và "HACKATHON" lọt vào từ điển.
+    Ô nội dung, tiêu đề trang và thuật ngữ đều cần đọc cả bộ; ba hàm đọc riêng
+    là ba lần mở PDF cho cùng một việc, mỗi lần vài giây.
     """
-    pages, _ = _read_deck(path)
-    return extract_terms(*(line.text for lines in pages for line in lines))
+
+    spans: tuple[Span, ...]
+    titles: dict[int, str]
+    terms: tuple[str, ...]
+    pages: int
 
 
-def deck_outline(path: Path) -> list[dict]:
-    """Dàn ý cả bộ slide: mỗi trang một dòng tiêu đề, để thanh bên liệt kê được
-    "Slide 20 · Giới hạn bẩm sinh…" thay vì một cột số trang vô nghĩa.
-
-    Trang không nhận ra được tiêu đề thì lấy dòng chữ đầu tiên — thà hơi dài
-    còn hơn để trống.
-    """
-    pages, heights = _read_deck(path)
-    outline = []
-    for number, (lines, height) in enumerate(zip(pages, heights, strict=True), 1):
-        title = _title_lines(lines, height)
-        text = " ".join(ln.text for ln in title) if title else (lines[0].text if lines else "")
-        outline.append({"page": number, "title": text})
-    return outline
-
-
-def parse_deck(path: Path, *, min_words: int = 4) -> list[Span]:
-    """Bóc cả bộ slide thành span có toạ độ, trang đánh số từ 1."""
-    pages, heights = _read_deck(path)
-    slug = re.sub(r"[^a-z0-9]+", "-", path.stem.lower()).strip("-")
+def _spans_of(pages, heights, slug: str, min_words: int) -> list[Span]:
     spans = []
     for page_number, (lines, height) in enumerate(zip(pages, heights, strict=True), 1):
         cards = [_to_card(g) for g in _group(lines, height)]
@@ -205,6 +189,44 @@ def parse_deck(path: Path, *, min_words: int = 4) -> list[Span]:
             if len(text.split()) >= min_words
         ]
     return spans
+
+
+def _titles_of(pages, heights) -> dict[int, str]:
+    # Trang không nhận ra được tiêu đề thì lấy dòng chữ đầu tiên — thà hơi dài
+    # còn hơn để trống.
+    titles = {}
+    for number, (lines, height) in enumerate(zip(pages, heights, strict=True), 1):
+        title = _title_lines(lines, height)
+        titles[number] = " ".join(ln.text for ln in title) if title else (lines[0].text if lines else "")
+    return titles
+
+
+def _slug(path: Path) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", path.stem.lower()).strip("-")
+
+
+def load_deck(path: Path, *, min_words: int = 4) -> Deck:
+    pages, heights = _read_deck(path)
+    return Deck(
+        spans=tuple(_spans_of(pages, heights, _slug(path), min_words)),
+        titles=_titles_of(pages, heights),
+        # Rút từ CẢ bộ slide, không chỉ trang đang học: học viên hay nhắc tới
+        # thuật ngữ ở trang khác khi giải thích.
+        terms=extract_terms(*(line.text for lines in pages for line in lines)),
+        pages=len(pages),
+    )
+
+
+def deck_terms(path: Path) -> tuple[str, ...]:
+    """Thuật ngữ của CẢ bộ slide, để mớm cho bộ nhận dạng giọng nói."""
+    pages, _ = _read_deck(path)
+    return extract_terms(*(line.text for lines in pages for line in lines))
+
+
+def parse_deck(path: Path, *, min_words: int = 4) -> list[Span]:
+    """Bóc cả bộ slide thành span có toạ độ, trang đánh số từ 1."""
+    pages, heights = _read_deck(path)
+    return _spans_of(pages, heights, _slug(path), min_words)
 
 
 def parse_slide(path: Path, page_number: int, *, min_words: int = 4) -> list[Span]:

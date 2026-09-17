@@ -17,6 +17,8 @@ from fastapi.responses import FileResponse
 from langgraph.checkpoint.memory import InMemorySaver
 
 from app.adapters.knowledge.local import load_lesson
+from app.adapters.knowledge.pdf import Deck, load_deck
+from app.adapters.knowledge.selection import lesson_from_selection
 from app.adapters.llm.mock import MockLLM
 from app.adapters.store.jsonl import JsonlSessionLog, JsonProfileStore
 from app.adapters.stt.mock import MockSTT
@@ -50,7 +52,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def _build_deps() -> tuple[
+def _build_deps(selection: list[str] | None = None) -> tuple[
     Lesson, SpanStore, LLMClient, SpeechToText, TextToSpeech, SessionLog, ProfileStore
 ]:
     # Gọi mỗi lần mở kết nối. Với mock thì không sao, nhưng khi viết adapter
@@ -59,14 +61,39 @@ def _build_deps() -> tuple[
     session_log = JsonlSessionLog(settings.session_log_file)
     profiles = JsonProfileStore(settings.profile_file)
 
+    lesson, spans = _lesson(selection)
     if settings.use_mocks:
-        lesson, spans = load_lesson(_lesson_file())
         return lesson, spans, MockLLM(), MockSTT(), MockTTS(), session_log, profiles
 
-    lesson_file = _lesson_file()
-    lesson, spans = load_lesson(lesson_file)
     llm, tts = _shared_providers()
     return lesson, spans, llm, _speech_to_text(lesson), tts, session_log, profiles
+
+
+def _lesson(selection: list[str] | None):
+    """Bài học của phiên này.
+
+    Học viên đã kéo chọn vùng trên slide thì dựng bài từ đúng vùng đó. Chưa
+    chọn gì (hoặc không có slide, như khi chạy test) thì rơi về file bài học —
+    đường đó giữ nguyên để repo vẫn chạy được ngay khi mới clone.
+    """
+    deck = _current_deck()
+    if selection and deck is not None:
+        return lesson_from_selection(deck, selection)
+    return load_lesson(_lesson_file())
+
+
+def _current_deck() -> Deck | None:
+    path = settings.slides_pdf
+    if not path or not path.is_file():
+        return None
+    return _deck(str(path), path.stat().st_mtime)
+
+
+@lru_cache(maxsize=4)
+def _deck(path: str, mtime: float) -> Deck:
+    # Đọc cả bộ slide mất vài giây; cache theo thời điểm sửa file để thay slide
+    # là tự đọc lại, không phải khởi động lại server.
+    return load_deck(Path(path))
 
 
 def _lesson_file():
@@ -162,22 +189,33 @@ async def slides():
     return FileResponse(path, media_type="application/pdf")
 
 
+def _require_deck() -> Deck:
+    deck = _current_deck()
+    if deck is None:
+        raise HTTPException(404, "Chưa cấu hình SLIDES_PDF trong .env")
+    return deck
+
+
 @app.get("/slides/outline")
 async def slides_outline():
     """Tiêu đề từng trang slide cho thanh bên."""
-    path = settings.slides_pdf
-    if not path or not path.is_file():
-        raise HTTPException(404, "Chưa cấu hình SLIDES_PDF trong .env")
-    return _outline(str(path), path.stat().st_mtime)
+    deck = _require_deck()
+    return [{"page": n, "title": deck.titles.get(n, "")} for n in range(1, deck.pages + 1)]
 
 
-@lru_cache(maxsize=4)
-def _outline(path: str, mtime: float) -> list[dict]:
-    # Đọc cả bộ slide mất vài giây; cache theo thời điểm sửa file để thay slide
-    # là tự đọc lại, không phải khởi động lại server.
-    from app.adapters.knowledge.pdf import deck_outline
+@app.get("/slides/blocks")
+async def slides_blocks():
+    """Mọi ô nội dung của bộ slide kèm toạ độ, để học viên kéo khung chọn.
 
-    return deck_outline(Path(path))
+    Frontend tự tính ô nào nằm trong khung để hiện ngay khi đang kéo, không phải
+    hỏi server mỗi lần rê chuột. Server vẫn kiểm lại mã ô lúc bắt đầu phiên.
+    """
+    deck = _require_deck()
+    return [
+        {"span_id": s.span_id, "page": s.page, "bbox": list(s.bbox), "text": s.text}
+        for s in deck.spans
+        if s.bbox
+    ]
 
 
 @app.websocket("/ws/session")
@@ -189,7 +227,16 @@ async def teach_back_session(ws: WebSocket):
     nếu không mic sẽ bắt lại chính giọng agent qua loa.
     """
     await ws.accept()
-    lesson, spans, llm, stt, tts, session_log, profiles = _build_deps()
+    # Vùng học viên đã chọn trên slide, gửi kèm lúc mở kết nối.
+    selection = [sid for sid in (ws.query_params.get("spans") or "").split(",") if sid]
+    try:
+        lesson, spans, llm, stt, tts, session_log, profiles = _build_deps(selection)
+    except ValueError:
+        await ws.send_json(
+            {"type": "error", "message": "Vùng đã chọn không còn khớp với slide — bạn chọn lại nhé."}
+        )
+        await ws.close()
+        return
     graph = build_graph(llm, spans, checkpointer=InMemorySaver())
 
     session_id = str(uuid.uuid4())
