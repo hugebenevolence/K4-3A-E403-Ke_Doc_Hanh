@@ -257,8 +257,9 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
   Phân tích và research là việc chung, ai cũng tham gia. Nhưng mỗi dòng trên có **một người chịu trách nhiệm giải thích được phần đó** — CP5 hỏi ngẫu nhiên, không giải thích được thì phần đó 0 điểm.
 
 - **Willing users (≥2 tên)** + kế hoạch validation *(bonus)*:
-  - Willing users: [điền ≥2 tên học viên ngoài nhóm].
-  - Kế hoạch: ≥5 người ngoài nhóm dùng link deploy, mỗi người một tài khoản riêng.
+  - **Chạy thử nội bộ — KHÔNG tính vào R6**: Trần Đại Nhân, Nguyễn Phú Bình (thành viên nhóm). Dùng để bắt lỗi luồng trước khi mời người ngoài.
+  - **Người ngoài nhóm — phần tính R6** *(≥2 theo tiêu chí 5, nhóm nhắm 3)*: [điền 3 tên học viên ngoài nhóm, phòng E403].
+  - Kế hoạch: 5 người dùng link deploy, mỗi người một tài khoản riêng trong 5 tài khoản đã cấp.
   - Giao task theo outcome: "Hãy dùng cái này để tự kiểm xem bạn hiểu slide *Token* (Day 1, trang 13) tới đâu".
   - Quan sát im lặng. Ghi `người thử | task | quan sát | quote nguyên văn | mức nghiêm trọng` vào `validation/`. ≥1 thay đổi vào §9.
   - Dry run demo trước LAB 6.
