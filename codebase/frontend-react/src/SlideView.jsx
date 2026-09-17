@@ -21,6 +21,20 @@ function contains([x0, y0, x1, y1], [px, py]) {
   return px >= x0 && px <= x1 && py >= y0 && py <= y1;
 }
 
+/** Khung bao quanh cả vùng đang giảng. Gộp thành một khung chứ không khoét từng
+ *  ô: các ô nằm sát nhau, khoét riêng thì phần chồng lên nhau bị phủ lại. */
+function unionBox(boxes) {
+  return [
+    Math.min(...boxes.map((b) => b[0])),
+    Math.min(...boxes.map((b) => b[1])),
+    Math.max(...boxes.map((b) => b[2])),
+    Math.max(...boxes.map((b) => b[3])),
+  ];
+}
+
+/** Lề quanh vùng được làm nổi (px), để chữ sát mép không bị nhoè lẹm vào. */
+const SPOTLIGHT_PAD = 8;
+
 export default function SlideView({
   source,
   page,
@@ -29,6 +43,7 @@ export default function SlideView({
   selectable,
   selectedIds,
   coveredIds,
+  spotlight = false,
   revealed,
   focusedSpan,
   focusKey = 0,
@@ -44,6 +59,11 @@ export default function SlideView({
   const [doc, setDoc] = useState(null);
   const [width, setWidth] = useState(0);
   const [scale, setScale] = useState(0);
+  const [pageSize, setPageSize] = useState([0, 0]);
+  // Đếm số lần vẽ xong: bản sao sắc nét của vùng đang giảng phải chép lại mỗi
+  // khi canvas gốc vẽ lại (đổi trang, zoom, co giãn cửa sổ).
+  const [renders, setRenders] = useState(0);
+  const crop = useRef(null);
   const [hovered, setHovered] = useState(null);
   const [box, setBox] = useState(null);
 
@@ -99,7 +119,9 @@ export default function SlideView({
       if (err?.name === "RenderingCancelledException") return;
       throw err;
     }
+    setPageSize([base.width, base.height]);
     setScale(next);
+    setRenders((n) => n + 1);
   }, [doc, page, zoom, width]);
 
   useEffect(() => {
@@ -174,6 +196,38 @@ export default function SlideView({
 
   const covered = blocks.filter((b) => coveredIds.has(b.span_id));
 
+  // Làm mờ phần khác: nhoè và nhạt mọi thứ NGOÀI vùng đang giảng.
+  //
+  // Bản đầu lọc xám cả canvas — vùng đang giảng cũng nằm trên canvas đó nên cả
+  // trang cùng xám, chẳng có gì nổi lên. Bản thứ hai phủ backdrop-filter khoét
+  // lỗ bằng clip-path, nhưng Chrome vẫn làm nhoè cả phần trong lỗ. Cách chắc
+  // chắn: nhoè cả canvas, rồi chép phần điểm ảnh sắc nét của đúng vùng đó lên
+  // một canvas nhỏ đặt đè lên trên (CSS filter không đụng tới điểm ảnh gốc).
+  const focusBlocks = selectable ? [] : blocks.filter((b) => selectedIds.has(b.span_id));
+  const [pageW, pageH] = [pageSize[0] * scale, pageSize[1] * scale];
+  const focusBox =
+    spotlight && focusBlocks.length && scale
+      ? unionBox(focusBlocks.map((b) => b.bbox)).map((v) => v * scale)
+      : null;
+  const hole = focusBox && [
+    Math.max(0, focusBox[0] - SPOTLIGHT_PAD),
+    Math.max(0, focusBox[1] - SPOTLIGHT_PAD),
+    Math.min(pageW, focusBox[2] + SPOTLIGHT_PAD),
+    Math.min(pageH, focusBox[3] + SPOTLIGHT_PAD),
+  ];
+  const holeKey = hole ? hole.map((v) => v.toFixed(1)).join(",") : "";
+
+  useEffect(() => {
+    const src = canvas.current;
+    const dst = crop.current;
+    if (!holeKey || !src || !dst || !pageW) return;
+    const [x0, y0, x1, y1] = holeKey.split(",").map(Number);
+    const ratio = src.width / pageW; // điểm ảnh canvas trên mỗi px CSS
+    dst.width = Math.round((x1 - x0) * ratio);
+    dst.height = Math.round((y1 - y0) * ratio);
+    dst.getContext("2d").drawImage(src, x0 * ratio, y0 * ratio, dst.width, dst.height, 0, 0, dst.width, dst.height);
+  }, [holeKey, renders, pageW]);
+
   return (
     <div
       ref={frame}
@@ -185,7 +239,33 @@ export default function SlideView({
       onPointerUp={onPointerUp}
       onPointerLeave={() => !drag.current && setHovered(null)}
     >
-      <canvas ref={canvas} className="block" />
+      <canvas
+        ref={canvas}
+        className={`block transition-[filter] duration-300 ${hole ? "blur-[3px] grayscale" : ""}`}
+      />
+
+      <AnimatePresence>
+        {hole && (
+          <motion.div
+            key="veil"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3, ease: EASE }}
+            className="pointer-events-none absolute inset-0 bg-white/55"
+          />
+        )}
+      </AnimatePresence>
+      {hole && (
+        <motion.canvas
+          ref={crop}
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.35, ease: EASE }}
+          style={{ left: hole[0], top: hole[1], width: hole[2] - hole[0], height: hole[3] - hole[1] }}
+          className="pointer-events-none absolute rounded-lg shadow-[0_0_0_1px_rgb(0_0_0/0.08),0_12px_32px_rgb(0_0_0/0.14)]"
+        />
+      )}
 
       {scale > 0 && (
         <div className="pointer-events-none absolute inset-0">

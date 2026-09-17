@@ -93,7 +93,7 @@ export default function SourcePanel({
       : null;
 
   return (
-    <section className={`flex min-h-0 min-w-0 flex-col bg-neutral-50 ${spotlight ? "spotlight" : ""}`}>
+    <section className="flex min-h-0 min-w-0 flex-col bg-neutral-50">
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-neutral-200 bg-white px-4">
         <h2 className="m-0 min-w-0 truncate text-[13px] font-medium text-neutral-900">{title}</h2>
         {inSession && page === sourcePage && <Badge>Đang giảng</Badge>}
@@ -188,6 +188,7 @@ export default function SourcePanel({
             selectable={selectable}
             selectedIds={selectedIds}
             coveredIds={coveredIds}
+            spotlight={spotlight}
             revealed={revealed}
             focusedSpan={focusedSpan}
             focusKey={focusKey}

@@ -57,16 +57,6 @@
   to { background-position: 12.728px 0; }
 }
 
-/* Chế độ vùng đang dạy: làm mờ phần còn lại để học viên và agent cùng bàn về
-   đúng một chỗ. */
-.spotlight canvas {
-  filter: grayscale(1) contrast(0.8) opacity(0.45);
-}
-.spotlight .mark {
-  background: transparent;
-  box-shadow: 0 0 0 9999px rgb(255 255 255 / 0.65);
-}
-
 /* Chữ lấp lánh lúc agent đang làm việc — kiểu "Working…" của ảnh tham chiếu.
    Chuyển động nói "đang chạy" mà không cần thêm một vòng xoay nào. */
 .shimmer {
