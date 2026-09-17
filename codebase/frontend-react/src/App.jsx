@@ -1,8 +1,9 @@
-// Các trang: đăng nhập → thư viện chọn slide → không gian học.
+// Các trang: giới thiệu → đăng nhập → thư viện chọn slide → không gian học.
 
 import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { AuthProvider, RequireAuth } from "./auth";
+import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 
 // Thư viện và không gian học kéo theo PDF.js (hơn 1MB): tách ra tải sau, để
@@ -15,7 +16,7 @@ export default function App() {
     <AuthProvider>
       <Suspense fallback={<p className="p-6 font-sans text-[13px] text-neutral-400">Đang tải…</p>}>
         <Routes>
-          <Route path="/" element={<Navigate to="/library" replace />} />
+          <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route
             path="/library"
