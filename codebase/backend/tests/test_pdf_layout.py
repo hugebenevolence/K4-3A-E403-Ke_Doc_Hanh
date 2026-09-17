@@ -83,3 +83,11 @@ def test_chan_trang_doi_so_trang_van_nhan_ra_la_cung_mot_thu():
     # khác nhau, không bao giờ lặp đủ nhiều để bị lọc.
     assert _shape("DAY 02 · 37 / 83") == _shape("DAY 02 · 38 / 83")
     assert _shape("Bong bóng thời gian") != _shape("Nói chắc như đúng rồi")
+
+
+def test_tieu_de_trang_nhan_ra_rieng_de_lam_dan_y():
+    from app.adapters.knowledge.pdf import _title_lines
+
+    assert _title_lines(ALL, PAGE_HEIGHT) == [TIEU_DE]
+    # Trang không có tiêu đề thì không bịa ra tiêu đề từ ô nội dung.
+    assert _title_lines([COT1_A, COT1_B, COT2_A], PAGE_HEIGHT) == []
