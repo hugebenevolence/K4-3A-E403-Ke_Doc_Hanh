@@ -48,13 +48,34 @@ Mọi con số lấy từ cùng file chatlog, cùng script ở §1.
 
 ## §3. Giải pháp tương tự đã nghiên cứu
 
+So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eval/evidence/landscape.md):
+1. ai là người giải thích;
+2. đối chiếu với cái gì;
+3. nguồn có bị che không;
+4. "không làm hộ" giữ bằng gì;
+5. nằm ở đâu;
+6. nói hay gõ.
+
 | Sản phẩm | Flow | Đáng học | Đáng né | Mình khác gì |
 |---|---|---|---|---|
-| **Khanmigo** (Khan Academy) | Gia sư AI hỏi gợi mở từng bước thay vì đưa đáp án | Giữ vững "không làm hộ" cả khi học viên xin thẳng | AI vẫn là người dạy; học viên chỉ trả lời câu hỏi | Đảo vai: **học viên giảng**, AI là học trò chỉ hỏi ngược |
-| **ChatGPT — Study mode** | Hỏi ngược, chia nhỏ bài theo trình độ | Câu hỏi ngắn, từng bước | Kiến thức chung, không bám tài liệu khoá; bị ép đủ thì vẫn giảng | Chấm theo **đúng vùng slide học viên chọn**, không theo hiểu biết của mô hình |
-| **NotebookLM** | Hỏi-đáp và tóm tắt trên tài liệu tải lên, có trích dẫn | Luôn chỉ ra nguồn cạnh câu trả lời | Máy tóm tắt và giải thích thay người học, vẫn thụ động | Thẻ nguồn chỉ **vị trí** trên slide, không trích nguyên văn (trích là lộ đáp án) |
-| **Betty's Brain** (Vanderbilt, teachable agent) | Học viên dạy agent bằng cách dựng bản đồ khái niệm; agent làm quiz, sai là lộ chỗ dạy sai | Protégé effect: học viên cố gắng hơn khi dạy người khác | Soạn bản đồ khái niệm nặng thao tác, rời khỏi nơi đang học | Giảng **bằng lời nói ngay trên slide** đang học |
-| **TeachYou / AlgoBo** (CHI 2024) | Học viên dạy lập trình cho một agent LLM giữ mức hiểu biết thấp | Kiểm soát "độ ngây thơ" của agent; agent đổi sang đặt câu hỏi giúp người dạy lập luận nhiều hơn | Chỉ cho lập trình, gõ chữ | Áp dụng cho slide khái niệm, giọng nói, kèm guard tất định chống lộ đáp án |
+| **ChatGPT Study mode** (7/2025) · **Gemini Guided Learning** (8/2025) · **Claude Learning mode** (4/2025) | AI hỏi gợi mở, chia nhỏ bài trước khi giải thích | Ba hãng lớn cùng đi hướng "hỏi trước, đừng đưa đáp án ngay", xác nhận hướng đi | AI vẫn là người dạy; kiến thức chung; **tắt được**, OpenAI nói không có cách khoá học sinh ở Study mode | Học viên giảng; đối chiếu đúng vùng slide; không có chế độ nào cho đáp án |
+| **Tutor VLearn hiện tại** | Bôi đen → "giải thích đoạn này" → đọc câu trả lời | Nằm đúng chỗ học viên đang học | Giảng lại 89,9% lượt, hỏi ngược 0,2% (§1) | Cùng chỗ, cùng thao tác chọn vùng, nhưng học viên giảng |
+| **Khanmigo** | Gia sư dẫn dắt từng bước, không đưa lời giải | Giữ "không làm hộ" như chính sách sản phẩm | AI vẫn dẫn, học viên trả lời theo | Đảo vai: AI là học trò chỉ hỏi ngược |
+| **NotebookLM** | Hỏi-đáp, tóm tắt, Audio Overview trên tài liệu tải lên | Bám tài liệu, luôn trích dẫn | Máy tóm tắt và giải thích thay, trích nguyên văn ngay cạnh câu trả lời | Thẻ nguồn chỉ **vị trí**, vùng giảng **bị che** |
+| **Betty's Brain** · **TeachYou/AlgoBo** (CHI 2024) | Học viên dạy agent (bản đồ khái niệm / gõ về thuật toán) | Đúng vai học-bằng-cách-dạy; agent hỏi "vì sao, như thế nào" làm hội thoại dày ý hơn (hiệu ứng 0,71) | Phần mềm riêng, rời chỗ đang học; không nói | Ngay trong trình đọc slide, giảng bằng giọng nói |
+| **Duolingo Max Video Call** | Học viên nói chuyện với nhân vật AI | Luyện nói tự nhiên, phản hồi tức thì | Luyện hội thoại, không kiểm hiểu khái niệm | Nói để giảng một khái niệm, có đối chiếu nguồn |
+
+**Điểm mạnh riêng (mỗi điểm một căn cứ, chi tiết ở landscape.md §2):**
+- **Đảo vai.** Học viên tạo ra lời giải thích: self-explanation effect (Chi và cộng sự, 1994), tutor learning (Roscoe & Chi, 2007), protégé effect (Chase và cộng sự, 2009).
+- **Che nguồn.** Đọc lại trở thành thực hành gợi nhớ (Roediger & Karpicke, 2006; Rowland, 2014).
+- **Chặn làm hộ bằng code.** AI không rào chắn giúp điểm lúc luyện tập nhưng làm học sinh kém đi 17% khi bỏ AI; bản có rào chắn gần như triệt tiêu tác hại (Bastani và cộng sự, PNAS 2025, gần 1.000 học sinh).
+- **Nằm đúng chỗ nhu cầu xảy ra.** 41,5% lượt xin giảng diễn ra ngay trong trình đọc slide.
+- **Tạo được tín hiệu "đã hiểu"** mà hệ thống hiện tại gần như không có (0,1%).
+
+**Điểm yếu tự nhận:**
+- Bộ chấm LLM còn dễ cho "đủ".
+- Nhận dạng tiếng Việt trộn thuật ngữ.
+- Chưa có số đo hiệu quả học của chính sản phẩm.
 
 ## §4. Thiết kế
 
