@@ -27,6 +27,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "use_mocks", True)
     monkeypatch.setattr(settings, "session_log_file", tmp_path / "s.jsonl")
     monkeypatch.setattr(settings, "profile_file", tmp_path / "p.json")
+    monkeypatch.setattr(settings, "graph_file", tmp_path / "g.json")
     # Tắt đăng nhập bất kể .env máy đang đặt MEMBERS gì — test đăng nhập nằm riêng.
     monkeypatch.setattr(settings, "members", "")
     return TestClient(app)
