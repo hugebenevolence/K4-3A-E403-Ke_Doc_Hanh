@@ -8,6 +8,7 @@ như người lạ.
 from __future__ import annotations
 
 import asyncio
+import json
 
 from app.adapters.store.jsonl import JsonProfileStore
 from app.domain.verdict import Evidence, GradeResult, Verdict
@@ -73,5 +74,39 @@ def test_y_da_noi_toi_thi_khong_tinh_la_cho_hong(tmp_path):
             ),
         )
         assert profile.recurring_gaps == {}
+
+    asyncio.run(main())
+
+
+def test_ho_so_hong_thi_bat_dau_lai_chu_khong_giet_moi_phien(tmp_path):
+    """Hồ sơ được nạp ngay khi mở kết nối, nên một file JSON méo là MỌI người
+    đều không vào học được. Mất trí nhớ cũ còn hơn mất cả sản phẩm."""
+
+    async def main():
+        path = tmp_path / "profiles.json"
+        path.write_text('{"nhan": {"student_i', encoding="utf-8")  # ghi dở rồi tắt máy
+        store = JsonProfileStore(path)
+
+        profile = await store.load("nhan")
+        assert profile.recurring_gaps == {}
+        giu_lai = list(tmp_path.glob("profiles.hong-*.json"))
+        assert giu_lai, "file hỏng phải được giữ lại kèm mốc thời gian"
+
+    asyncio.run(main())
+
+
+def test_ghi_ho_so_khong_de_lai_file_cut_giua_chung(tmp_path):
+    """Ghi đè thẳng sẽ cắt file về rỗng trước khi viết. Đổi chỗ file tạm thì
+    hoặc là bản cũ, hoặc là bản mới — không bao giờ có bản cụt."""
+
+    async def main():
+        path = tmp_path / "profiles.json"
+        store = JsonProfileStore(path)
+        p = await store.load("nhan")
+        p.absorb("khái niệm", _grade("[T06-138]"))
+        await store.save(p)
+
+        assert json.loads(path.read_text(encoding="utf-8"))["nhan"]
+        assert not path.with_suffix(".tmp").exists(), "còn sót file tạm"
 
     asyncio.run(main())

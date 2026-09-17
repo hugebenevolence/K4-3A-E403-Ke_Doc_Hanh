@@ -10,12 +10,33 @@ from app.adapters.knowledge.pdf import Deck
 from app.adapters.knowledge.selection import lesson_from_selection
 from app.domain.span import Span
 
+# Mỗi ô dài cỡ một ô nội dung thật trên slide (~25 từ). Fixture ngắn hơn thế sẽ
+# bị luật "vùng chỉ có tiêu đề" nới ra cả trang — xem domain/substance.py — và
+# test sẽ đo một luồng mà người dùng thật không đi qua.
 DECK = Deck(
     spans=(
         Span("[d-p20-01]", "Giới hạn bẩm sinh: học giả trong bong bóng", page=20, bbox=(38, 20, 519, 48)),
-        Span("[d-p20-03]", "Nói chắc như đúng rồi Model tối ưu cho câu nghe hợp lý", page=20, bbox=(362, 93, 612, 174)),
-        Span("[d-p20-06]", "Đây không phải lỗi tạm thời — đó là bản chất của cỗ máy đoán token", page=20, bbox=(120, 359, 843, 391)),
-        Span("[d-p21-02]", "Model rất giỏi học vẹt đường tắt khi dữ liệu có mẫu dễ đoán", page=21, bbox=(40, 90, 500, 160)),
+        Span(
+            "[d-p20-03]",
+            "Nói chắc như đúng rồi. Model tối ưu cho câu nghe hợp lý chứ không tra "
+            "lại sự thật, nên nó vẫn nói trôi chảy cả khi đang nói sai.",
+            page=20,
+            bbox=(362, 93, 612, 174),
+        ),
+        Span(
+            "[d-p20-06]",
+            "Đây không phải lỗi tạm thời — đó là bản chất của cỗ máy đoán token, và "
+            "sẽ không biến mất khi model to hơn hay dữ liệu nhiều hơn.",
+            page=20,
+            bbox=(120, 359, 843, 391),
+        ),
+        Span(
+            "[d-p21-02]",
+            "Model rất giỏi học vẹt đường tắt khi dữ liệu có mẫu dễ đoán, nên điểm "
+            "cao trên bộ kiểm tra chưa chắc có nghĩa là nó đã hiểu việc cần làm.",
+            page=21,
+            bbox=(40, 90, 500, 160),
+        ),
     ),
     titles={20: "Giới hạn bẩm sinh: học giả trong bong bóng", 21: ""},
     terms=("LLM", "token"),

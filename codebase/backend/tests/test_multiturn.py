@@ -16,6 +16,7 @@ from app.adapters.llm.mock import MockLLM
 from app.domain.session import MAX_FOLLOWUPS, TurnState
 from app.domain.span import Span
 from app.graph.build import build_graph
+from app.prompts.schemas import GradeOutput
 
 SPAN = Span(span_id="[T06-138]", text="nguồn giả lập")
 SHORT = "tại vì dữ liệu có thiên lệch"  # ngắn → MockLLM luôn trả incomplete
@@ -83,5 +84,63 @@ def test_khong_co_nguon_thi_hong_to_chu_khong_cham_bia():
             assert "source_span_ids" in str(e)
         else:
             raise AssertionError("chấm không nguồn mà vẫn chạy — grounding bị bỏ qua")
+
+    asyncio.run(main())
+
+
+class _SpyLLM(MockLLM):
+    """Ghi lại phần user của mỗi lượt gọi chấm, để soi xem bộ chấm THẤY những gì."""
+
+    def __init__(self):
+        self.graded: list[str] = []
+
+    async def structured(self, *, system, user, schema, tier):
+        if schema is GradeOutput:
+            self.graded.append(user)
+        return await super().structured(system=system, user=user, schema=schema, tier=tier)
+
+
+def test_bo_cham_thay_ca_buoi_chu_khong_chi_cau_vua_noi():
+    """Lượt sau là câu TRẢ LỜI cho một câu hỏi hẹp, không phải một lời giảng mới.
+
+    Bản trước chỉ gửi đúng lượt vừa nói, nên mảnh trả lời đó bị đem đối chiếu
+    với toàn bộ đoạn nguồn — hoặc trượt oan, hoặc cho qua cả bài chỉ vì một
+    mảnh (phiên thật 2e6d52f3).
+    """
+
+    async def main():
+        llm = _SpyLLM()
+        graph = build_graph(llm, InMemorySpanStore([SPAN]), checkpointer=InMemorySaver())
+        config = {"configurable": {"thread_id": "p4"}}
+        await graph.ainvoke(_first_turn() | {"student_text": "ý thứ nhất"}, config=config)
+        await graph.ainvoke({"student_text": "ý thứ hai"}, config=config)
+
+        lan_dau, lan_sau = llm.graded
+        assert "> ý thứ nhất" in lan_dau and "ý thứ hai" not in lan_dau
+        # Lượt hai phải thấy CẢ HAI ý, cộng câu hỏi mà lượt đó đang trả lời.
+        assert "> ý thứ nhất" in lan_sau and "> ý thứ hai" in lan_sau
+        assert "Chỗ đó thì vì sao lại xảy ra vậy bạn?" in lan_sau
+
+    asyncio.run(main())
+
+
+def test_giang_du_y_qua_hai_luot_van_duoc_tinh_la_da_giang():
+    """Cộng dồn không chỉ để chấm đúng — nó là điều kiện để phiên KẾT THÚC được.
+
+    MockLLM cho "đủ" khi học viên nói từ 40 từ trở lên. Chia đúng số chữ ấy làm
+    hai lượt: bản chỉ-chấm-lượt-cuối sẽ không bao giờ đóng phiên.
+    """
+
+    async def main():
+        nua = " ".join(f"chữ{i}" for i in range(21))
+        graph = build_graph(
+            MockLLM(), InMemorySpanStore([SPAN]), checkpointer=InMemorySaver()
+        )
+        config = {"configurable": {"thread_id": "p5"}}
+        dau = await graph.ainvoke(_first_turn() | {"student_text": nua}, config=config)
+        assert dau["turn_state"] == TurnState.STUDENT_RESPONDING.name
+
+        sau = await graph.ainvoke({"student_text": nua.replace("chữ", "từ")}, config=config)
+        assert sau["turn_state"] == TurnState.TAUGHT.name
 
     asyncio.run(main())

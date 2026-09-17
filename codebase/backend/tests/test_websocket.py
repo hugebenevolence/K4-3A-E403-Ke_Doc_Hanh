@@ -256,3 +256,34 @@ def test_vung_chon_khong_con_khop_slide_thi_bao_ro_chu_khong_cham_nguon_rong(cli
     with client.websocket_connect("/api/ws/session?spans=[khong-ton-tai]") as ws:
         msg = ws.receive_json()
     assert msg["type"] == "error"
+
+
+def test_provider_hong_thi_noi_that_chu_khong_do_cho_hoc_vien(client, monkeypatch):
+    """17/9: API trả 429 `credit_balance_exhausted` giữa lúc đang đo golden set,
+    và học viên nhận đúng câu "Mình nghe chưa rõ, bạn nói lại giúp mình nhé" —
+    bảo người ta nói lại một câu không hề có lỗi. Lỗi phía mình thì phải nhận."""
+    from app.adapters.llm.mock import MockLLM
+    from app.ports.llm import LLMUnavailable
+
+    async def het_han_muc(self, **kwargs):
+        raise LLMUnavailable("429 credit_balance_exhausted")
+
+    with client.websocket_connect("/api/ws/session") as ws:
+        _opening(ws)
+        monkeypatch.setattr(MockLLM, "structured", het_han_muc)
+        ws.send_bytes(b"\x00" * 100)
+        ws.send_text(DONE)
+
+        while True:
+            msg = ws.receive()
+            if not msg.get("text"):
+                continue
+            body = json.loads(msg["text"])
+            if body.get("type") == "error":
+                assert "không phải do bạn" in body["message"]
+                break
+            assert body.get("type") != "session_end", "lỗi hệ thống không được kết phiên"
+
+        # Phiên vẫn sống và vẫn tới lượt học viên nói — mất một lượt, không mất buổi.
+        state = json.loads(ws.receive()["text"])
+        assert state["type"] == "state" and state["mic_open"]
