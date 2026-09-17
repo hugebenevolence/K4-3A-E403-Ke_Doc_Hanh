@@ -67,4 +67,3 @@ bài học từ đúng các ô đó.
 | `Esc` | Bỏ chọn |
 | `←` `→` | Lật slide |
 | `G` | Về trang đang giảng |
-| `F` | Làm mờ phần khác |
