@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+/* Bảng đơn sắc: trắng, đen, xám. Không màu thương hiệu, không màu nhấn.
+   Lý do: đây là công cụ để học viên tập trung vào nội dung bài và vào lời giải
+   thích của chính họ — mọi mảng màu đều tranh sự chú ý với việc đó. Chỗ duy
+   nhất được phép nổi là vùng nội dung agent đang bàn tới.
+
+   Chỉ những lớp Tailwind không với tới được mới viết tay ở đây: decoration của
+   Monaco do editor tự chèn vào DOM, và overlay trên canvas PDF cần toạ độ tính
+   bằng JS. */
+
+/* Vùng code agent đang bàn tới. Nền nhạt để chữ vẫn đọc được — tô đậm quá thì
+   che mất chính thứ học viên cần nhìn. */
+.code-span {
+  background: rgba(0, 0, 0, 0.05);
+}
+.code-span.focused {
+  background: rgba(0, 0, 0, 0.11);
+}
+
+/* Vệt lề trái: thấy được vùng đang bàn cả khi đã cuộn ra xa. */
+.code-gutter {
+  width: 3px !important;
+  margin-left: 4px;
+  background: #a3a3a3;
+}
+.code-gutter.focused {
+  background: #171717;
+}
+
+/* Khung trên slide, toạ độ do JS tính từ bbox của PyMuPDF. */
+.mark {
+  position: absolute;
+  border: 2px solid #a3a3a3;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.04);
+}
+.mark.focused {
+  border-color: #171717;
+  background: rgba(0, 0, 0, 0.09);
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.07);
+}
+
+/* Chế độ vùng đang dạy: làm mờ phần còn lại để học viên và agent cùng bàn về
+   đúng một chỗ. Slide dày chữ thì ý cốt lõi rất dễ trôi giữa thứ xung quanh. */
+.spotlight canvas {
+  filter: grayscale(1) contrast(0.8) opacity(0.45);
+}
+.spotlight .mark {
+  /* Khoét một "lỗ sáng": trong khung giữ nguyên, ngoài khung bị phủ. */
+  background: transparent;
+  box-shadow: 0 0 0 9999px rgba(255, 255, 255, 0.6);
+}
+
+/* Chỉ báo trạng thái: đứng yên khi rảnh, thở khi đang làm việc. Theo Apple HIG,
+   chỉ báo đứng im bị người dùng hiểu là hệ thống treo. */
+@keyframes breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+.pulse[data-mode="listening"] { animation: breathe 1.4s ease-in-out infinite; }
+.pulse[data-mode="working"] { animation: breathe 1s ease-in-out infinite; }
+.pulse[data-mode="speaking"] { animation: breathe 1.8s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse { animation: none !important; }
+}
