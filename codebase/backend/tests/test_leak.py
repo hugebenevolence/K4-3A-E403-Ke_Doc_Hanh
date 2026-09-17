@@ -69,3 +69,18 @@ def test_cau_hoi_ve_code_dang_co_thi_khong_bi_chan():
         "Bạn đọc dòng 4 giúp mình, nó đang làm gì?",
     ]:
         assert not suggests_fix(q), q
+
+
+# --- Câu mở bài phải nói về chính vùng học viên đã chọn -----------------------
+
+
+def test_cau_mo_bai_chep_vi_du_mau_ve_slide_khac_bi_bat():
+    # Đo được thật: học viên chọn tiêu đề slide 12 mà bị hỏi về slide 20 —
+    # model chép nguyên ví dụ mẫu trong prompt khi nguồn chỉ có một dòng.
+    from app.domain.leak import about_source
+
+    source = "Sinh văn bản = đoán → nối vào câu → đoán tiếp"
+    off_topic = "Mình thấy mô hình thường nói rất chắc nhưng đôi khi lại nêu thông tin sai — chỗ chắc chắn và chỗ sai cùng tồn tại kiểu gì vậy bạn?"
+    on_topic = "Mình chưa hình dung ra: đoán xong một chữ thì nối vào câu kiểu gì để đoán được chữ tiếp theo vậy bạn?"
+    assert not about_source(off_topic, source)
+    assert about_source(on_topic, source)
