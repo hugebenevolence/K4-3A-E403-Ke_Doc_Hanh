@@ -109,7 +109,7 @@ h1, h2 { margin: 0; font-weight: 600; }
 .sidebar { border-right: 1px solid var(--hair); }
 .panel { border-left: 1px solid var(--hair); display: flex; flex-direction: column; gap: 12px; }
 
-.sidebar h2, .evidence h2 {
+.sidebar h2 {
   font-size: var(--caption);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -251,13 +251,6 @@ body.spotlight .mark {
   color: var(--ink-2);
 }
 
-/* Ý học viên chưa nói tới: cố ý KHÔNG in nguyên văn giữa phiên. */
-.withheld {
-  margin: 6px 0 0;
-  font-size: var(--footnote);
-  font-style: italic;
-  color: var(--ink-3);
-}
 
 /* Vùng được trỏ tới khi bấm "Xem trên slide". */
 .mark.focused {
@@ -274,47 +267,6 @@ body.spotlight .mark {
   color: var(--ink-2);
   font-style: italic;
 }
-
-/* ---------- căn cứ đối chiếu ---------- */
-.evidence ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-
-.evidence li {
-  padding: 10px 12px;
-  border: 1px solid var(--hair);
-  border-left-width: 3px;
-  border-radius: 10px;
-}
-
-.evidence li.covered { border-left-color: var(--ok); }
-.evidence li.missing { border-left-color: var(--warn); }
-
-.state-dot {
-  font-size: var(--caption);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-weight: 600;
-}
-
-.covered .state-dot { color: var(--ok); }
-.missing .state-dot { color: var(--warn); }
-
-.evidence blockquote {
-  margin: 6px 0 0;
-  font-size: var(--footnote);
-  color: var(--ink-2);
-}
-
-.jump {
-  margin-top: 8px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--tint);
-  font-size: var(--footnote);
-  cursor: pointer;
-}
-
-.jump:hover { text-decoration: underline; }
 
 /* ---------- điều khiển ---------- */
 .controls { display: flex; gap: 8px; align-items: center; }

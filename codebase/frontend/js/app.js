@@ -8,14 +8,7 @@
 // xong. Thiếu vế sau thì mic bắt lại chính giọng agent qua loa, STT sẽ nghe
 // agent nói và tưởng là học viên.
 
-import {
-  citationBox,
-  clearEvidence,
-  indexSpans,
-  renderEvidence,
-  resetReveal,
-  revealEverything,
-} from "./evidence.js";
+import { citationBox, indexSpans } from "./evidence.js";
 import { loadSlides, setZoom, show, sourcePage, step } from "./slides.js";
 
 const API = `http://${location.hostname}:8000`;
@@ -54,7 +47,6 @@ let audioCtx = null;
 let micNode = null;
 let recording = false;
 let turnState = null;
-let lastEvidence = [];
 const audioQueue = [];
 let isPlaying = false;
 
@@ -131,7 +123,6 @@ function submitTurn(payload) {
   if (!live()) return;
   ws.send(JSON.stringify(payload));
   turnState = null; // khoá ngay, khỏi gửi hai lần trước khi server kịp trả lời
-  clearEvidence();
   applyTurnPolicy();
   setLive("working", "Đang nhận lời bạn");
 }
@@ -218,9 +209,6 @@ document.addEventListener("keydown", (e) => {
 });
 
 startBtn.addEventListener("click", () => {
-  resetReveal();
-  lastEvidence = [];
-  clearEvidence();
   transcriptEl.replaceChildren();
   ws = new WebSocket(`${API.replace("http", "ws")}/ws/session`);
   ws.binaryType = "blob";
@@ -234,10 +222,6 @@ startBtn.addEventListener("click", () => {
     const msg = JSON.parse(event.data);
     if (msg.type === "state") {
       turnState = msg.state;
-      if (msg.evidence?.length) {
-        lastEvidence = msg.evidence;
-        renderEvidence(msg.evidence);
-      }
       applyTurnPolicy();
     } else if (msg.type === "activity") {
       // Tiến trình THẬT của agent (tên node trong graph), không phải vòng xoay
@@ -258,8 +242,6 @@ startBtn.addEventListener("click", () => {
       // Hết phiên mới mở hết nguyên văn: giữa phiên mà in ra ý học viên chưa
       // nói thì họ chỉ việc đọc, mất sạch ý nghĩa của việc hỏi ngược. Hết
       // phiên thì trỏ đúng chỗ cần xem lại lại chính là việc D3 yêu cầu.
-      revealEverything();
-      if (lastEvidence.length) renderEvidence(lastEvidence);
       applyTurnPolicy();
       setLive(
         "idle",
