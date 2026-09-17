@@ -113,6 +113,18 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
   - *AI luôn phải* đối chiếu với đúng vùng slide đang giảng và chỉ ra vị trí khi đóng phiên.
   - *AI không được* nói ra ý học viên chưa nói hay xác nhận một ý sai, kể cả khi học viên xin đáp án.
   - *Nếu AI chấm yếu, học viên không phiền* bị hỏi thêm một câu, miễn là câu hỏi nhắm đúng chỗ và bỏ qua được.
+- **§4b. Nguyên tắc đã áp dụng**
+
+  | Nguyên tắc | Áp cụ thể vào đâu trong prototype |
+  |---|---|
+  | **G1** Làm rõ hệ thống làm được gì | Màn hình "Bắt đầu giảng" nói rõ slide nào, bao nhiêu phần đã chọn, hay cả trang (`Conversation.jsx` › `Ready`). Thanh tiến trình Chọn · Giảng · Trả lời · Xem lại luôn trên đầu hội thoại. Trang chủ: "AI đặt câu hỏi. Bạn tìm ra câu trả lời." |
+  | **G10** Thu hẹp phạm vi khi nghi ngờ | Vùng chọn dưới 12 chữ tự mở rộng ra cả trang và báo trước "Vùng chọn quá ngắn, sẽ giảng cả trang" (`Learn.jsx` › `MIN_TEACH_WORDS`). Hết `MAX_FOLLOWUPS = 3` thì đóng phiên chỉ vị trí cần xem lại, không giảng hộ (`close_review`). Câu mở bài hỏi lạc sang slide khác thì bị guard `about_source` chặn. |
+  | **G11** Giải thích vì sao | Trước mỗi câu hỏi ngược, học trò liệt kê "Mình hiểu là…" các ý đã nghe được, để học viên thấy phần nào đã ổn và câu hỏi nhắm vào phần còn lại. Thẻ "Chỗ học trò đang hỏi · Slide N · Xem" nhảy tới đúng vùng trên slide (`SourceCard`). |
+  | **G9** Sửa dễ dàng | Chữ nhận dạng giọng nói hiện ngay trong lúc nói, sai thì nói lại hoặc gõ. "Giảng lại" che lại đúng vùng và mở phiên mới. Bấm vào vùng che để xem lại. |
+  | **G8** Gạt bỏ dễ dàng | Space hoặc "Bỏ qua" cắt giọng đọc của học trò. "Chọn phần khác" thoát phiên bất cứ lúc nào. "Che lại" / "Xem phần đang giảng" bật tắt tự do. |
+  | **G5** Hợp chuẩn mực xã hội | Học trò xưng "mình – bạn", nói tiếng Việt, tiếng Anh chỉ cho thuật ngữ; chữ HOA do model sinh ra bị hạ về thường (`tame_shouting`). Mic chỉ thu khi học viên giữ nút nói, không tự thu giọng người khác trong lớp. |
+  | **PAIR — Explainability + Trust** | Thẻ nguồn chỉ vị trí, **cố ý không trích nguyên văn**. Đo trên LLM thật: trích dẫn hiện ngay dưới câu hỏi ngược chính là đáp án. |
+
 - **§4c. Trí nhớ của học trò — knowledge graph** *(phần mở rộng, **CHƯA có trong bản build**)*
 
   **Chỗ hổng đang có.** Học trò mất trí nhớ sau mỗi phiên: nó sinh ra ngây thơ, được dạy, rồi quên sạch. Học viên không thật sự *dạy* nó, chỉ bị nó kiểm tra — mất đúng thứ làm học-bằng-cách-dạy hiệu quả, là việc người ta quan tâm tới học trò của mình hơn tới điểm của mình (protégé effect, §3).
@@ -131,18 +143,6 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
   **Hạ tầng đã có:** `build_graph()` compile sẵn cả checkpointer lẫn store xuyên phiên; `StudentProfile.concepts_taught` / `recurring_gaps` đã ghi server và `recurring_gaps` đã được bơm vào prompt hỏi ngược. Thiếu: lưu cả phần **đã dạy được** chứ không chỉ chỗ vấp, API đọc đồ thị, và lớp hiển thị trên dàn ý.
 
   **Rủi ro + điều kiện build.** Buổi đầu đồ thị rỗng nên không khác bản hiện tại; demo phải seed sẵn một tài khoản đã dạy vài slide và **nói rõ là seed**. Chỉ build sau khi `validation/` có đủ 5 người ngoài (R6 — 8 điểm đang bỏ trống), vì đây là phần mở rộng còn R6 là điểm chắc.
-
-- **§4b. Nguyên tắc đã áp dụng**
-
-  | Nguyên tắc | Áp cụ thể vào đâu trong prototype |
-  |---|---|
-  | **G1** Làm rõ hệ thống làm được gì | Màn hình "Bắt đầu giảng" nói rõ slide nào, bao nhiêu phần đã chọn, hay cả trang (`Conversation.jsx` › `Ready`). Thanh tiến trình Chọn · Giảng · Trả lời · Xem lại luôn trên đầu hội thoại. Trang chủ: "AI đặt câu hỏi. Bạn tìm ra câu trả lời." |
-  | **G10** Thu hẹp phạm vi khi nghi ngờ | Vùng chọn dưới 12 chữ tự mở rộng ra cả trang và báo trước "Vùng chọn quá ngắn, sẽ giảng cả trang" (`Learn.jsx` › `MIN_TEACH_WORDS`). Hết `MAX_FOLLOWUPS = 3` thì đóng phiên chỉ vị trí cần xem lại, không giảng hộ (`close_review`). Câu mở bài hỏi lạc sang slide khác thì bị guard `about_source` chặn. |
-  | **G11** Giải thích vì sao | Trước mỗi câu hỏi ngược, học trò liệt kê "Mình hiểu là…" các ý đã nghe được, để học viên thấy phần nào đã ổn và câu hỏi nhắm vào phần còn lại. Thẻ "Chỗ học trò đang hỏi · Slide N · Xem" nhảy tới đúng vùng trên slide (`SourceCard`). |
-  | **G9** Sửa dễ dàng | Chữ nhận dạng giọng nói hiện ngay trong lúc nói, sai thì nói lại hoặc gõ. "Giảng lại" che lại đúng vùng và mở phiên mới. Bấm vào vùng che để xem lại. |
-  | **G8** Gạt bỏ dễ dàng | Space hoặc "Bỏ qua" cắt giọng đọc của học trò. "Chọn phần khác" thoát phiên bất cứ lúc nào. "Che lại" / "Xem phần đang giảng" bật tắt tự do. |
-  | **G5** Hợp chuẩn mực xã hội | Học trò xưng "mình – bạn", nói tiếng Việt, tiếng Anh chỉ cho thuật ngữ; chữ HOA do model sinh ra bị hạ về thường (`tame_shouting`). Mic chỉ thu khi học viên giữ nút nói, không tự thu giọng người khác trong lớp. |
-  | **PAIR — Explainability + Trust** | Thẻ nguồn chỉ vị trí, **cố ý không trích nguyên văn**. Đo trên LLM thật: trích dẫn hiện ngay dưới câu hỏi ngược chính là đáp án. |
 
 ## §5. Kiểu lỗi — 4 lớp chỗ khó + kịch bản
 
