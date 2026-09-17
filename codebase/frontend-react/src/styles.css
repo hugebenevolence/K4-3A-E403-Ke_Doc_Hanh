@@ -36,6 +36,27 @@
   100% { box-shadow: 0 0 0 4px rgb(0 0 0 / 0.06); transform: scale(1); }
 }
 
+/* Vùng đang giảng bị che: sọc chéo tối trên nền xám, viền đứt đậm, sọc trôi
+   chậm. Ba tín hiệu cùng lúc vì bản trước (xám nhạt, nhoè) lẫn vào nền trắng
+   của slide — người dùng không nhận ra đâu là chỗ đang bị che.
+   Ô gạch vuông cạnh 9px·√2 thì sọc 45° nối liền giữa các ô, nên trôi được
+   mà không thấy mối nối. */
+.cover {
+  background-color: #e5e5e5;
+  background-image: repeating-linear-gradient(-45deg, rgb(23 23 23 / 0.22) 0 2px, transparent 2px 9px);
+  background-size: 12.728px 12.728px;
+  border: 1.5px dashed #171717;
+  cursor: pointer;
+  animation: cover-drift 1.8s linear infinite;
+  transition: background-color 0.2s;
+}
+.cover:hover {
+  background-color: #d4d4d4;
+}
+@keyframes cover-drift {
+  to { background-position: 12.728px 0; }
+}
+
 /* Chế độ vùng đang dạy: làm mờ phần còn lại để học viên và agent cùng bàn về
    đúng một chỗ. */
 .spotlight canvas {
@@ -75,4 +96,5 @@
   .pulse { animation: none !important; }
   .mark.focused { animation: none; }
   .shimmer { animation: none; color: #737373; background: none; }
+  .cover { animation: none; }
 }

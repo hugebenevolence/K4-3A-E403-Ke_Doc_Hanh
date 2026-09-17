@@ -92,6 +92,15 @@ export default function App() {
     session.start(ids);
   }, [selectedHere, thin, blocksOnPage, page, session]);
 
+  /** Kết thúc phiên đang dở (nếu có) và quay về chọn vùng. Giữ nguyên trang
+   *  đang xem, để học viên chọn ngay trên trang họ vừa lật tới. */
+  const restart = useCallback(() => {
+    session.reset();
+    setRevealed(false);
+    setSpotlight(false);
+    setSelection({ page: null, ids: [] });
+  }, [session]);
+
   const open = useCallback(
     (span) => {
       const where = byId.get(span.span_id) ?? span;
@@ -169,11 +178,7 @@ export default function App() {
         spanById={byId}
         onTeach={info.has_slides ? teach : () => session.start()}
         onClearSelection={() => setSelection({ page: null, ids: [] })}
-        onRestart={() => {
-          session.reset();
-          setRevealed(false);
-          setSpotlight(false);
-        }}
+        onRestart={restart}
         onOpen={open}
       />
       <SourcePanel
@@ -197,6 +202,7 @@ export default function App() {
         teachingPages={teachingPages}
         sourcePage={sessionPage}
         onSelect={select}
+        onAbandon={restart}
         onPages={setPages}
       />
 

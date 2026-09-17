@@ -230,17 +230,24 @@ export default function SlideView({
             <motion.button
               key={`cover-${b.span_id}`}
               style={style(b.bbox)}
-              initial={{ opacity: 0, backdropFilter: "blur(0px)" }}
-              animate={{ opacity: 1, backdropFilter: "blur(8px)" }}
-              exit={{ opacity: 0, backdropFilter: "blur(0px)" }}
-              transition={{ duration: 0.35, ease: EASE }}
+              // Che "kéo rèm" từ trái sang, mở thì rút về — nhìn là biết vùng
+              // này đang bị che chứ không phải slide vẽ lỗi.
+              initial={{ opacity: 0, clipPath: "inset(0 100% 0 0 round 6px)" }}
+              animate={{ opacity: 1, clipPath: "inset(0 0% 0 0 round 6px)" }}
+              exit={{ opacity: 0, clipPath: "inset(0 0 0 100% round 6px)" }}
+              transition={{ duration: 0.45, ease: EASE }}
               onClick={onReveal}
-              title="Đang giảng phần này — bấm để xem lại"
-              className="absolute flex items-center justify-center overflow-hidden rounded-md border border-neutral-200 bg-neutral-100/85 px-2 text-[11px] leading-none font-medium text-neutral-500 hover:text-neutral-900"
+              title="Đang che phần bạn giảng — bấm để xem lại"
+              className="cover absolute grid place-items-center overflow-hidden rounded-md"
             >
-              {/* Ô nhỏ (như một dòng link) không đủ chỗ cho cả câu: cắt bớt
-                  thay vì để chữ tràn ra đè lên phần slide bên ngoài. */}
-              <span className="truncate">Đang giảng phần này · bấm để xem lại</span>
+              {/* Nhãn chỉ hiện trên ô đủ rộng. Slide sơ đồ có hàng chục nhãn
+                  chữ tí hon; nhét chữ vào từng ô là ra một đống "Đang gi…"
+                  chi chít đè lên nhau. Ô nhỏ chỉ cần sọc là đủ nhận ra. */}
+              {(b.bbox[2] - b.bbox[0]) * scale >= 150 && (b.bbox[3] - b.bbox[1]) * scale >= 26 && (
+                <span className="rounded-full bg-neutral-900 px-2.5 py-1 text-[11px] leading-none font-medium whitespace-nowrap text-white shadow-sm">
+                  Đang che · bấm để xem
+                </span>
+              )}
             </motion.button>
           ))}
       </AnimatePresence>

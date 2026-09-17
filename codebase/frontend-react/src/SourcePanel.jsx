@@ -35,6 +35,7 @@ export default function SourcePanel({
   teachingPages,
   sourcePage,
   onSelect,
+  onAbandon,
   onPages,
 }) {
   const [scope, animate] = useAnimate();
@@ -118,6 +119,11 @@ export default function SourcePanel({
               </Button>
               <Button size="sm" pressed={spotlight} onClick={() => setSpotlight((s) => !s)}>
                 Làm mờ phần khác
+              </Button>
+              {/* Chọn nhầm chỗ, hoặc muốn đổi sang trang khác giảng: bỏ vùng che
+                  và quay về chế độ chọn, không phải đợi hết phiên. */}
+              <Button size="sm" variant="quiet" onClick={onAbandon}>
+                Bỏ che, chọn vùng khác
               </Button>
             </>
           ) : selectedIds.size ? (
