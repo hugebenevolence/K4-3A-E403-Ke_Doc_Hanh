@@ -30,6 +30,9 @@ BASE_LAYERS: dict[str, tuple[str, ...]] = {
     "talker": ("guardrails_v1", "persona_v2"),
     "student_persona": ("guardrails_v1", "persona_v2"),
     "opener": ("guardrails_v1", "persona_v2"),
+    # Việc kỹ thuật cho bộ nhận dạng giọng nói, không nói với học viên — nhưng
+    # vẫn giữ sàn an toàn: thuật ngữ lấy từ nội dung slide, không kiểm soát được.
+    "pronunciation": ("guardrails_v1",),
 }
 
 

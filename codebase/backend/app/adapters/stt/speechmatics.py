@@ -31,7 +31,9 @@ ENDPOINT = "wss://eu2.rt.speechmatics.com/v2"
 IDLE_TIMEOUT_S = 30.0
 
 
-def _start_message(sample_rate: int, vocabulary: tuple[str, ...]) -> str:
+def _start_message(
+    sample_rate: int, vocabulary: tuple[str, ...], sounds_like: dict[str, list[str]] | None = None
+) -> str:
     config: dict = {
         "language": "vi",
         # Sai dấu là sai nghĩa, và bộ chấm ở sau sẽ phạt oan học viên vì lỗi
@@ -45,7 +47,7 @@ def _start_message(sample_rate: int, vocabulary: tuple[str, ...]) -> str:
         # lại đúng là những từ quyết định chấm đúng hay sai. Đo thật trước khi
         # có danh sách này: "temperature" -> "template" rồi "computer cô ta",
         # "LLM" -> "Em".
-        config["additional_vocab"] = vocab_entries(vocabulary)
+        config["additional_vocab"] = vocab_entries(vocabulary, sounds_like)
 
     return json.dumps(
         {
@@ -66,10 +68,14 @@ class SpeechmaticsRealtimeSTT(SpeechToText):
         api_key: str | None = None,
         sample_rate: int = 16000,
         vocabulary: tuple[str, ...] = (),
+        sounds_like: dict[str, list[str]] | None = None,
     ):
         self._key = api_key or settings.speechmatics_api_key
         self._sample_rate = sample_rate
         self._vocabulary = vocabulary
+        # Giữ THAM CHIẾU chứ không chép: bảng cách đọc được sinh dần ở nền trong
+        # lúc phiên đã chạy, lượt nói sau đọc lại là thấy phần mới thêm.
+        self._sounds_like = sounds_like
 
     async def stream(self, audio: AsyncIterator[bytes]) -> AsyncIterator[Transcript]:
         """Nuôi audio vào và nhả transcript ra — partial trước, final sau."""
@@ -78,7 +84,7 @@ class SpeechmaticsRealtimeSTT(SpeechToText):
         async with websockets.connect(
             ENDPOINT, additional_headers={"Authorization": f"Bearer {self._key}"}
         ) as sock:
-            await sock.send(_start_message(self._sample_rate, self._vocabulary))
+            await sock.send(_start_message(self._sample_rate, self._vocabulary, self._sounds_like))
             feeder = asyncio.create_task(self._feed(sock, audio))
             reader = asyncio.create_task(self._read(sock, out))
             try:

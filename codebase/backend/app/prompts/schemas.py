@@ -58,3 +58,12 @@ class FollowupOutput(BaseModel):
     cites_span_id: str | None = Field(
         default=None, description="Span được trích trong câu hỏi, nếu có — để frontend highlight"
     )
+
+
+class Pronunciation(BaseModel):
+    term: str = Field(description="Đúng thuật ngữ gốc được đưa, không sửa cách viết")
+    sounds_like: list[str] = Field(description="2–3 cách sinh viên Việt phát âm, chữ quốc ngữ có dấu")
+
+
+class PronunciationOutput(BaseModel):
+    items: list[Pronunciation]

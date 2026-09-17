@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     # File slide để frontend render. Nằm ngoài repo vì thuộc data pack.
     slides_pdf: Path | None = None
     session_log_file: Path = BACKEND_DIR / "var" / "sessions.jsonl"
+    pronunciation_file: Path = BACKEND_DIR / "var" / "sounds_like.json"
+
+    # Sinh cách đọc kiểu Việt cho thuật ngữ bằng LLM. TẮT vì đo được nó làm TỆ
+    # đi: 8 đoạn giọng đọc tiếng Anh kiểu Việt, từ điển theo vùng + cụm từ ra
+    # đúng 19/20 thuật ngữ, thêm cách đọc sinh tự động còn 15/20 ("reward model"
+    # quay về "report model" ở cả hai giọng). Đo bằng giọng tổng hợp nên chưa
+    # phải lời cuối — bật lại để thử khi có bản ghi giọng người thật.
+    enable_generated_pronunciations: bool = False
     profile_file: Path = BACKEND_DIR / "var" / "profiles.json"
     checkpoint_db: Path = BACKEND_DIR / "var" / "checkpoints.sqlite"
 

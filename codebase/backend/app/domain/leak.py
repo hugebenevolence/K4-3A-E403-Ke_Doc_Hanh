@@ -110,9 +110,17 @@ def about_source(question: str, source: str) -> bool:
 # Bản đầu dựa vào dấu và bỏ nhầm một ý hoàn toàn đúng ("cộng cho câu đúng, trừ
 # cho câu sai"). Nhận theo cấu trúc âm tiết thì chắc hơn: tiếng Việt không bao
 # giờ có f, j, w, z, và chỉ kết thúc bằng một nhóm phụ âm cuối rất hẹp.
+# Vần tiếng Việt CÓ THẬT (đã bỏ dấu). Bản đầu cho phép mọi tổ hợp 1–3 nguyên
+# âm, nên "deep" (d + ee + p) lọt thành âm tiết tiếng Việt và cụm "deep
+# learning" không bao giờ được nhận ra. Tiếng Việt không có vần "ee", "ea".
+_VI_NUCLEI = (
+    "oai|oay|oeo|uay|uoi|uou|uya|uye|uyu|ieu|yeu|uai|"
+    "ai|ao|au|ay|eo|eu|ia|ie|iu|oa|oe|oi|oo|ua|ue|ui|uo|uu|uy|ye|"
+    "a|e|i|o|u|y"
+)
 _VI_SYLLABLE = re.compile(
     r"^(?:ngh|ng|nh|ch|gh|gi|kh|ph|qu|th|tr|b|c|d|g|h|k|l|m|n|p|r|s|t|v|x)?"
-    r"[aeiouy]{1,3}"
+    rf"(?:{_VI_NUCLEI})"
     r"(?:ch|nh|ng|c|m|n|p|t)?$"
 )
 
@@ -123,8 +131,28 @@ def _plain(word: str) -> str:
 
 
 def looks_english(word: str) -> bool:
-    """Chữ không thể là một âm tiết tiếng Việt — gần như chắc là tiếng Anh."""
-    return bool(word) and not _VI_SYLLABLE.match(_plain(word))
+    """Chữ không thể là một âm tiết tiếng Việt — gần như chắc là tiếng Anh.
+
+    Chữ viết HOA không dấu (AI, LLM) tính là tiếng Anh dù "ai" viết thường là
+    một chữ tiếng Việt: giữa câu, viết HOA như vậy là viết tắt thuật ngữ.
+    """
+    if not word:
+        return False
+    if word.isupper() and len(word) >= 2 and _plain(word) == word.lower():
+        return True
+    return not _VI_SYLLABLE.match(_plain(word))
+
+
+def is_acronym(word: str) -> bool:
+    """Viết tắt thật (RLHF, API, LLM) chứ không phải chữ thường bị viết HOA (MODEL).
+
+    Viết tắt thì ngắn hoặc gần như không có nguyên âm; chữ thường viết HOA thì
+    đọc được thành tiếng: "MODEL", "LEARNING".
+    """
+    if not word.isupper() or len(word) < 2:
+        return False
+    vowels = sum(c in "AEIOUY" for c in word)
+    return len(word) <= 3 or vowels <= 1
 
 
 # --- Câu hỏi xác nhận: "Có phải … không?" -------------------------------------

@@ -88,14 +88,24 @@ SOUNDS_LIKE: dict[str, list[str]] = {
 }
 
 
-def vocab_entries(terms: tuple[str, ...]) -> list[dict]:
+def vocab_entries(terms: tuple[str, ...], generated: dict[str, list[str]] | None = None) -> list[dict]:
     """Đổi danh sách thuật ngữ sang dạng additional_vocab của Speechmatics,
-    gắn thêm cách đọc cho những từ đã biết."""
+    gắn thêm cách đọc cho những từ đã biết.
+
+    `generated` là cách đọc sinh tự động (xem api/pronunciations.py); cách đọc
+    gõ tay trong SOUNDS_LIKE được ưu tiên vì đã có người kiểm.
+    """
+    generated = generated or {}
     entries = []
     for term in terms:
         entry: dict = {"content": term}
-        if hints := SOUNDS_LIKE.get(term) or SOUNDS_LIKE.get(term.lower()):
-            entry["sounds_like"] = hints
+        hints = (
+            SOUNDS_LIKE.get(term)
+            or SOUNDS_LIKE.get(term.lower())
+            or generated.get(term.lower())
+        )
+        if hints:
+            entry["sounds_like"] = list(hints)
         entries.append(entry)
 
     # Thuật ngữ có cách đọc nhưng bài này không nhắc tới vẫn nên khai: học viên
@@ -131,3 +141,94 @@ def extract_terms(*texts: str) -> tuple[str, ...]:
 
     ranked = sorted(canonical.values(), key=lambda pair: (-pair[0], pair[1].lower()))
     return tuple(word for _, word in ranked[:MAX_TERMS])
+
+
+# --- Cụm thuật ngữ nhiều từ ---------------------------------------------------
+#
+# Đo thật (giọng đọc tiếng Anh kiểu Việt, 8 đoạn): với từ điển chỉ gồm TỪ ĐƠN,
+# mọi chỗ trượt đều là cụm — "machine learning" ra "Learning", "reward model"
+# ra "report model", "generative AI" mất hẳn. Khai "reward" và "model" riêng lẻ
+# không giúp bộ nhận dạng biết hai từ đó hay đi liền nhau.
+
+MAX_PHRASE_WORDS = 3
+"""Dài hơn thì gần như luôn là cả dòng chữ viết HOA của sơ đồ bị ghép lại
+("ARTIFICIAL INTELLIGENCE MACHINE LEARNING DEEP LEARNING") chứ không phải thuật
+ngữ. Cụm thật thì đã có ở chỗ khác trên slide dưới dạng ngắn."""
+
+_EDGE_STOPWORDS = frozenset(["the", "a", "an", "of", "and", "or", "to", "in", "on", "for", "with", "by", "is", "are", "behind"])
+
+_TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*")
+
+
+def _english_token(word: str) -> bool:
+    # Import muộn: leak.py cũng là domain, tránh vòng import lúc nạp module.
+    from app.domain.leak import looks_english
+
+    return not _has_diacritic(word) and looks_english(word)
+
+
+def _normalize_word(word: str) -> str:
+    """Hạ chữ HOA về thường nếu không phải viết tắt ("MODEL" → "model", "RLHF" giữ).
+
+    Bộ nhận dạng trả về ĐÚNG cách viết đã khai, nên khai "LEARNING" thì học
+    viên sẽ thấy lời mình hiện ra thành chữ HOA. Tên riêng ("Claude") giữ nguyên.
+    """
+    from app.domain.leak import is_acronym
+
+    return word.lower() if word.isupper() and not is_acronym(word) else word
+
+
+def _normalize_phrase(words: list[str]) -> str:
+    # Trong cụm thì viết thường hết trừ viết tắt: "Deep Learning" → "deep learning",
+    # "Generative AI" → "generative AI".
+    from app.domain.leak import is_acronym
+
+    return " ".join(w if is_acronym(w) else w.lower() for w in words)
+
+
+def extract_phrases(*texts: str) -> tuple[str, ...]:
+    """Cụm 2–3 từ tiếng Anh đứng liền nhau, xếp theo tần suất giảm dần."""
+    counts: Counter[str] = Counter()
+    for text in texts:
+        # Dấu câu, "·", "—", ":" là ranh giới cụm; chỉ khoảng trắng mới nối.
+        for segment in re.split(r"[^\w\s-]|_", text):
+            run: list[str] = []
+            for word in segment.split() + [""]:
+                if word and _TOKEN.fullmatch(word) and _english_token(word):
+                    run.append(word)
+                    continue
+                while run and run[0].lower() in _EDGE_STOPWORDS:
+                    run.pop(0)
+                while run and run[-1].lower() in _EDGE_STOPWORDS:
+                    run.pop()
+                from app.domain.leak import is_acronym
+
+                all_acronyms = all(is_acronym(w) for w in run)
+                if 2 <= len(run) <= MAX_PHRASE_WORDS and not all_acronyms:
+                    counts[_normalize_phrase(run)] += 1
+                run = []
+    return tuple(p for p, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
+
+
+SESSION_VOCAB_LIMIT = 300
+"""Speechmatics khuyên dưới 1000 mục; giữ xa ngưỡng đó để thuật ngữ của vùng
+đang giảng không bị loãng giữa cả trăm từ của những slide khác."""
+
+
+def session_vocabulary(selected_texts: list[str], deck_terms: tuple[str, ...]) -> tuple[str, ...]:
+    """Từ điển cho một phiên: thuật ngữ của VÙNG ĐANG GIẢNG trước, cả bộ slide sau.
+
+    Học viên đang giảng slide nào thì nói thuật ngữ của slide đó nhiều nhất.
+    Xếp theo tần suất cả bộ thì "deep learning" của slide 3 nằm lẫn sau hàng
+    chục từ của những slide khác.
+    """
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for term in (*extract_phrases(*selected_texts), *extract_terms(*selected_texts), *deck_terms):
+        words = term.split()
+        term = _normalize_phrase(words) if len(words) > 1 else _normalize_word(term)
+        key = term.lower()
+        if key not in seen:
+            seen.add(key)
+            ordered.append(term)
+    return tuple(ordered[:SESSION_VOCAB_LIMIT])

@@ -5,6 +5,7 @@ Chạy: uvicorn app.main:app --reload --port 8000
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -24,6 +25,7 @@ from app.adapters.store.jsonl import JsonlSessionLog, JsonProfileStore
 from app.adapters.stt.mock import MockSTT
 from app.adapters.tts.mock import MockTTS
 from app.api.live_turn import LiveTurn
+from app.api.pronunciations import PronunciationCache
 from app.api.session import TALKER_VERSION, run_turn
 from app.config import settings
 from app.domain.lesson import Lesson
@@ -130,7 +132,20 @@ def _speech_to_text(lesson: Lesson) -> SpeechToText:
 
     from app.adapters.stt.speechmatics import SpeechmaticsRealtimeSTT
 
-    return SpeechmaticsRealtimeSTT(vocabulary=lesson.vocabulary)
+    sounds_like = _pronunciations().table if settings.enable_generated_pronunciations else None
+    return SpeechmaticsRealtimeSTT(vocabulary=lesson.vocabulary, sounds_like=sounds_like)
+
+
+@lru_cache(maxsize=1)
+def _pronunciations() -> PronunciationCache:
+    return PronunciationCache(settings.pronunciation_file)
+
+
+_BACKGROUND: set[asyncio.Task] = set()
+
+PRONUNCIATION_TERMS = 60
+"""Chỉ sinh cách đọc cho đầu danh sách — tức thuật ngữ của vùng đang giảng, vì
+từ điển phiên đã xếp chúng lên trước."""
 
 
 @lru_cache(maxsize=1)
@@ -239,6 +254,19 @@ async def teach_back_session(ws: WebSocket):
         await ws.close()
         return
     graph = build_graph(llm, spans, checkpointer=InMemorySaver())
+
+    # Sinh cách đọc kiểu Việt cho thuật ngữ của vùng đang giảng, chạy NỀN song
+    # song với câu mở bài: học viên còn phải nghe câu hỏi xong mới nói, đủ thời
+    # gian để bảng kịp đầy trước lượt nói đầu tiên. Không chờ, không làm chậm gì.
+    if not settings.use_mocks and settings.enable_generated_pronunciations:
+        task = asyncio.create_task(
+            _pronunciations().ensure(lesson.vocabulary[:PRONUNCIATION_TERMS], llm)
+        )
+        # Giữ tham chiếu tới khi xong: asyncio chỉ giữ tham chiếu yếu tới task,
+        # không giữ thì task có thể bị dọn giữa chừng. Để nó chạy nốt cả khi
+        # học viên đã rời phiên — kết quả được lưu lại cho lần sau.
+        _BACKGROUND.add(task)
+        task.add_done_callback(_BACKGROUND.discard)
 
     session_id = str(uuid.uuid4())
     # Hồ sơ theo học viên chứ không theo phiên — đó là điểm của trí nhớ xuyên

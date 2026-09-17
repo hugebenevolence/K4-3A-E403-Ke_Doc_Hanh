@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from app.adapters.knowledge.local import InMemorySpanStore
 from app.adapters.knowledge.pdf import Deck
 from app.domain.lesson import Lesson
+from app.domain.terms import session_vocabulary
 
 MAX_CONCEPT_WORDS = 12
 """Trang không có tiêu đề thì lấy đầu ô đầu tiên làm tên, cắt ở ngần này chữ."""
@@ -35,7 +36,7 @@ def lesson_from_selection(deck: Deck, span_ids: Sequence[str]) -> tuple[Lesson, 
     lesson = Lesson(
         concept=concept,
         source_span_ids=tuple(s.span_id for s in chosen),
-        vocabulary=deck.terms,
+        vocabulary=session_vocabulary([s.text for s in chosen], deck.terms),
         kind="slide",
     )
     # Kho chứa cả bộ slide chứ không chỉ vùng đã chọn: agent có thể trỏ học
