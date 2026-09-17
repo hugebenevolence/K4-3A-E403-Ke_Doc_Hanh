@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import mimetypes
 import uuid
 from functools import lru_cache
 from pathlib import Path
@@ -618,7 +619,7 @@ async def _log_turn(
 
 
 
-def _mount_frontend(dist: Path) -> None:
+def mount_frontend(target_app: FastAPI, dist: Path) -> None:
     """Phục vụ giao diện đã build ngay từ backend: deploy một service là đủ.
 
     Đường dẫn nào không phải file có thật thì trả index.html — để tải lại trang
@@ -628,8 +629,11 @@ def _mount_frontend(dist: Path) -> None:
     if not index.is_file():
         return
     root = dist.resolve()
+    # Windows không đăng ký đuôi .mjs, FileResponse đoán ra text/plain, và trình
+    # duyệt từ chối chạy worker của PDF.js — slide vẫn hiện nhưng vẽ chậm hẳn.
+    mimetypes.add_type("text/javascript", ".mjs")
 
-    @app.get("/{path:path}", include_in_schema=False)
+    @target_app.get("/{path:path}", include_in_schema=False)
     async def frontend(path: str):
         if path.startswith("api/"):
             raise HTTPException(404)
@@ -641,4 +645,4 @@ def _mount_frontend(dist: Path) -> None:
 
 
 app.include_router(api)
-_mount_frontend(settings.frontend_dist)
+mount_frontend(app, settings.frontend_dist)
