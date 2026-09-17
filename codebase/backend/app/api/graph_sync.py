@@ -51,9 +51,15 @@ async def absorb_turn(
             viec["nối"].append(f"{link.source}→{link.target}")
 
     # Gỡ sau khi thêm: cùng một lượt có thể vừa dạy đúng ô này vừa nói sai ô kia.
+    #
+    # NHƯNG không gỡ thứ vừa dạy đúng trong chính lượt này. Một đỉnh gom nhiều
+    # ô qua nhiều buổi, nên chỉ cần một ô cũ bị đánh dấu nói trái là nó xoá luôn
+    # mệnh đề học viên vừa giảng lại đúng ở ô khác — báo cáo ra
+    # `{'giảng lại': ['token'], 'gỡ': ['token']}` và đồ thị rỗng, ngược hẳn ý đồ.
+    vua_day = {c.concept for c in claims}
     for span_id in wrong_ids:
         for concept, claim in list(graph.claims.items()):
-            if span_id in claim.span_ids:
+            if span_id in claim.span_ids and concept not in vua_day:
                 graph.forget(concept)
                 viec["gỡ"].append(concept)
 

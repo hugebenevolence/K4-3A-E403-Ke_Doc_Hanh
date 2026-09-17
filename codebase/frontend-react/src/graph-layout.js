@@ -9,6 +9,13 @@
 // một đồ thị thì lần nào mở ra cũng nằm đúng chỗ cũ — người học nhớ bản đồ của
 // mình theo hình dạng, mà hình dạng nhảy mỗi lần tải lại thì không nhớ được.
 
+const NGHI = 128;
+/** Khoảng cách nghỉ của lò xo (px trong hệ toạ độ 900×620).
+ *
+ *  Đặt theo BỀ NGANG CỦA NHÃN chứ không phải theo bán kính đỉnh: hai chấm cách
+ *  nhau 40px trông vẫn rời nhau, nhưng "attention" và "context" viết dưới chúng
+ *  thì đã đè lên nhau rồi. 128px là chỗ hai nhãn dài vẫn thở được. */
+
 /** Băm tên thành một số ổn định, để mỗi đỉnh có một chỗ khởi đầu riêng. */
 function hash(text) {
   let h = 2166136261;
@@ -48,6 +55,12 @@ export function layout(nodes, links, { width = 900, height = 620, iterations = 3
     // Nguội dần: bước đầu cho phép nhảy xa để gỡ rối, về sau chỉ chỉnh li ti.
     const nhiet = (1 - buoc / iterations) ** 1.5;
 
+    // SỬA TẠI CHỖ, tuyệt đối không `pos.set(id, {...})`. Bản đầu tạo object mới
+    // ở mỗi cặp, và hỏng hai lần cùng lúc: lực đẩy của đỉnh i bị ghi đè nên chỉ
+    // còn lại cặp cuối cùng, còn `canhs` thì đang giữ tham chiếu tới những
+    // object đã bị thay — nên lực lò xo của CẠNH không bao giờ tác dụng. Đo
+    // được: bỏ hết cạnh đi mà toạ độ trả về vẫn y hệt, tức đồ thị xếp như thể
+    // không ai nối gì với ai.
     for (let i = 0; i < nodes.length; i++) {
       const a = pos.get(nodes[i].id);
       for (let j = i + 1; j < nodes.length; j++) {
@@ -63,8 +76,10 @@ export function layout(nodes, links, { width = 900, height = 620, iterations = 3
           d2 = 0.02;
         }
         const day = (k * k) / d2;
-        pos.set(nodes[i].id, { ...a, vx: a.vx + dx * day, vy: a.vy + dy * day });
-        pos.set(nodes[j].id, { ...b, vx: b.vx - dx * day, vy: b.vy - dy * day });
+        a.vx += dx * day;
+        a.vy += dy * day;
+        b.vx -= dx * day;
+        b.vy -= dy * day;
       }
     }
 
@@ -72,7 +87,12 @@ export function layout(nodes, links, { width = 900, height = 620, iterations = 3
       const dx = b.x - a.x;
       const dy = b.y - a.y;
       const d = Math.hypot(dx, dy) || 0.01;
-      const keo = (d * d) / k / d;
+      // Lò xo có KHOẢNG NGHỈ: gần hơn ngần này thì thôi kéo nữa. Lò xo kéo vô
+      // điều kiện thì hai đỉnh có nối dính sát vào nhau và hai cái nhãn chồng
+      // lên nhau — đo được ngay sau khi sửa lực lò xo: token và context còn
+      // cách nhau ~30px, đọc không ra chữ nào.
+      if (d <= NGHI) continue;
+      const keo = ((d - NGHI) * (d - NGHI)) / k / d;
       a.vx += dx * keo * 0.5;
       a.vy += dy * keo * 0.5;
       b.vx -= dx * keo * 0.5;

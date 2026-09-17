@@ -195,7 +195,11 @@ def _concept_of(sentence: str, span_text: str) -> str | None:
             return term.lower()
 
     chung = trong_cau & content_terms(span_text)
-    du_dai = [w for w in chung if len(w) >= MIN_CONCEPT_LEN]
+    # `sorted` trước khi `max`: duyệt thẳng một set thì thứ tự đổi theo
+    # PYTHONHASHSEED, nên hai từ dài bằng nhau ("nhiệt"/"lượng") cho ra khoá
+    # khác nhau giữa hai lần khởi động server. Mà `concept` chính là khoá gộp
+    # xuyên buổi — khoá đổi nghĩa là một đỉnh tách làm đôi sau mỗi lần restart.
+    du_dai = sorted(w for w in chung if len(w) >= MIN_CONCEPT_LEN)
     return max(du_dai, key=len) if du_dai else None
 
 

@@ -2,10 +2,12 @@
 
     python scripts/dump_graph.py                     # liệt kê mọi học viên
     python scripts/dump_graph.py --student member1   # đồ thị của một người
-    python scripts/dump_graph.py --replay member1    # dựng lại từ log phiên thật
+    python scripts/dump_graph.py --replay            # dựng lại từ log phiên thật
 
 `--replay` là công cụ debug chính: nó chạy lại phép rút mệnh đề trên đúng những
 lượt đã ghi trong `var/sessions.jsonl` và in ra CẢ những câu bị loại kèm lý do.
+Nó chạy trên MỌI lượt trong log, không lọc theo học viên được — `TurnLog` không
+ghi `student_id`. Cần lọc thì phải thêm trường đó vào log trước.
 Không có nó thì đồ thị chỉ im lặng bỏ sót, và không ai lần ra được vì sao một
 câu học viên rõ ràng đã nói lại không thành đỉnh.
 """
@@ -41,7 +43,7 @@ def _in_do_thi(g: KnowledgeGraph) -> None:
             print(f"      vì họ nói: {l.evidence}")
 
 
-def _replay(student_id: str) -> None:
+def _replay() -> None:
     """Chạy lại phép rút mệnh đề trên log thật, in cả phần bị loại."""
     path = settings.session_log_file
     if not path.is_file():
@@ -86,11 +88,11 @@ def _replay(student_id: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--student", default="")
-    ap.add_argument("--replay", default="")
+    ap.add_argument("--replay", action="store_true")
     args = ap.parse_args()
 
     if args.replay:
-        _replay(args.replay)
+        _replay()
         return
 
     store = JsonGraphStore(settings.graph_file)
