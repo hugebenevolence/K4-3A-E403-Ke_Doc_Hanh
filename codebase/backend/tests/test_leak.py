@@ -7,7 +7,7 @@ từ khoá học viên đang thiếu, học viên chỉ cần gật đầu là x
 
 from __future__ import annotations
 
-from app.domain.leak import leaked_terms, leaks_answer
+from app.domain.leak import leaked_terms, leaks_answer, suggests_fix
 
 UNCOVERED = "Nước sôi ở 100 độ C là do áp suất khí quyển ở mực nước biển đè lên mặt nước."
 STUDENT = "Lên núi nước sôi thấp hơn là tại trên đó lạnh hơn nhiều."
@@ -43,3 +43,29 @@ def test_mot_tu_trung_tinh_co_thi_chua_tinh_la_lo():
 
 def test_khong_co_phan_thieu_thi_khong_co_gi_de_lo():
     assert not leaks_answer("Câu hỏi bất kỳ về áp suất khí quyển?", "", STUDENT)
+
+
+# --- Bài code: lộ đáp án = mách cách sửa ------------------------------------
+#
+# Câu mách nước không trùng từ nào với nguồn (nguồn là code, lời mách là tiếng
+# Việt), nên bộ lọc từ khoá ở trên không thấy. Phải bắt theo lối nói.
+
+
+def test_bat_cau_mach_cach_sua():
+    # Đúng câu agent đã tự viết ra khi prompt cấm suông: đưa sẵn tối ưu mà học
+    # viên phải tự tìm ra.
+    for q in [
+        "Tại sao vòng trong lại duyệt từ đầu thay vì chỉ từ i+1?",
+        "Lẽ ra chỗ này chỉ cần một vòng thôi phải không bạn?",
+        "Dùng dict ở đây thì có tốt hơn không?",
+    ]:
+        assert suggests_fix(q), q
+
+
+def test_cau_hoi_ve_code_dang_co_thi_khong_bi_chan():
+    for q in [
+        "Vòng lặp bên trong chạy bao nhiêu lần với mảng 5 phần tử?",
+        "Dòng 7 đang so sánh hai giá trị nào vậy bạn?",
+        "Bạn đọc dòng 4 giúp mình, nó đang làm gì?",
+    ]:
+        assert not suggests_fix(q), q
