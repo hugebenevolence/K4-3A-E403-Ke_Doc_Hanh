@@ -164,3 +164,43 @@ def test_moi_luot_deu_duoc_ghi_log_replay_duoc(client, tmp_path):
     assert rows[0]["prompt_versions"]["grader"] == GRADER_VERSION
     assert rows[0]["grade"]["verdict"] == "incomplete"
     assert "first_audio" in rows[0]["latency_ms"]
+
+
+def test_state_mang_theo_luat_mic_cua_chinh_state_do(client):
+    """Ngưỡng im lặng phải đi được xuống client, không chỉ nằm trong domain.
+
+    Luật "im lặng sau câu hỏi ngược là đang nghĩ, không phải đã nói xong" được
+    CLAUDE.md gọi là load-bearing, nhưng suốt một thời gian dài nó là code chết:
+    domain có thuộc tính, chỉ test gọi tới, message `state` thì chỉ mang mỗi
+    tên state nên frontend không có cách nào biết mà thi hành.
+    """
+    states: dict[str, dict] = {}
+    with client.websocket_connect("/ws/session") as ws:
+        # Gom state ngay từ message đầu: câu mở bài cũng đã kèm một state rồi.
+        sent = False
+        for _ in range(60):
+            msg = ws.receive()
+            if not msg.get("text"):
+                continue
+            body = json.loads(msg["text"])
+            if body["type"] != "state":
+                continue
+            states[body["state"]] = body
+            if body["state"] == "STUDENT_RESPONDING":
+                break
+            if body["state"] == "STUDENT_TEACHING" and not sent:
+                sent = True
+                ws.send_bytes(b"\x00" * 100)
+                ws.send_text(DONE)
+
+    teaching = states["STUDENT_TEACHING"]
+    assert teaching["mic_open"] is True
+    assert teaching["silence_ms"] > 0
+
+    # Lúc đang chấm thì mic phải đóng: không thì nó bắt luôn giọng agent qua loa.
+    assert states["CHECKING"]["mic_open"] is False
+
+    # Và ngưỡng chờ sau câu hỏi ngược phải NỚI ra so với lúc đang tự giảng.
+    responding = states["STUDENT_RESPONDING"]
+    assert responding["mic_open"] is True
+    assert responding["silence_ms"] > teaching["silence_ms"]
