@@ -1,0 +1,62 @@
+"""Dựng bài học từ vùng học viên tự chọn — không cần file PDF thật."""
+
+from __future__ import annotations
+
+import asyncio
+
+import pytest
+
+from app.adapters.knowledge.pdf import Deck
+from app.adapters.knowledge.selection import lesson_from_selection
+from app.domain.span import Span
+
+DECK = Deck(
+    spans=(
+        Span("[d-p20-01]", "Giới hạn bẩm sinh: học giả trong bong bóng", page=20, bbox=(38, 20, 519, 48)),
+        Span("[d-p20-03]", "Nói chắc như đúng rồi Model tối ưu cho câu nghe hợp lý", page=20, bbox=(362, 93, 612, 174)),
+        Span("[d-p20-06]", "Đây không phải lỗi tạm thời — đó là bản chất của cỗ máy đoán token", page=20, bbox=(120, 359, 843, 391)),
+        Span("[d-p21-02]", "Model rất giỏi học vẹt đường tắt khi dữ liệu có mẫu dễ đoán", page=21, bbox=(40, 90, 500, 160)),
+    ),
+    titles={20: "Giới hạn bẩm sinh: học giả trong bong bóng", 21: ""},
+    terms=("LLM", "token"),
+    pages=29,
+)
+
+
+def test_bai_hoc_dung_tu_dung_vung_da_chon_khong_co_dinh_slide_20():
+    lesson, _ = lesson_from_selection(DECK, ["[d-p21-02]"])
+    assert lesson.source_span_ids == ("[d-p21-02]",)
+
+
+def test_thu_tu_theo_thu_tu_doc_tren_slide_khong_theo_thu_tu_bam():
+    # Học viên kéo khung từ dưới lên: nguồn vẫn phải đọc từ trên xuống, không
+    # thì agent hỏi về câu kết luận trước câu dẫn.
+    lesson, _ = lesson_from_selection(DECK, ["[d-p20-06]", "[d-p20-03]"])
+    assert lesson.source_span_ids == ("[d-p20-03]", "[d-p20-06]")
+
+
+def test_ten_khai_niem_la_tieu_de_trang():
+    lesson, _ = lesson_from_selection(DECK, ["[d-p20-03]"])
+    assert lesson.concept == "Giới hạn bẩm sinh: học giả trong bong bóng"
+
+
+def test_trang_khong_tieu_de_thi_lay_dau_o_dau_tien():
+    lesson, _ = lesson_from_selection(DECK, ["[d-p21-02]"])
+    assert lesson.concept.startswith("Model rất giỏi học vẹt")
+
+
+def test_ma_la_bi_bo_qua_ma_khong_lam_hong_phien():
+    lesson, _ = lesson_from_selection(DECK, ["[d-p20-03]", "[khong-ton-tai]"])
+    assert lesson.source_span_ids == ("[d-p20-03]",)
+
+
+def test_khong_con_o_nao_thi_bao_loi_chu_khong_cham_voi_nguon_rong():
+    with pytest.raises(ValueError):
+        lesson_from_selection(DECK, ["[khong-ton-tai]"])
+
+
+def test_kho_chua_ca_bo_slide_de_trich_dan_sang_o_ben_canh_van_tra_ra():
+    # Dự án chạy async bằng asyncio.run như các test khác, không kéo thêm plugin.
+    _, store = lesson_from_selection(DECK, ["[d-p20-03]"])
+    neighbour = asyncio.run(store.get("[d-p20-06]"))
+    assert "cỗ máy đoán token" in neighbour.text

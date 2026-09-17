@@ -229,3 +229,28 @@ def test_mic_chi_mo_sau_khi_agent_da_hoi_xong(client):
     assert order[-1] == "mic_open", order
     assert order.index("question") < order.index("mic_open")
     assert max(i for i, k in enumerate(order) if k == "audio") < order.index("mic_open")
+
+
+def test_phien_day_dung_vung_hoc_vien_chon_chu_khong_co_dinh_mot_trang(client, tmp_path, monkeypatch):
+    """Trước đây bài học nằm cố định trong file, nên cả sản phẩm chỉ giảng được
+    đúng một chỗ của slide 20 dù học viên đang xem trang nào."""
+    from app import main
+    from tests.test_selection import DECK
+
+    monkeypatch.setattr(main, "_current_deck", lambda: DECK)
+    with client.websocket_connect("/ws/session?spans=[d-p21-02]") as ws:
+        _opening(ws)
+        _one_turn(ws)
+
+    row = json.loads((tmp_path / "s.jsonl").read_text(encoding="utf-8").splitlines()[0])
+    assert row["source_span_id"] == "[d-p21-02]"
+
+
+def test_vung_chon_khong_con_khop_slide_thi_bao_ro_chu_khong_cham_nguon_rong(client, monkeypatch):
+    from app import main
+    from tests.test_selection import DECK
+
+    monkeypatch.setattr(main, "_current_deck", lambda: DECK)
+    with client.websocket_connect("/ws/session?spans=[khong-ton-tai]") as ws:
+        msg = ws.receive_json()
+    assert msg["type"] == "error"
