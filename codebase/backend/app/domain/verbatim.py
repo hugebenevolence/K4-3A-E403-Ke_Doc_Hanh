@@ -69,3 +69,26 @@ def is_verbatim_paste(student_text: str, source_text: str) -> bool:
     return (
         len(_words(student_text)) >= MIN_WORDS_FOR_RATIO and ratio >= OVERLAP_RATIO
     )
+
+
+ECHO_RUN_WORDS = 7
+"""Agent nhại lại liền mạch ngần này từ của học viên thì không còn là hỏi nữa.
+
+Đo trên 57 lượt của hai lần chạy golden set: câu hỏi ngược bình thường trùng
+dài nhất 5 từ (A02 nhắc lại "token là gì và tại sao" trước khi hỏi tiếp), còn
+lượt hỏng thì trùng 10 từ — chép nguyên câu học viên vừa nói. Ngưỡng 7 nằm
+giữa hai nhóm đó.
+"""
+
+
+def echoes_student(agent_text: str, student_text: str) -> bool:
+    """Câu hỏi ngược có đang chép lại chính lời học viên không.
+
+    Quan sát thật (O03): học viên đang giảng thì hỏi chen "link github bài của
+    trường đang bị đóng đúng không", và học trò hỏi lại đúng câu đó. Câu lạc đề
+    không phải lời giảng nên không có chỗ hổng nào để hỏi vào, model bí và nhại
+    lại — nghe như máy vọng tiếng, và tệ hơn là nó biến câu lạc đề thành chủ đề
+    của buổi học.
+    """
+    _, longest = verbatim_overlap(agent_text, student_text)
+    return longest >= ECHO_RUN_WORDS

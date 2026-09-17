@@ -20,6 +20,13 @@ from pydantic import BaseModel, Field
 class EvidenceOut(BaseModel):
     span_id: str
     quote: str = Field(description="Trích ngắn nguyên văn từ đoạn nguồn")
+    key: bool = Field(
+        description=(
+            "Ý CHÍNH (cơ chế chính của đoạn nguồn, thiếu là chưa hiểu phần này) "
+            "hay chi tiết phụ (con số ví dụ, tên riêng, nguồn trích dẫn)? "
+            "Thường chỉ 1–3 ý là chính."
+        )
+    )
     covered_by_student: bool = Field(
         description=(
             "Học viên đã nói tới ý này chưa. Diễn đạt khác chữ mà đúng bản chất "

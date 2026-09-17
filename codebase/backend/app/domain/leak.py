@@ -167,3 +167,48 @@ def confirms_answer(question: str) -> bool:
     Nội dung X thì vô số, nhưng lối hỏi thì chỉ có một, nên bắt theo lối hỏi.
     """
     return "có phải" in unicodedata.normalize("NFC", question).lower()
+
+
+# --- Học trò tuột khỏi vai, nhận làm người giảng ------------------------------
+
+_TEACHER_ROLE = (
+    "mình giải thích",
+    "mình giảng",
+    "mình trình bày",
+    "mình nói cho",
+    "bạn muốn mình",
+)
+"""Dấu hiệu agent đã đổi sang vai trợ lý: nhận giảng, hoặc hỏi học viên muốn
+mình làm gì.
+
+Prompt persona đã cấm sẵn ("đừng hỏi 'bạn muốn hỗ trợ chỗ nào'") mà vẫn trượt:
+đo trên 87 lượt của ba lần chạy golden set, 3 lượt dính — và cả 3 đều là case
+lớp ③ (học viên đòi đáp án hoặc đổi vai agent), 0 lượt trong 84 lượt còn lại.
+Đủ tách bạch để chặn bằng luật.
+"""
+
+
+def takes_teacher_role(text: str) -> bool:
+    """Agent có đang nhận vai người giảng không."""
+    lowered = unicodedata.normalize("NFC", text).lower()
+    return any(marker in lowered for marker in _TEACHER_ROLE)
+
+
+MIN_OFF_TOPIC_TERMS = 4
+"""Dưới ngần này từ nội dung thì là "mình chịu", không phải chuyện lạc đề.
+
+Đo được: các lượt học viên bỏ cuộc ("mình chịu", "mình vẫn không biết") có
+nhiều nhất 1 từ nội dung, còn câu hỏi chen lạc đề của O03 có 5. Hai nhóm này
+cần hai cách đáp khác nhau nên phải phân biệt được.
+"""
+
+
+def off_topic(student_text: str, source_text: str) -> bool:
+    """Học viên đang nói sang chuyện khác hẳn, không phải đang giảng.
+
+    Không trùng NỔI MỘT từ nội dung nào với đoạn nguồn thì không có chỗ hổng nào
+    để hỏi vào; để model tự viết câu hỏi lúc này là nó bám theo chuyện lạc đề
+    (O03: học viên hỏi link GitHub, học trò hỏi lại về link GitHub).
+    """
+    terms = content_terms(student_text)
+    return len(terms) >= MIN_OFF_TOPIC_TERMS and not (terms & content_terms(source_text))

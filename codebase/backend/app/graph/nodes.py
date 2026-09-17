@@ -15,11 +15,13 @@ from app.domain.leak import (
     leaked_terms,
     leaks_answer,
     looks_english,
+    off_topic,
     suggests_fix,
+    takes_teacher_role,
 )
 from app.domain.session import TeachBackSession, TurnState
 from app.domain.span import normalize_span_id
-from app.domain.verbatim import is_verbatim_paste, quotes_source
+from app.domain.verbatim import echoes_student, is_verbatim_paste, quotes_source
 from app.domain.verdict import Evidence, GradeResult, decide
 from app.graph.state import TeachBackState
 from app.ports.knowledge import SpanStore
@@ -29,7 +31,7 @@ from app.prompts.schemas import FollowupOutput, GradeOutput
 
 log = logging.getLogger(__name__)
 
-GRADER_VERSION = "v2"
+GRADER_VERSION = "v3"
 GRADER_CODE_VERSION = "v1"
 PERSONA_VERSION = "v2"
 OPENER_VERSION = "v2"
@@ -151,7 +153,7 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
         # xuống log/hồ sơ đều cùng một dạng dù model viết kiểu gì.
         known = {normalize_span_id(s.span_id): s.span_id for s in source}
         cited = tuple(
-            Evidence(known[key], e.quote, e.covered_by_student)
+            Evidence(known[key], e.quote, e.covered_by_student, e.key)
             for e in out.evidence
             if (key := normalize_span_id(e.span_id)) in known
         )
@@ -199,6 +201,29 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
         }
 
     return grade
+
+
+_OFF_TOPIC = (
+    "Cái đó mình chịu, mình chỉ theo được phần bạn đang giảng thôi. "
+    "Bạn quay lại phần đang mở, nói tiếp giúp mình nhé?"
+)
+"""Trả lời khi học viên hỏi chen một câu ngoài buổi giảng.
+
+Học trò không biết gì ngoài đoạn nguồn, nên nói thẳng là không biết rồi mời
+quay lại — chứ không đổi vai thành trợ lý kỹ thuật, và cũng không coi câu lạc
+đề là một lời giảng để chấm.
+"""
+
+
+_NOT_MY_JOB = (
+    "Mình mà biết thì mình đã không nhờ bạn giảng rồi. "
+    "Bạn kể mình nghe một ý bạn còn nhớ thôi cũng được."
+)
+"""Dùng khi học trò tuột vai, nhận sẽ giảng hoặc hỏi học viên muốn mình làm gì.
+
+Từ chối bằng chính lý do của vai chứ không bằng câu máy móc — mình không có đáp
+án để đưa — rồi mở một đường vào nhỏ để học viên nói tiếp.
+"""
 
 
 _REANCHORS = (
@@ -249,6 +274,20 @@ def _uncovered_text(state: TeachBackState, source) -> str:
 def make_followup_node(llm: LLMClient, spans: SpanStore):
     async def ask_followup(state: TeachBackState) -> TeachBackState:
         source = await spans.get_many(state["source_span_ids"])
+
+        # Câu lạc đề không có chỗ hổng nào để hỏi vào. Chặn TRƯỚC khi gọi model:
+        # để model tự viết lúc này là nó bám theo chuyện lạc đề và biến câu hỏi
+        # chen thành chủ đề buổi học — mà gọi thì vẫn mất tiền.
+        joined = " ".join(s.text for s in source)
+        if off_topic(state["student_text"], joined):
+            log.warning("Lượt này lạc đề, không hỏi ngược theo nó")
+            return {
+                "agent_says": _OFF_TOPIC,
+                "agent_understood": [],
+                "cites_span_id": None,
+                "asked_questions": [_OFF_TOPIC],
+                "turn_state": TurnState.STUDENT_RESPONDING.name,
+            }
 
         asked = state.get("asked_questions") or []
         history = (
@@ -334,6 +373,20 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
             ):
                 log.warning("Viết lại vẫn là câu xác nhận hoặc vẫn lộ, dùng câu hỏi neo lại")
                 out = FollowupOutput(question=_reanchor(state, heard=bool(first_heard)), understood=first_heard, cites_span_id=None)
+
+        # Câu lạc đề không có chỗ hổng nào để hỏi vào, nên model hay nhại lại
+        # nguyên câu học viên vừa nói. Bắt bằng độ trùng chuỗi, không hỏi thêm
+        # LLM: nhại lại thì trùng dài liền mạch, hỏi thật thì không.
+        if echoes_student(out.question, state["student_text"]):
+            log.warning("Câu hỏi ngược nhại lại lời học viên, chuyển sang câu ngoài phạm vi")
+            out = FollowupOutput(question=_OFF_TOPIC, understood=[], cites_span_id=None)
+
+        # Nhận vai người giảng là hỏng nặng hơn lộ một từ khoá: học viên hết
+        # lý do phải tự nói. Xét cả phần "mình hiểu là", vì câu tuột vai hay
+        # nằm ở đó ("Bạn muốn mình giải thích attention nhưng chưa nêu gì").
+        if takes_teacher_role(" ".join([out.question, *out.understood])):
+            log.warning("Học trò nhận vai người giảng, thay bằng câu từ chối đúng vai")
+            out = FollowupOutput(question=_NOT_MY_JOB, understood=[], cites_span_id=None)
 
         # Với bài code, lộ đáp án mang hình dạng khác: mách cách sửa. Phải bắt
         # riêng, vì phần code học viên chưa nói tới KHÔNG phải thứ cấm nhắc —

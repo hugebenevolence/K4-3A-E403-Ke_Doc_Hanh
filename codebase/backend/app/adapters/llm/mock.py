@@ -37,6 +37,7 @@ class MockLLM(LLMClient):
                     {
                         "span_id": span,
                         "quote": "ý cốt lõi giả lập",
+                        "key": True,
                         "covered_by_student": covered,
                     }
                     for span in spans

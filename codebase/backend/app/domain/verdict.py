@@ -29,6 +29,8 @@ class Evidence:
     span_id: str
     quote: str
     covered_by_student: bool
+    # Ý chính (cơ chế) hay chi tiết phụ (con số, tên riêng, nguồn trích dẫn).
+    key: bool = True
 
 
 @dataclass(frozen=True)
@@ -51,7 +53,13 @@ def decide(
     không bao giờ trả `sufficient` — viết ra chỗ hổng xong là đã tự cam kết
     "còn thiếu", kể cả khi chính nó ghi "không có chỗ thiếu lớn".
 
-    Thứ tự ưu tiên: nói trái nguồn > đọc lại nguyên văn > còn ý chưa chạm tới.
+    Thứ tự ưu tiên: nói trái nguồn > đọc lại nguyên văn > còn Ý CHÍNH chưa chạm tới.
+
+    Chỉ đòi các ý CHÍNH, không đòi mọi chi tiết trên slide. Đo trên lượt chạy
+    golden set đầu tiên (eval/results/): 6 trong 9 case học viên giảng đúng cơ
+    chế và tự lấy ví dụ vẫn bị chấm là thiếu, vì trên slide còn con số hoặc tên
+    riêng chưa được nhắc tới. Bắt đủ mọi chi tiết là bắt học thuộc slide, trái
+    với định nghĩa "đã giảng được" trong spec §7 (đúng cơ chế + ví dụ của mình).
     """
     if contradiction.strip():
         return Verdict.INCORRECT
@@ -59,6 +67,11 @@ def decide(
         # Không trích được ý nào từ nguồn nghĩa là chưa chấm được gì, không
         # phải là học viên đã nói đủ.
         return Verdict.INCOMPLETE
-    if verbatim or any(not e.covered_by_student for e in evidence):
+    if verbatim:
+        return Verdict.INCOMPLETE
+    # Model không đánh dấu ý chính nào thì coi như mọi ý đều chính — thà khắt
+    # khe còn hơn cho qua một lời giảng chưa tới.
+    main = [e for e in evidence if e.key] or list(evidence)
+    if any(not e.covered_by_student for e in main):
         return Verdict.INCOMPLETE
     return Verdict.SUFFICIENT
