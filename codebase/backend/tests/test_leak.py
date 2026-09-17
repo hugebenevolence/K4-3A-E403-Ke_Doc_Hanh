@@ -84,3 +84,47 @@ def test_cau_mo_bai_chep_vi_du_mau_ve_slide_khac_bi_bat():
     on_topic = "Mình chưa hình dung ra: đoán xong một chữ thì nối vào câu kiểu gì để đoán được chữ tiếp theo vậy bạn?"
     assert not about_source(off_topic, source)
     assert about_source(on_topic, source)
+
+
+# --- Bắn nhầm: đo được trên LLM thật ------------------------------------------
+
+
+def test_chu_tren_tieu_de_slide_khong_tinh_la_lo():
+    # Câu hỏi bị chặn vì "bước", "thành" — nằm ngay trên tiêu đề slide mà học
+    # viên đang nhìn. Nhắc lại chữ đang hiện trên màn hình không nói hộ gì cả.
+    title = "RLHF: ba bước uốn cỗ máy đoán token thành trợ lý biết nghe lời"
+    source = "Model viết nhiều câu trả lời; qua từng bước, câu ghi điểm cao thành mẫu để học"
+    question = "Sau các bước đó thì nó thành ra thế nào vậy bạn?"
+    assert leaks_answer(question, source, "người chấm cho điểm")
+    assert not leaks_answer(question, source, "người chấm cho điểm", visible=title)
+
+
+def test_tu_giao_tiep_cua_vai_hoc_tro_khong_tinh_la_lo():
+    # 3 trong 7 lần bắn đo được là do trùng "nói", "thể", "vậy", "rồi" — những
+    # chữ vai học trò nói suốt, không mang nội dung gì của đáp án.
+    source = "Chuyện sau đó nó không biết; có thể nói rồi vậy mà vẫn sai"
+    question = "Mình chưa hiểu, bạn nói rồi mà sao vậy, có thể kể thêm không?"
+    assert not leaks_answer(question, source, "")
+
+
+def test_lo_that_van_bi_bat():
+    source = "Đây không phải lỗi tạm thời, đó là bản chất của cỗ máy đoán token"
+    question = "Có phải đó là bản chất của cỗ máy đoán token không bạn?"
+    assert leaks_answer(question, source, "mô hình hay bịa")
+
+
+def test_cau_hoi_co_phai_khong_bi_bat():
+    from app.domain.leak import confirms_answer
+
+    # Đo được thật: đọc hộ đúng bước học viên còn thiếu dưới dạng câu hỏi.
+    assert confirms_answer("Có phải hệ thống sinh nhiều phương án trả lời cho cùng một câu hay không?")
+    assert not confirms_answer("Trước khi chấm điểm thì chuyện gì xảy ra vậy bạn?")
+
+
+def test_nhan_ra_chu_tieng_anh_theo_cau_truc_am_tiet():
+    from app.domain.leak import looks_english
+
+    for vi in ["cho", "sai", "tin", "người", "khuya", "giường", "quyết"]:
+        assert not looks_english(vi), vi
+    for en in ["JSON", "button", "model", "token", "reward"]:
+        assert looks_english(en), en
