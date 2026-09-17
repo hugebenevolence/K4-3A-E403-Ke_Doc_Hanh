@@ -12,7 +12,47 @@ cp .env.example .env          # USE_MOCKS=true nên chạy được ngay, không
 .venv/Scripts/uvicorn app.main:app --reload --port 8000
 
 # frontend — React + Vite, cần serve chứ không mở file (getUserMedia đòi localhost)
-cd codebase/frontend-react && npm install && npm run dev   # :5500
+cd codebase/frontend-react && npm install && npm run dev   # :5500, /api chuyển sang :8000
+```
+
+Các trang: `/` giới thiệu · `/login` · `/library` chọn bộ slide và trang · `/learn/:deck?page=N` không gian học.
+
+## Deploy cho thành viên thử
+
+Backend phục vụ luôn giao diện đã build (`frontend-react/dist`): một service, một
+địa chỉ. Mic chỉ chạy trên HTTPS (hoặc localhost), nên link gửi cho thành viên
+phải là HTTPS.
+
+**Cách nhanh nhất — chạy trên máy mình, mở tunnel.** Slide của khoá ở nguyên
+trên máy, không upload lên đâu; thành viên phải đăng nhập mới xem được.
+
+```bash
+cd codebase/frontend-react && npm install && npm run build
+
+# thêm vào codebase/backend/.env
+#   USE_MOCKS=false
+#   SLIDES_DIR=D:/.../brief/data/vlearn-pack/slides
+#   MEMBERS=an:matkhau-an,binh:matkhau-binh
+#   AUTH_SECRET=...   (lệnh tạo có trong .env.example)
+
+cd ../backend
+env -u OPENAI_API_KEY .venv/Scripts/uvicorn app.main:app --port 8000   # bỏ key hệ thống, dùng key trong .env
+cloudflared tunnel --url http://localhost:8000                          # terminal khác; in ra link https://…trycloudflare.com
+```
+
+Cần biết trước khi gửi link:
+
+- Máy phải bật suốt lúc mọi người thử; tắt terminal là link chết, mở lại tunnel là ra link mới.
+- Mỗi phiên tiêu credit thật (LLM + đọc thành tiếng). Không đặt `MEMBERS` thì ai có link cũng dùng được.
+- Speechmatics giới hạn số phiên nhận dạng giọng nói **đồng thời** — nhiều người cùng nói một lúc sẽ gặp lỗi "Concurrent Quota Exceeded". Hẹn nhau thử lệch giờ, hoặc bật chế độ im lặng và gõ chữ.
+- Tên hiển thị của từng bộ slide: `knowledge/decks.json` (gitignore), dạng `{"d1-slide-hackathon": {"title": "...", "subtitle": "..."}}`.
+
+**Docker — máy chủ của nhóm.** Image không chứa slide; mount lúc chạy, và đừng
+push image kèm dữ liệu lên registry công khai.
+
+```bash
+docker build -t giang-lai codebase
+docker run -p 8000:8000 --env-file codebase/backend/.env   -e SLIDES_DIR=/data/slides   -v "$PWD/brief/data/vlearn-pack/slides:/data/slides:ro"   -v "$PWD/knowledge:/app/knowledge:ro"   giang-lai
 ```
 
 ## Cấu trúc (ports & adapters)
@@ -107,7 +147,11 @@ khi sửa giao diện hoặc chạy test. Đặt `false` rồi điền key thì 
 | LLM | OpenAI theo bảng tier trên | `service_tier=priority` cho nhanh |
 | Nguồn | PDF slide, hoặc đoạn code | `adapters/knowledge/pdf.py` tách span kèm trang + bbox |
 
-## Giao thức WebSocket `/ws/session`
+## Giao thức WebSocket `/api/ws/session`
+
+Query: `deck` (mã bộ slide) · `spans` (mã các ô đã chọn, cách nhau dấu phẩy) ·
+`token` khi server bật đăng nhập — trình duyệt không gắn được header vào
+WebSocket. Token sai hoặc hết hạn: server gửi `{"type":"error"}` rồi đóng với mã `4401`.
 
 Client → server: binary frame = audio chunk · `{"type":"explanation_done"}` = chốt lượt.
 
