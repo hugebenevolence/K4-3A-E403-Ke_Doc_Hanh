@@ -1,55 +1,64 @@
 @import "tailwindcss";
 
-/* Bảng đơn sắc: trắng, đen, xám. Không màu thương hiệu, không màu nhấn.
-   Lý do: đây là công cụ để học viên tập trung vào nội dung bài và vào lời giải
-   thích của chính họ — mọi mảng màu đều tranh sự chú ý với việc đó. Chỗ duy
-   nhất được phép nổi là vùng nội dung agent đang bàn tới.
+/* Bố cục theo khuôn của Profound (thanh bên · hội thoại · khung tài liệu),
+   nhưng nền trắng và đơn sắc. Chỗ duy nhất được phép nổi là vùng slide agent
+   đang bàn tới — mọi mảng màu khác đều tranh chú ý với việc học viên đang làm.
 
-   Chỉ những lớp Tailwind không với tới được mới viết tay ở đây: decoration của
-   Monaco do editor tự chèn vào DOM, và overlay trên canvas PDF cần toạ độ tính
-   bằng JS. */
+   Style viết bằng Tailwind. File này chỉ giữ những gì Tailwind không với tới:
+   overlay vẽ bằng toạ độ JS trên canvas PDF, và keyframe. */
 
-/* Vùng code agent đang bàn tới. Nền nhạt để chữ vẫn đọc được — tô đậm quá thì
-   che mất chính thứ học viên cần nhìn. */
-.code-span {
-  background: rgba(0, 0, 0, 0.05);
-}
-.code-span.focused {
-  background: rgba(0, 0, 0, 0.11);
-}
-
-/* Vệt lề trái: thấy được vùng đang bàn cả khi đã cuộn ra xa. */
-.code-gutter {
-  width: 3px !important;
-  margin-left: 4px;
-  background: #a3a3a3;
-}
-.code-gutter.focused {
-  background: #171717;
+@theme {
+  /* Inter có đủ dấu tiếng Việt và cùng họ sans trung tính với ảnh tham chiếu.
+     Nạp từ gói npm chứ không từ Google Fonts: app dùng được cả khi mạng lớp
+     học chập chờn, và không gửi request nào ra ngoài lúc học. */
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Khung trên slide, toạ độ do JS tính từ bbox của PyMuPDF. */
 .mark {
   position: absolute;
-  border: 2px solid #a3a3a3;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.04);
+  border-radius: 6px;
+  border: 1.5px solid rgb(0 0 0 / 0.18);
+  background: rgb(0 0 0 / 0.025);
+  transition: border-color 0.3s, background-color 0.3s, box-shadow 0.3s;
 }
 .mark.focused {
   border-color: #171717;
-  background: rgba(0, 0, 0, 0.09);
-  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.07);
+  background: rgb(0 0 0 / 0.06);
+  box-shadow: 0 0 0 4px rgb(0 0 0 / 0.06);
+  animation: mark-arrive 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Khi học viên bấm "Mở" từ hội thoại: khung "đáp xuống" đúng chỗ, để mắt tìm
+   ra vùng đó ngay trên một slide dày chữ. */
+@keyframes mark-arrive {
+  0% { box-shadow: 0 0 0 18px rgb(0 0 0 / 0); transform: scale(1.03); }
+  45% { box-shadow: 0 0 0 8px rgb(0 0 0 / 0.1); }
+  100% { box-shadow: 0 0 0 4px rgb(0 0 0 / 0.06); transform: scale(1); }
 }
 
 /* Chế độ vùng đang dạy: làm mờ phần còn lại để học viên và agent cùng bàn về
-   đúng một chỗ. Slide dày chữ thì ý cốt lõi rất dễ trôi giữa thứ xung quanh. */
+   đúng một chỗ. */
 .spotlight canvas {
   filter: grayscale(1) contrast(0.8) opacity(0.45);
 }
 .spotlight .mark {
-  /* Khoét một "lỗ sáng": trong khung giữ nguyên, ngoài khung bị phủ. */
   background: transparent;
-  box-shadow: 0 0 0 9999px rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 0 9999px rgb(255 255 255 / 0.65);
+}
+
+/* Chữ lấp lánh lúc agent đang làm việc — kiểu "Working…" của ảnh tham chiếu.
+   Chuyển động nói "đang chạy" mà không cần thêm một vòng xoay nào. */
+.shimmer {
+  background: linear-gradient(90deg, #a3a3a3 0%, #a3a3a3 35%, #171717 50%, #a3a3a3 65%, #a3a3a3 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.8s linear infinite;
+}
+@keyframes shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -150% 0; }
 }
 
 /* Chỉ báo trạng thái: đứng yên khi rảnh, thở khi đang làm việc. Theo Apple HIG,
@@ -64,4 +73,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .pulse { animation: none !important; }
+  .mark.focused { animation: none; }
+  .shimmer { animation: none; color: #737373; background: none; }
 }

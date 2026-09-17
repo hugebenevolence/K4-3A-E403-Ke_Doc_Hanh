@@ -1,9 +1,8 @@
 // Toàn bộ vòng đời một phiên dạy-lại: WebSocket, mic, phát tiếng, trạng thái.
 //
-// Gom vào một hook vì mấy thứ này ràng buộc nhau chặt. Ví dụ luật mic: chỉ mở
-// khi backend cho phép VÀ audio agent đã phát xong — tách rời ra hai chỗ thì
-// sớm muộn mic sẽ bắt lại chính giọng agent qua loa, và STT nghe agent nói rồi
-// tưởng là học viên.
+// Gom vào một hook vì mấy thứ này ràng buộc nhau chặt. Ví dụ luật mic: chỉ thu
+// khi backend cho phép, audio agent đã phát xong, VÀ học viên đang nhấn để nói
+// — tách rời ra nhiều chỗ thì sớm muộn mic sẽ thu lúc agent đang nói.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createVad, feedVad, levelOf, resetVad } from "./vad";
@@ -14,36 +13,58 @@ const SAMPLE_RATE = 16000;
 /** Dự phòng khi server chưa kịp gửi ngưỡng của state hiện tại. */
 const DEFAULT_SILENCE_MS = 2000;
 
+/** Bước nào của graph là việc của vai nào — để hội thoại hiện ra được "ai vừa
+ *  làm gì", thay vì một hộp đen im lặng vài giây. */
+export const AGENT_OF_STEP = {
+  open: "Học trò AI",
+  grade: "Người đối chiếu",
+  ask_followup: "Học trò AI",
+  close_taught: "Học trò AI",
+  close_review: "Học trò AI",
+};
+
 export function useSession() {
   const [turnState, setTurnState] = useState(null);
   const [micOpen, setMicOpen] = useState(false);
   const [turns, setTurns] = useState([]);
   const [partial, setPartial] = useState("");
   const [activity, setActivity] = useState(null);
-  const [started, setStarted] = useState(false);
-  const [micReady, setMicReady] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [level, setLevel] = useState(0);
   const [ended, setEnded] = useState(null);
   const [error, setError] = useState("");
   const [micDenied, setMicDenied] = useState(false);
-  // Chế độ im lặng: 9–16h là giờ cao điểm dùng VLearn, tức đang ngồi trong lớp
-  // — không ai nói to vào máy được. Không có đường này thì sản phẩm chỉ dùng
-  // được ở nhà, mà ở nhà thì ít người học hơn hẳn.
+  const [started, setStarted] = useState(false);
+  const [micReady, setMicReady] = useState(false);
+  // Nhấn để nói, không tự bật mic: 9–16h là giờ dùng cao điểm, tức đang ngồi
+  // trong lớp. Mic tự thu là thu luôn giọng giảng viên và bạn bên cạnh.
+  const [talking, setTalking] = useState(false);
+  // Chế độ im lặng: không đụng tới mic, chỉ gõ chữ.
   const [silent, setSilent] = useState(false);
+  // Agent đang làm gì cho lượt hiện tại — để hiện "Đang đối chiếu… 3s" rồi
+  // chốt thành "Đã nghĩ trong 4s", như dòng "Worked for 9s" của ảnh tham chiếu.
+  const [thinking, setThinking] = useState(null);
 
   const ws = useRef(null);
   const audioCtx = useRef(null);
   const micStream = useRef(null);
   const queue = useRef([]);
   const player = useRef(null);
+  const thinkingRef = useRef(null);
 
   // Worklet và callback của nó sống ngoài vòng render nên không thấy được
   // state của React — mọi thứ chúng đọc phải đi qua ref.
   const recordingRef = useRef(false);
+  const holdRef = useRef(false);
   const silenceMsRef = useRef(DEFAULT_SILENCE_MS);
   const vad = useRef(createVad());
   const finishRef = useRef(() => {});
+
+  const beginThinking = useCallback((step, label) => {
+    const next = { startedAt: Date.now(), steps: step ? [{ step, label }] : [] };
+    thinkingRef.current = next;
+    setThinking(next);
+  }, []);
 
   // Hàm có tên để tự gọi lại được: nếu tham chiếu qua biến `playNext` bên
   // ngoài thì đó là đọc một binding đang khởi tạo dở.
@@ -58,17 +79,22 @@ export function useSession() {
     el.play().catch(next);
   }, []);
 
-  const send = useCallback((payload) => {
-    if (ws.current?.readyState !== WebSocket.OPEN) return;
-    ws.current.send(JSON.stringify(payload));
-    setMicOpen(false); // khoá ngay, khỏi gửi hai lần trước khi server trả lời
-    setTurnState(null);
-    setPartial("");
-  }, []);
+  const send = useCallback(
+    (payload) => {
+      if (ws.current?.readyState !== WebSocket.OPEN) return;
+      ws.current.send(JSON.stringify(payload));
+      setMicOpen(false); // khoá ngay, khỏi gửi hai lần trước khi server trả lời
+      setTurnState(null);
+      setPartial("");
+      setTalking(false);
+      setError("");
+      beginThinking(null);
+    },
+    [beginThinking],
+  );
 
   // VAD chạy trong callback của worklet, tức ngoài vòng render, nên nó không
-  // gọi thẳng `send` được (sẽ dính bản `send` của lần render nào đó). Cho nó
-  // gọi qua ref, ref luôn trỏ tới bản mới nhất.
+  // gọi thẳng `send` được (sẽ dính bản `send` của một lần render cũ).
   useEffect(() => {
     finishRef.current = () => send({ type: "explanation_done" });
   }, [send]);
@@ -83,17 +109,36 @@ export function useSession() {
       setActivity(null);
     } else if (msg.type === "activity") {
       setActivity(msg.label);
+      const cur = thinkingRef.current;
+      if (cur && cur.steps.at(-1)?.step !== msg.step) {
+        const next = { ...cur, steps: [...cur.steps, { step: msg.step, label: msg.label }] };
+        thinkingRef.current = next;
+        setThinking(next);
+      }
     } else if (msg.type === "partial") {
       setPartial(msg.text);
     } else if (msg.type === "transcript") {
       setPartial("");
-      setTurns((prev) => [...prev, msg]);
+      const cur = thinkingRef.current;
+      const agentDone = msg.role === "agent" && !msg.filler && cur;
+      setTurns((prev) => [
+        ...prev,
+        agentDone ? { ...msg, worked: { ms: Date.now() - cur.startedAt, steps: cur.steps } } : msg,
+      ]);
+      if (agentDone) {
+        thinkingRef.current = null;
+        setThinking(null);
+      }
     } else if (msg.type === "error") {
       setError(msg.message);
+      thinkingRef.current = null;
+      setThinking(null);
     } else if (msg.type === "session_end") {
       setTurnState(null);
       setMicOpen(false);
       setEnded(msg);
+      thinkingRef.current = null;
+      setThinking(null);
     }
   }, []);
 
@@ -129,9 +174,10 @@ export function useSession() {
       if (ws.current?.readyState === WebSocket.OPEN) ws.current.send(data.pcm);
 
       setLevel(levelOf(data.rms));
-      if (feedVad(vad.current, data.rms, performance.now(), silenceMsRef.current) === "end") {
-        finishRef.current();
-      }
+      const said = feedVad(vad.current, data.rms, performance.now(), silenceMsRef.current);
+      // Đang GIỮ phím thì học viên tự quyết lúc nào xong; ngập ngừng giữa
+      // chừng không được phép tự chốt hộ họ.
+      if (said === "end" && !holdRef.current) finishRef.current();
     };
     ctx.createMediaStreamSource(stream).connect(node);
     audioCtx.current = ctx;
@@ -152,6 +198,7 @@ export function useSession() {
     setEnded(null);
     setError("");
     setStarted(true);
+    beginThinking("open", "Soạn câu mở đầu");
 
     const socket = new WebSocket(`${API.replace("http", "ws")}/ws/session`);
     socket.binaryType = "blob";
@@ -166,21 +213,22 @@ export function useSession() {
     socket.onclose = () => {
       setTurnState(null);
       setMicOpen(false);
+      setTalking(false);
     };
     ws.current = socket;
-  }, [handle, playNext]);
+  }, [handle, playNext, beginThinking]);
 
   const myTurn = micOpen && !speaking;
 
-  // Đang thu hay không là thứ SUY RA được, không phải state riêng: nó đúng bằng
-  // "tới lượt mình, không ở chế độ im lặng, và mic đã sẵn sàng". Giữ thành
-  // state riêng thì sớm muộn sẽ có một nhánh quên cập nhật, và cái quên đó
-  // nghĩa là mic thu trong lúc agent đang nói.
-  const recording = myTurn && !silent && micReady;
+  // Đang thu hay không là thứ SUY RA được, không phải state riêng. Giữ thành
+  // state riêng thì sớm muộn có một nhánh quên cập nhật, và cái quên đó nghĩa
+  // là mic thu trong lúc agent đang nói.
+  const recording = myTurn && talking && !silent && micReady;
 
-  // Mở mic ngay khi vào phiên, rồi thôi — thay vì bắt bấm "Bật micro" mỗi lượt.
-  // Chạy cả khi học viên đang ở chế độ im lặng rồi giữa chừng mới tắt nó đi
-  // (ra khỏi lớp, về chỗ ngồi riêng); lúc đó mic còn chưa hề được mở.
+  // Xin quyền mic ngay khi vào phiên — cú bấm "Bắt đầu" là cử chỉ người dùng
+  // chắc chắn có. Xin muộn hơn thì hộp thoại của trình duyệt nhảy ra đúng lúc
+  // học viên vừa nhấn để nói. Mở mic KHÔNG có nghĩa là thu: chưa nhấn thì
+  // không byte nào được gửi đi.
   useEffect(() => {
     if (!started || silent || micReady) return;
     let cancelled = false;
@@ -192,17 +240,32 @@ export function useSession() {
     };
   }, [started, silent, micReady, openMic]);
 
-  // Giữ bản mới nhất cho callback của worklet đọc, và quên những gì nghe được
-  // ở lượt trước — không quên thì khoảng lặng cuối lượt trước bị tính tiếp vào
-  // lượt này và lượt mới chốt ngay khi vừa mở.
+  // Giữ bản mới nhất cho callback của worklet, và quên lượt trước — không quên
+  // thì khoảng lặng cuối lượt trước bị tính tiếp và lượt mới chốt ngay khi mở.
   useEffect(() => {
     recordingRef.current = recording;
     if (recording) resetVad(vad.current);
   }, [recording]);
 
+  const startTalking = useCallback(
+    ({ hold = false } = {}) => {
+      if (!myTurn || silent || !micReady) return false;
+      holdRef.current = hold;
+      setError("");
+      setTalking(true);
+      return true;
+    },
+    [myTurn, silent, micReady],
+  );
+
+  const stopTalking = useCallback(() => {
+    if (!talking) return;
+    holdRef.current = false;
+    send({ type: "explanation_done" });
+  }, [talking, send]);
+
   // Trả mic lại ngay khi phiên kết thúc, và khi rời trang. Thiếu chỗ này thì
-  // chấm ghi âm của trình duyệt vẫn sáng sau khi đã học xong — học viên có lý
-  // do để nghĩ là bị nghe lén, và họ đúng khi nghĩ vậy.
+  // chấm ghi âm của trình duyệt vẫn sáng sau khi đã học xong.
   useEffect(() => {
     if (!ended) return;
     const id = setTimeout(closeMic, 0);
@@ -214,17 +277,23 @@ export function useSession() {
     turns,
     partial,
     activity,
+    thinking,
     ended,
     error,
     speaking,
     recording,
+    talking,
     level,
     myTurn,
     silent,
+    micReady,
     micDenied,
-    connected: Boolean(turnState) || Boolean(ended),
+    started,
+    connected: Boolean(turnState) || Boolean(ended) || started,
     start,
     send,
+    startTalking,
+    stopTalking,
     setSilent,
     playerRef: player,
     onAudioEnded: playNext,

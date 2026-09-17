@@ -1,19 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import SlideView from "./SlideView";
-import TeachPanel from "./TeachPanel";
-import { Button, Eyebrow, LiveDot, Separator } from "./ui";
+// Khung ứng dụng: thanh bên · hội thoại · tài liệu nguồn — bố cục ba cột theo
+// ảnh tham chiếu, nền trắng.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Conversation from "./Conversation";
+import Sidebar from "./Sidebar";
+import SourcePanel from "./SourcePanel";
 import { API, useSession } from "./useSession";
 import "./styles.css";
 
-const ZOOM_STEPS = [0.75, 1, 1.25, 1.5, 2];
-
 export default function App() {
   const [lesson, setLesson] = useState(null);
+  const [outline, setOutline] = useState([]);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(0);
   const [zoomIndex, setZoomIndex] = useState(1);
-  const [focusedSpan, setFocusedSpan] = useState(null);
+  const [focus, setFocus] = useState({ id: null, n: 0 });
   const [spotlight, setSpotlight] = useState(false);
+  const spaceHeld = useRef(false);
 
   const session = useSession();
 
@@ -26,153 +29,95 @@ export default function App() {
         if (first) setPage(first);
       })
       .catch(() => setLesson({ concept: "(không kết nối được backend)", spans: [] }));
+    // Dàn ý chỉ để làm đẹp thanh bên: hỏng thì vẫn học được, chỉ mất tiêu đề.
+    fetch(`${API}/slides/outline`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setOutline)
+      .catch(() => {});
   }, []);
 
-  const spanById = useMemo(
-    () => new Map((lesson?.spans ?? []).map((s) => [s.span_id, s])),
+  const spanById = useMemo(() => new Map((lesson?.spans ?? []).map((s) => [s.span_id, s])), [lesson]);
+  const teachingPages = useMemo(
+    () => new Set((lesson?.spans ?? []).map((s) => s.page).filter(Boolean)),
     [lesson],
   );
   const sourcePage = useMemo(() => lesson?.spans.find((s) => s.page)?.page ?? 1, [lesson]);
 
-  const jump = useCallback((span) => {
+  const open = useCallback((span) => {
     if (span.page) setPage(span.page);
-    setFocusedSpan(span.span_id);
+    // Tăng bộ đếm để khung "đáp xuống" chạy lại cả khi mở lại đúng vùng cũ.
+    setFocus((f) => ({ id: span.span_id, n: f.n + 1 }));
   }, []);
 
   // Phím tắt. Bỏ qua khi con trỏ đang ở ô nhập chữ — lúc đó bàn phím thuộc về
   // người đang gõ, không phải về ứng dụng.
   useEffect(() => {
-    function onKey(e) {
-      const typing = ["TEXTAREA", "INPUT"].includes(document.activeElement?.tagName);
-      if (typing || e.repeat || e.ctrlKey || e.metaKey) return;
+    const typing = () => ["TEXTAREA", "INPUT"].includes(document.activeElement?.tagName);
 
+    function onDown(e) {
+      if (typing() || e.ctrlKey || e.metaKey) return;
       if (e.code === "Space") {
         e.preventDefault();
-        // Space là đường thoát bằng tay ở cả hai đầu: cắt lời agent khi đã hiểu
-        // rồi, và chốt lượt khi máy nghe chưa nhận ra là mình đã nói xong.
+        if (e.repeat) return;
+        // Space là nút "giữ để nói". Khi agent đang nói thì nó là nút cắt lời:
+        // đã hiểu câu hỏi rồi thì không phải ngồi nghe hết.
         if (session.speaking) return session.skipAudio();
-        if (session.recording) session.send({ type: "explanation_done" });
+        if (session.startTalking({ hold: true })) spaceHeld.current = true;
         return;
       }
+      if (e.repeat) return;
       if (e.code === "ArrowLeft") setPage((p) => Math.max(1, p - 1));
       if (e.code === "ArrowRight") setPage((p) => Math.min(pages || 1, p + 1));
       if (e.code === "KeyG") setPage(sourcePage);
       if (e.code === "KeyF") setSpotlight((s) => !s);
     }
-    addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
+
+    function onUp(e) {
+      if (e.code !== "Space" || !spaceHeld.current) return;
+      spaceHeld.current = false;
+      session.stopTalking();
+    }
+
+    addEventListener("keydown", onDown);
+    addEventListener("keyup", onUp);
+    return () => {
+      removeEventListener("keydown", onDown);
+      removeEventListener("keyup", onUp);
+    };
   }, [session, pages, sourcePage]);
 
   if (!lesson) {
-    return <p className="p-6 text-[13px] text-neutral-400">Đang tải…</p>;
+    return <p className="p-6 font-sans text-[13px] text-neutral-400">Đang tải…</p>;
   }
 
-  const [mode, label] = session.speaking
-    ? ["speaking", "Học trò AI đang nói"]
-    : session.recording
-      ? ["listening", "Đang nghe — ngừng nói là mình biết bạn xong"]
-      : session.activity
-        ? ["working", session.activity]
-        : session.myTurn
-          ? ["idle", "Tới lượt bạn"]
-          : session.connected
-            ? ["working", "Học trò AI đang nghĩ"]
-            : ["idle", "Chưa kết nối"];
-
   return (
-    <div
-      className={`flex h-screen flex-col bg-neutral-50 text-neutral-900 antialiased ${
-        spotlight ? "spotlight" : ""
-      }`}
-    >
-      <header className="flex shrink-0 items-center gap-6 border-b border-neutral-200 bg-white px-5 py-3">
-        <div>
-          <Eyebrow>AI &amp; LLM Foundation</Eyebrow>
-          <h1 className="m-0 text-[19px] font-semibold tracking-tight">{lesson.concept}</h1>
-        </div>
-        <LiveDot mode={mode} label={label} />
-      </header>
-
-      <div className="grid min-h-0 flex-1 grid-cols-[172px_minmax(0,1fr)_400px]">
-        <aside className="overflow-y-auto border-r border-neutral-200 bg-white p-4">
-          <div className="mb-2">
-            <Eyebrow>Slide</Eyebrow>
-          </div>
-          <ol className="m-0 list-none p-0 text-[13px]">
-            {Array.from({ length: pages }, (_, i) => {
-              const n = i + 1;
-              const taught = lesson.spans.some((s) => s.page === n);
-              return (
-                <li
-                  key={n}
-                  onClick={() => setPage(n)}
-                  className={`cursor-pointer rounded-lg px-2.5 py-1.5 ${
-                    n === page
-                      ? "bg-neutral-900 text-white"
-                      : "text-neutral-600 hover:bg-neutral-100"
-                  }`}
-                >
-                  Slide {n}
-                  {taught && (
-                    <span className={n === page ? "text-neutral-300" : "text-neutral-400"}>
-                      {" "}
-                      · đang dạy
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        </aside>
-
-        <main className="flex min-w-0 flex-col gap-3 p-4">
-          <div className="flex shrink-0 items-center gap-2 overflow-x-auto rounded-xl border border-neutral-200 bg-white px-2 py-1.5">
-            <Button onClick={() => setPage((p) => Math.max(1, p - 1))}>Trước</Button>
-            <span className="whitespace-nowrap text-[13px] text-neutral-600">
-              Slide <b>{page}</b> / {pages || "–"}
-            </span>
-            <Button onClick={() => setPage((p) => Math.min(pages || 1, p + 1))}>Sau</Button>
-            <Separator />
-            <Button onClick={() => setZoomIndex((z) => Math.max(0, z - 1))}>Thu nhỏ</Button>
-            <span className="whitespace-nowrap text-[13px] text-neutral-600">
-              {Math.round(ZOOM_STEPS[zoomIndex] * 100)}%
-            </span>
-            <Button onClick={() => setZoomIndex((z) => Math.min(ZOOM_STEPS.length - 1, z + 1))}>
-              Phóng to
-            </Button>
-            <Separator />
-            <Button pressed={spotlight} onClick={() => setSpotlight((s) => !s)}>
-              Vùng đang dạy
-            </Button>
-            <Button variant="quiet" className="ml-auto" onClick={() => setPage(sourcePage)}>
-              Về trang đang dạy
-            </Button>
-          </div>
-
-          {lesson.has_slides ? (
-            <SlideView
-              url={`${API}/slides.pdf`}
-              spans={lesson.spans}
-              page={page}
-              zoom={ZOOM_STEPS[zoomIndex]}
-              focusedSpan={focusedSpan}
-              onPages={setPages}
-            />
-          ) : (
-            <p className="text-[13px] text-neutral-400">
-              Chưa cấu hình slide (SLIDES_PDF trong .env)
-            </p>
-          )}
-        </main>
-
-        <TeachPanel session={session} spanById={spanById} onJump={jump} />
-      </div>
-
-      <audio
-        ref={session.playerRef}
-        onEnded={session.onAudioEnded}
-        onError={session.onAudioEnded}
+    <div className="grid h-screen grid-cols-[240px_minmax(380px,460px)_minmax(0,1fr)] bg-white font-sans text-neutral-900 antialiased">
+      <Sidebar
+        outline={outline}
+        pages={pages}
+        page={page}
+        teachingPages={teachingPages}
+        onPage={setPage}
       />
+      <Conversation session={session} lesson={lesson} spanById={spanById} onOpen={open} />
+      <SourcePanel
+        lesson={lesson}
+        outline={outline}
+        page={page}
+        pages={pages}
+        setPage={setPage}
+        zoomIndex={zoomIndex}
+        setZoomIndex={setZoomIndex}
+        spotlight={spotlight}
+        setSpotlight={setSpotlight}
+        focusedSpan={focus.id}
+        focusKey={focus.n}
+        teachingPages={teachingPages}
+        sourcePage={sourcePage}
+        onPages={setPages}
+      />
+
+      <audio ref={session.playerRef} onEnded={session.onAudioEnded} onError={session.onAudioEnded} />
     </div>
   );
 }
