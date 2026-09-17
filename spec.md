@@ -102,10 +102,10 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
     - tiến độ "đã giảng" lưu trên trình duyệt;
     - transcript bài giảng **chưa** dùng làm nguồn chấm (hiện chỉ slide);
     - nhãn "ngoài tài liệu" (§6) chưa có trong bản build.
-- **Automation: Conditional.** AI tự quyết hỏi tiếp hay đóng phiên khi vùng slide có căn cứ. Khi không đủ căn cứ thì không chấm: vùng chọn quá mỏng thì mở rộng ra cả trang, phần giảng ngoài slide thì không tính. Hết 3 câu hỏi ngược thì trả việc lại cho học viên bằng cách chỉ vị trí cần đọc.
+- **Automation: Conditional.** AI tự quyết hỏi tiếp hay đóng phiên khi vùng slide có căn cứ. Khi không đủ căn cứ thì không chấm: vùng chọn quá mỏng thì mở rộng ra cả trang, cả trang chỉ có tiêu đề thì từ chối mở phiên, phần giảng ngoài slide thì không tính. Hết 3 câu hỏi ngược thì trả việc lại cho học viên bằng cách chỉ vị trí cần đọc.
 
   Lý do theo cost-of-error:
-  - **Chấm nhầm "đủ" thì đắt.** Học viên tin mình đã hiểu và mang kiến thức sai đi tiếp, không ai phát hiện. Vì vậy bộ chấm thiên về "thiếu": đọc nguyên văn slide bị hạ xuống INCOMPLETE bằng so khớp chuỗi, và mọi thiếu sót được liệt kê trước khi ra nhãn.
+  - **Chấm nhầm "đủ" thì đắt.** Học viên tin mình đã hiểu và mang kiến thức sai đi tiếp, không ai phát hiện. Vì vậy bộ chấm thiên về "thiếu", bằng ba sàn tất định chứ không bằng lời dặn trong prompt: đọc nguyên văn slide bị hạ xuống INCOMPLETE bằng so khớp chuỗi; cả buổi nói chưa tới 20 từ thì không thể ra "đủ" (đo: mọi lượt đạt thật đều từ 27 từ trở lên, mọi lượt cho qua oan đều dưới 17); và mâu thuẫn được hỏi theo TỪNG Ý — trái một ý chính là INCORRECT, trái một chi tiết phụ là INCOMPLETE — vì một ô văn xuôi chung hỏi "có mâu thuẫn nào không" bắn hụt đều đặn. Mọi thiếu sót vẫn được liệt kê trước khi ra nhãn.
   - **Chấm nhầm "thiếu" thì rẻ.** Học viên chỉ bị hỏi thêm một câu và luôn thoát được ("Chọn phần khác").
   - Nhãn không bao giờ thành điểm số, nên không có gì đắt tới mức phải cần người duyệt từng lượt.
 
@@ -118,7 +118,7 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
   | Nguyên tắc | Áp cụ thể vào đâu trong prototype |
   |---|---|
   | **G1** Làm rõ hệ thống làm được gì | Màn hình "Bắt đầu giảng" nói rõ slide nào, bao nhiêu phần đã chọn, hay cả trang (`Conversation.jsx` › `Ready`). Thanh tiến trình Chọn · Giảng · Trả lời · Xem lại luôn trên đầu hội thoại. Trang chủ: "AI đặt câu hỏi. Bạn tìm ra câu trả lời." |
-  | **G10** Thu hẹp phạm vi khi nghi ngờ | Vùng chọn dưới 12 chữ tự mở rộng ra cả trang và báo trước "Vùng chọn quá ngắn, sẽ giảng cả trang" (`Learn.jsx` › `MIN_TEACH_WORDS`). Hết `MAX_FOLLOWUPS = 3` thì đóng phiên chỉ vị trí cần xem lại, không giảng hộ (`close_review`). Câu mở bài hỏi lạc sang slide khác thì bị guard `about_source` chặn. |
+  | **G10** Thu hẹp phạm vi khi nghi ngờ | Vùng chọn dưới 24 chữ (đã trừ ô tiêu đề trang) tự mở rộng ra cả trang và báo trước "Vùng chọn quá ngắn, sẽ giảng cả trang"; cả trang vẫn không đủ chữ — trang bìa, trang phân mục — thì **không mở phiên**, báo "Trang này chỉ có tiêu đề" (`domain/substance.py` › `MIN_SOURCE_WORDS`, `Learn.jsx`). Hết `MAX_FOLLOWUPS = 3` thì đóng phiên chỉ vị trí cần xem lại, không giảng hộ (`close_review`). Câu mở bài hỏi lạc sang slide khác thì bị guard `about_source` chặn. |
   | **G11** Giải thích vì sao | Trước mỗi câu hỏi ngược, học trò liệt kê "Mình hiểu là…" các ý đã nghe được, để học viên thấy phần nào đã ổn và câu hỏi nhắm vào phần còn lại. Thẻ "Chỗ học trò đang hỏi · Slide N · Xem" nhảy tới đúng vùng trên slide (`SourceCard`). |
   | **G9** Sửa dễ dàng | Chữ nhận dạng giọng nói hiện ngay trong lúc nói, sai thì nói lại hoặc gõ. "Giảng lại" che lại đúng vùng và mở phiên mới. Bấm vào vùng che để xem lại. |
   | **G8** Gạt bỏ dễ dàng | Space hoặc "Bỏ qua" cắt giọng đọc của học trò. "Chọn phần khác" thoát phiên bất cứ lúc nào. "Che lại" / "Xem phần đang giảng" bật tắt tự do. |
