@@ -48,17 +48,21 @@ def _unwrap_json_envelope(text: str) -> str:
     return text
 
 
-# Hai từ HOA liền nhau trở lên, mỗi từ từ 4 chữ cái: "REWARD MODEL",
-# "ARTIFICIAL INTELLIGENCE". Viết tắt ngắn (LLM, AI, RLHF) không lọt vào vì
-# ngắn hơn, hoặc vì đứng một mình.
-_SHOUTING = re.compile(r"\b[A-Z]{4,}(?:[ \-][A-Z]{4,})+\b")
+# Chữ HOA từ 4 ký tự: "REWARD", "MODEL", "GENERATIVE". Viết tắt thật thì không
+# đọc thành tiếng được (RLHF, JSON — tối đa một nguyên âm) nên giữ nguyên.
+_CAPS_WORD = re.compile(r"\b[A-Z]{4,}\b")
+
+
+def _readable(word: str) -> bool:
+    return sum(c in "AEIOUY" for c in word) >= 2
 
 
 def tame_shouting(text: str) -> str:
-    """Hạ chữ HOA của cả cụm tiếng Anh về chữ thường.
+    """Hạ chữ HOA của từ tiếng Anh thường về chữ thường, giữ chữ viết tắt.
 
-    Model chép nguyên cách viết của slide ("REWARD MODEL") vào câu nói, đọc lên
-    như đang quát, và trái với văn phong đã quy định. Prompt dặn rồi mà vẫn
-    lọt, nên chặn thêm bằng luật.
+    Model chép nguyên cách viết của slide ("REWARD MODEL", "GENERATIVE AI") vào
+    câu nói, đọc lên như đang quát, và trái với văn phong đã quy định. Bản đầu
+    chỉ bắt cụm hai từ HOA dài liền nhau nên lọt "GENERATIVE AI" (chữ đi kèm chỉ
+    có 2 ký tự); giờ xét từng chữ.
     """
-    return _SHOUTING.sub(lambda m: m.group(0).lower(), text)
+    return _CAPS_WORD.sub(lambda m: m.group(0).lower() if _readable(m.group(0)) else m.group(0), text)
