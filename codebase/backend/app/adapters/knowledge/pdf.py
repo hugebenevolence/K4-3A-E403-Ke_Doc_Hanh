@@ -251,8 +251,12 @@ def _titles_of(pages, heights) -> dict[int, str]:
     return titles
 
 
-def _slug(path: Path) -> str:
+def deck_slug(path: Path) -> str:
+    """Mã của bộ slide, lấy từ tên file — cũng là tiền tố của mọi mã ô trong bộ."""
     return re.sub(r"[^a-z0-9]+", "-", path.stem.lower()).strip("-")
+
+
+_slug = deck_slug
 
 
 def load_deck(path: Path, *, min_words: int = 4) -> Deck:

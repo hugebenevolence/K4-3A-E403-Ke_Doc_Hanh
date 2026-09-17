@@ -12,18 +12,34 @@ import uuid
 from functools import lru_cache
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import BaseModel
 
 from app.adapters.knowledge.local import load_lesson
-from app.adapters.knowledge.pdf import Deck, attach_descriptions, load_deck
+from app.adapters.knowledge.pdf import Deck, attach_descriptions, deck_slug, load_deck
 from app.adapters.knowledge.selection import lesson_from_selection
 from app.adapters.llm.mock import MockLLM
 from app.adapters.store.jsonl import JsonlSessionLog, JsonProfileStore
 from app.adapters.stt.mock import MockSTT
 from app.adapters.tts.mock import MockTTS
+from app.api.auth import (
+    check_password,
+    issue_token,
+    make_secret,
+    parse_members,
+    verify_token,
+)
 from app.api.live_turn import LiveTurn
 from app.api.pronunciations import PronunciationCache
 from app.api.session import TALKER_VERSION, run_turn
@@ -51,11 +67,11 @@ app = FastAPI(title="Ke Doc Hanh — Track D3 teach-back")
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
-def _build_deps(selection: list[str] | None = None) -> tuple[
+def _build_deps(selection: list[str] | None = None, deck: str | None = None) -> tuple[
     Lesson, SpanStore, LLMClient, SpeechToText, TextToSpeech, SessionLog, ProfileStore
 ]:
     # Gọi mỗi lần mở kết nối. Với mock thì không sao, nhưng khi viết adapter
@@ -64,7 +80,7 @@ def _build_deps(selection: list[str] | None = None) -> tuple[
     session_log = JsonlSessionLog(settings.session_log_file)
     profiles = JsonProfileStore(settings.profile_file)
 
-    lesson, spans = _lesson(selection)
+    lesson, spans = _lesson(selection, deck)
     if settings.use_mocks:
         return lesson, spans, MockLLM(), MockSTT(), MockTTS(), session_log, profiles
 
@@ -72,27 +88,39 @@ def _build_deps(selection: list[str] | None = None) -> tuple[
     return lesson, spans, llm, _speech_to_text(lesson), tts, session_log, profiles
 
 
-def _lesson(selection: list[str] | None):
+def _lesson(selection: list[str] | None, deck: str | None = None):
     """Bài học của phiên này.
 
     Học viên đã kéo chọn vùng trên slide thì dựng bài từ đúng vùng đó. Chưa
     chọn gì (hoặc không có slide, như khi chạy test) thì rơi về file bài học —
     đường đó giữ nguyên để repo vẫn chạy được ngay khi mới clone.
     """
-    deck = _current_deck()
-    if selection and deck is not None:
-        return lesson_from_selection(deck, selection)
+    found = _find_deck(deck)
+    if selection and found is not None:
+        return lesson_from_selection(found, selection)
     return load_lesson(_lesson_file())
 
 
-def _current_deck() -> Deck | None:
-    path = settings.slides_pdf
-    if not path or not path.is_file():
-        return None
-    return _deck(str(path), path.stat().st_mtime)
+def _deck_paths() -> dict[str, Path]:
+    """Mọi bộ slide đang cấu hình, theo mã bộ."""
+    paths: list[Path] = []
+    if settings.slides_dir and settings.slides_dir.is_dir():
+        paths += sorted(settings.slides_dir.glob("*.pdf"))
+    if settings.slides_pdf and settings.slides_pdf.is_file():
+        paths.append(settings.slides_pdf)
+    return {deck_slug(path): path for path in paths}
 
 
-@lru_cache(maxsize=4)
+def _find_deck(slug: str | None) -> Deck | None:
+    """Bộ slide theo mã; không nói mã mà chỉ có đúng một bộ thì lấy bộ đó."""
+    paths = _deck_paths()
+    if slug is None and len(paths) == 1:
+        slug = next(iter(paths))
+    path = paths.get(slug or "")
+    return _deck(str(path), path.stat().st_mtime) if path else None
+
+
+@lru_cache(maxsize=8)
 def _deck(path: str, mtime: float) -> Deck:
     # Đọc cả bộ slide mất vài giây; cache theo thời điểm sửa file để thay slide
     # là tự đọc lại, không phải khởi động lại server.
@@ -162,75 +190,124 @@ def _shared_providers() -> tuple[LLMClient, TextToSpeech]:
     return OpenAILLM(), OpenAITTS()
 
 
-@app.get("/lesson")
-async def lesson_info():
-    """Frontend hỏi bài học đang chạy để hiện lên màn hình, thay vì chép cứng."""
+api = APIRouter(prefix="/api")
+
+
+@lru_cache(maxsize=1)
+def _auth_secret() -> str:
+    return settings.auth_secret or make_secret()
+
+
+def _members() -> dict[str, str]:
+    return parse_members(settings.members)
+
+
+def require_member(authorization: str | None = Header(default=None)) -> str:
+    """Tên thành viên đang gọi. Không cấu hình MEMBERS thì bỏ qua đăng nhập."""
+    if not _members():
+        return "demo"
+    token = (authorization or "").removeprefix("Bearer ").strip()
+    name = verify_token(token, _auth_secret()) if token else None
+    if name is None or name not in _members():
+        raise HTTPException(401, "Cần đăng nhập")
+    return name
+
+
+class LoginBody(BaseModel):
+    username: str
+    password: str
+
+
+@api.post("/auth/login")
+async def login(body: LoginBody):
+    members = _members()
+    if not members:
+        return {"token": "", "name": "demo", "auth": False}
+    name = body.username.strip()
+    if not check_password(members, name, body.password):
+        raise HTTPException(401, "Sai tên đăng nhập hoặc mật khẩu")
+    return {"token": issue_token(name, _auth_secret()), "name": name, "auth": True}
+
+
+@api.get("/me")
+async def me(member: str = Depends(require_member)):
+    return {"name": member, "auth": bool(_members())}
+
+
+@api.get("/health")
+async def health():
+    return {"status": "ok", "mocks": settings.use_mocks}
+
+
+@api.get("/lesson")
+async def lesson_info(member: str = Depends(require_member)):
+    """Bài học mặc định (khi chưa chọn vùng) — giữ cho đường chạy không có slide."""
     lesson, store, *_ = _build_deps()
     spans = await store.get_many(lesson.source_span_ids)
     return {
         "concept": lesson.concept,
         "kind": lesson.kind,
-        "code": lesson.code,
-        "language": lesson.language,
-        "has_slides": lesson.kind == "slide"
-        and bool(settings.slides_pdf and settings.slides_pdf.is_file()),
-        # bbox theo hệ PyMuPDF (gốc trên-trái). Frontend phải đổi sang hệ của
-        # PDF.js trước khi vẽ — xem ghi chú trong js/slides.js.
+        "has_slides": bool(_deck_paths()),
         "spans": [
-            {
-                "span_id": s.span_id,
-                "page": s.page,
-                "bbox": list(s.bbox) if s.bbox else None,
-                "lines": list(s.lines) if s.lines else None,
-                # Nội dung thật để client hiện lại nguyên văn khi đối chiếu —
-                # học viên thấy được agent đang dựa vào đúng chữ nào trên slide.
-                "text": s.text,
-            }
+            {"span_id": s.span_id, "page": s.page, "bbox": list(s.bbox) if s.bbox else None, "text": s.text}
             for s in spans
         ],
     }
 
 
-@app.get("/health")
-async def health():
-    return {"status": "ok", "mocks": settings.use_mocks}
-
-
-@app.get("/slides.pdf")
-async def slides():
-    """Phục vụ chính file slide của bài đang học, để frontend render bằng PDF.js.
-
-    Học viên nhìn slide và dạy lại ngay tại đó — đúng bối cảnh dùng thật trên
-    VLearn, thay vì một khung chat rời rạc không biết đang nói về cái gì.
-    """
-    path = settings.slides_pdf
-    if not path or not path.is_file():
-        raise HTTPException(404, "Chưa cấu hình SLIDES_PDF trong .env")
-    return FileResponse(path, media_type="application/pdf")
-
-
-def _require_deck() -> Deck:
-    deck = _current_deck()
+def _deck_or_404(slug: str) -> Deck:
+    deck = _find_deck(slug)
     if deck is None:
-        raise HTTPException(404, "Chưa cấu hình SLIDES_PDF trong .env")
+        raise HTTPException(404, f"Không có bộ slide {slug}")
     return deck
 
 
-@app.get("/slides/outline")
-async def slides_outline():
+@api.get("/decks")
+async def decks(member: str = Depends(require_member)):
+    """Thư viện: các bộ slide chọn được để học."""
+    try:
+        names = json.loads(settings.decks_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        names = {}
+    out = []
+    for slug in _deck_paths():
+        deck = _deck_or_404(slug)
+        meta = names.get(slug, {})
+        out.append(
+            {
+                "slug": slug,
+                "title": meta.get("title") or deck.titles.get(1) or slug,
+                "subtitle": meta.get("subtitle", ""),
+                "pages": deck.pages,
+                "figures": sum(1 for s in deck.spans if s.kind == "figure"),
+            }
+        )
+    return out
+
+
+@api.get("/decks/{slug}/pdf")
+async def deck_pdf(slug: str, member: str = Depends(require_member)):
+    path = _deck_paths().get(slug)
+    if not path:
+        raise HTTPException(404, f"Không có bộ slide {slug}")
+    return FileResponse(path, media_type="application/pdf")
+
+
+@api.get("/decks/{slug}/outline")
+async def deck_outline(slug: str, member: str = Depends(require_member)):
     """Tiêu đề từng trang slide cho thanh bên."""
-    deck = _require_deck()
+    deck = _deck_or_404(slug)
     return [{"page": n, "title": deck.titles.get(n, "")} for n in range(1, deck.pages + 1)]
 
 
-@app.get("/slides/blocks")
-async def slides_blocks():
+@api.get("/decks/{slug}/blocks")
+async def deck_blocks(slug: str, member: str = Depends(require_member)):
     """Mọi ô nội dung của bộ slide kèm toạ độ, để học viên kéo khung chọn.
 
     Frontend tự tính ô nào nằm trong khung để hiện ngay khi đang kéo, không phải
     hỏi server mỗi lần rê chuột. Server vẫn kiểm lại mã ô lúc bắt đầu phiên.
     """
-    deck = _require_deck()
+    deck = _deck_or_404(slug)
     return [
         {"span_id": s.span_id, "page": s.page, "bbox": list(s.bbox), "text": s.text, "kind": s.kind}
         for s in deck.spans
@@ -238,7 +315,7 @@ async def slides_blocks():
     ]
 
 
-@app.websocket("/ws/session")
+@api.websocket("/ws/session")
 async def teach_back_session(ws: WebSocket):
     """Một phiên = một học viên dạy lại một khái niệm.
 
@@ -247,10 +324,22 @@ async def teach_back_session(ws: WebSocket):
     nếu không mic sẽ bắt lại chính giọng agent qua loa.
     """
     await ws.accept()
+    # Trình duyệt không gắn được header vào WebSocket, nên token đi qua query.
+    member: str | None = "demo"
+    if _members():
+        member = verify_token(ws.query_params.get("token") or "", _auth_secret())
+        if member not in _members():
+            await ws.send_json(
+                {"type": "error", "message": "Phiên đăng nhập đã hết hạn — bạn đăng nhập lại nhé."}
+            )
+            await ws.close(code=4401)
+            return
     # Vùng học viên đã chọn trên slide, gửi kèm lúc mở kết nối.
     selection = [sid for sid in (ws.query_params.get("spans") or "").split(",") if sid]
     try:
-        lesson, spans, llm, stt, tts, session_log, profiles = _build_deps(selection)
+        lesson, spans, llm, stt, tts, session_log, profiles = _build_deps(
+            selection, ws.query_params.get("deck")
+        )
     except ValueError:
         await ws.send_json(
             {"type": "error", "message": "Vùng đã chọn không còn khớp với slide — bạn chọn lại nhé."}
@@ -275,7 +364,9 @@ async def teach_back_session(ws: WebSocket):
     session_id = str(uuid.uuid4())
     # Hồ sơ theo học viên chứ không theo phiên — đó là điểm của trí nhớ xuyên
     # buổi. Không có student_id thì mọi người dùng chung một hồ sơ và nó vô nghĩa.
-    student_id = ws.query_params.get("student_id", "demo")
+    # Đã đăng nhập thì hồ sơ theo tên thành viên — mỗi người một trí nhớ riêng,
+    # dù học trên máy nào.
+    student_id = member if _members() else ws.query_params.get("student_id", "demo")
     profile = await profiles.load(student_id)
 
     live: LiveTurn | None = None
@@ -525,3 +616,29 @@ async def _log_turn(
     )
     return grade
 
+
+
+def _mount_frontend(dist: Path) -> None:
+    """Phục vụ giao diện đã build ngay từ backend: deploy một service là đủ.
+
+    Đường dẫn nào không phải file có thật thì trả index.html — để tải lại trang
+    ở /learn/... hay /login vẫn vào đúng trang thay vì báo 404.
+    """
+    index = dist / "index.html"
+    if not index.is_file():
+        return
+    root = dist.resolve()
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def frontend(path: str):
+        if path.startswith("api/"):
+            raise HTTPException(404)
+        target = (dist / path).resolve()
+        # Chặn "../" thoát ra ngoài thư mục build.
+        if path and target.is_file() and root in target.parents:
+            return FileResponse(target)
+        return FileResponse(index)
+
+
+app.include_router(api)
+_mount_frontend(settings.frontend_dist)

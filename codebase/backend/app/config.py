@@ -60,6 +60,22 @@ class Settings(BaseSettings):
 
     # File slide để frontend render. Nằm ngoài repo vì thuộc data pack.
     slides_pdf: Path | None = None
+    # Thư mục chứa nhiều bộ slide (*.pdf) — mỗi file là một bài học chọn được ở
+    # trang thư viện. Cả hai cách cấu hình đều nhận; trùng file thì tính một.
+    slides_dir: Path | None = None
+    # Tên hiển thị cho từng bộ slide: {"<slug>": {"title": ..., "subtitle": ...}}.
+    # Thiếu thì lấy tiêu đề trang đầu của bộ slide.
+    decks_file: Path = REPO_ROOT / "knowledge" / "decks.json"
+
+    # Đăng nhập cho bản thử nghiệm nội bộ — xem app/api/auth.py.
+    # MEMBERS="an:matkhau1,binh:matkhau2". Để trống = tắt đăng nhập (máy cá nhân, test).
+    members: str = ""
+    # Khoá ký token. Để trống thì sinh ngẫu nhiên mỗi lần khởi động (token cũ mất hiệu lực).
+    auth_secret: str = ""
+
+    # Bản build của frontend. Có thư mục này thì backend phục vụ luôn giao diện,
+    # deploy chỉ cần MỘT service — không phải lo CORS hay hai tên miền.
+    frontend_dist: Path = REPO_ROOT / "codebase" / "frontend-react" / "dist"
     session_log_file: Path = BACKEND_DIR / "var" / "sessions.jsonl"
     pronunciation_file: Path = BACKEND_DIR / "var" / "sounds_like.json"
 
