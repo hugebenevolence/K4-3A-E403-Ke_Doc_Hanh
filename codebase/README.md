@@ -11,8 +11,8 @@ cp .env.example .env          # USE_MOCKS=true nên chạy được ngay, không
 .venv/Scripts/python -m pytest tests/ -q
 .venv/Scripts/uvicorn app.main:app --reload --port 8000
 
-# frontend — cần serve chứ không mở file trực tiếp (getUserMedia đòi localhost)
-python -m http.server 5500 --directory codebase/frontend
+# frontend — React + Vite, cần serve chứ không mở file (getUserMedia đòi localhost)
+cd codebase/frontend-react && npm install && npm run dev   # :5500
 ```
 
 ## Cấu trúc (ports & adapters)
@@ -97,12 +97,15 @@ gần như không tốn thêm tiền vì phần cố định được tính 10% 
 
 ## Mock vs thật
 
-| Phần | Trạng thái | Kế hoạch |
+`USE_MOCKS=true` (mặc định) chạy được cả luồng mà không tốn credit — hữu ích
+khi sửa giao diện hoặc chạy test. Đặt `false` rồi điền key thì dùng bản thật.
+
+| Phần | Bản thật | Ghi chú |
 |---|---|---|
-| STT | mock | Speechmatics (realtime, partial <500ms, có tiếng Việt, $100 credit) |
-| TTS | mock | FPT.AI (giọng Việt bản địa, có accent vùng miền) |
-| LLM chấm | mock | OpenAI theo bảng tier ở trên |
-| Nguồn grounding | span demo rỗng | `knowledge/spans.json` — xem `knowledge/README.md` |
+| STT | Speechmatics realtime | WS, PCM16 16kHz, có partial nên chữ hiện lúc đang nói |
+| TTS | OpenAI `gpt-4o-mini-tts` | FPT.AI bị loại: trả URL bất đồng bộ, chờ 5s–2 phút |
+| LLM | OpenAI theo bảng tier trên | `service_tier=priority` cho nhanh |
+| Nguồn | PDF slide, hoặc đoạn code | `adapters/knowledge/pdf.py` tách span kèm trang + bbox |
 
 ## Giao thức WebSocket `/ws/session`
 

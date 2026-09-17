@@ -18,8 +18,8 @@ cp .env.example .env              # USE_MOCKS=true by default
 .venv/Scripts/python -m pytest tests/ -q
 .venv/Scripts/uvicorn app.main:app --reload --port 8000
 
-# frontend — no build step, but must be served (getUserMedia needs localhost)
-python -m http.server 5500 --directory codebase/frontend
+# frontend — React + Vite + Tailwind; must be served (getUserMedia needs localhost)
+cd codebase/frontend-react && npm install && npm run dev   # :5500
 ```
 
 Console output is Vietnamese; on Windows set `PYTHONIOENCODING=utf-8` or `print` crashes on cp1252.
@@ -40,6 +40,6 @@ Console output is Vietnamese; on Windows set `PYTHONIOENCODING=utf-8` or `print`
 
 **Prompts are versioned `.md` files** under `app/prompts/<name>/<version>.md`, loaded by `registry.py`. The constant part (instructions + source spans) goes in `system` and the variable part (learner's words) in `user` — OpenAI prompt caching only matches on shared prefix, so reversing this silently loses the 90% discount. Budget for the whole project is **$5 of credit**; see the tier table in `codebase/README.md`.
 
-**MVP simplifications, intentional**: the frontend uses an explicit "done explaining" button (`#done-btn`) instead of automatic VAD endpointing, and `_transcribe()` in `main.py` buffers a whole turn before running STT. Both are reliability choices for a ~40h build; the STT port already has the streaming shape so wiring real partials changes one function.
+**MVP simplification, intentional**: the frontend uses an explicit "done explaining" button (Space) instead of automatic VAD endpointing — a reliability choice for a ~40h build. STT itself is no longer buffered: `api/live_turn.py` feeds mic audio into Speechmatics over a WebSocket as it arrives and streams partials back, so the learner sees their words land while they talk.
 
 **Repo layout beyond `codebase/`** follows the hackathon's required submission structure, not a normal app convention (see `README.md` "Cấu trúc repo" for the full grading rubric): `spec.md` is the graded AI-spec document (template in place, sections empty), `eval/golden-set/` + `eval/results/` hold test cases and run logs against a quality bar that locks at CP4 and can't change afterward, `validation/` holds outside-user testing logs (optional, but skipping it caps the max score at 92/100), `reflection/` holds one file per member (see `reflection/TEMPLATE.md`).
