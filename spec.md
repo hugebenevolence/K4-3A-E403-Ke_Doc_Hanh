@@ -125,7 +125,7 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
   | **G5** Hợp chuẩn mực xã hội | Học trò xưng "mình – bạn", nói tiếng Việt, tiếng Anh chỉ cho thuật ngữ; chữ HOA do model sinh ra bị hạ về thường (`tame_shouting`). Mic chỉ thu khi học viên giữ nút nói, không tự thu giọng người khác trong lớp. |
   | **PAIR — Explainability + Trust** | Thẻ nguồn chỉ vị trí, **cố ý không trích nguyên văn**. Đo trên LLM thật: trích dẫn hiện ngay dưới câu hỏi ngược chính là đáp án. |
 
-- **§4c. Trí nhớ của học trò — knowledge graph** *(phần mở rộng, **CHƯA có trong bản build**)*
+- **§4c. Trí nhớ của học trò — knowledge graph** *(**đã có trong bản build**, 18/9)*
 
   **Chỗ hổng đang có.** Học trò mất trí nhớ sau mỗi phiên: nó sinh ra ngây thơ, được dạy, rồi quên sạch. Học viên không thật sự *dạy* nó, chỉ bị nó kiểm tra — mất đúng thứ làm học-bằng-cách-dạy hiệu quả, là việc người ta quan tâm tới học trò của mình hơn tới điểm của mình (protégé effect, §3).
 
@@ -144,7 +144,21 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
 
   **Sửa được.** Học viên dạy sai rồi tự sửa (case R02) thì mệnh đề cũ bị thay, không chồng thêm — nếu không, đồ thị tích lại chính hiểu lầm của họ.
 
-  **Hạ tầng đã có:** `build_graph()` compile sẵn cả checkpointer lẫn store xuyên phiên; `StudentProfile.concepts_taught` / `recurring_gaps` đã ghi server và `recurring_gaps` đã được bơm vào prompt hỏi ngược. Thiếu: lưu cả phần **đã dạy được** chứ không chỉ chỗ vấp, API đọc đồ thị, và lớp hiển thị trên dàn ý.
+  **Đã build được gì.** `domain/graph.py` giữ toàn bộ luật (đỉnh, cạnh, gộp
+  xuyên tài liệu, sửa lời, gỡ khi hiểu sai) và không import SDK nào; `api/graph_sync.py`
+  nối nó vào từng lượt chấm; `JsonGraphStore` lưu ra `var/graphs.json`; `GET /api/graph`
+  trả đồ thị kèm vùng tối; trang `/graph` vẽ bản đồ. Câu hỏi ngược đã bắc cầu được
+  sang thứ học viên dạy ở buổi trước — và khi đồ thị rỗng thì nó không đổi gì so
+  với trước, nên **lượt đo 23/26 vẫn so sánh được** (harness chạy trên tài khoản
+  không có đồ thị).
+
+  **Chưa làm, tự khai:**
+  - Cạnh chỉ sinh trong PHẠM VI MỘT LƯỢT. Học viên nối hai ý qua hai lượt khác
+    nhau thì không thành cạnh.
+  - Khoá khái niệm suy bằng luật (nhãn đầu ô → tần suất thuật ngữ → từ nội dung
+    chung). Câu giảng thuần Việt không chạm thuật ngữ nào sẽ ra khoá kém đẹp
+    ("đoán", "trước") — vẫn tất định và vẫn gộp được, chỉ là tên đỉnh xấu.
+  - Chưa có lớp phủ trạng thái trên dàn ý; vùng tối mới hiện ở trang đồ thị.
 
   **Rủi ro + điều kiện build.** Buổi đầu đồ thị rỗng nên không khác bản hiện tại; demo phải seed sẵn một tài khoản đã dạy vài slide và **nói rõ là seed**. Chỉ build sau khi `validation/` có đủ 5 người ngoài (R6 — 8 điểm đang bỏ trống), vì đây là phần mở rộng còn R6 là điểm chắc.
 
@@ -313,4 +327,5 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
 | 18/9 00:50 | Golden set chạy được nhiều lượt (`--repeat`), báo trung vị + từng lượt + danh sách case dao động | Một lượt chạy là một lần tung đồng xu: cùng bản build, D1 đã đo được 20–23/26 qua các lượt (§7) |
 | 18/9 01:10 | Lỗi nhà cung cấp được nói thật ("lỗi phía hệ thống, không phải do bạn") thay vì "mình nghe chưa rõ", và nổi lên ngay thay vì sau 20 giây | Gặp thật khi đang đo: API trả 429 hết hạn mức, nhưng graph hỏng không đẩy tín hiệu kết thúc nên lượt treo tới hết timeout rồi báo sai nguyên nhân — đổ lỗi cho giọng học viên |
 | 18/9 01:30 | Rà soát chéo toàn bộ đợt sửa: trả bộ lọc lộ đáp án về xét theo từng lượt | Nới "đã nói" ra cả buổi làm guard yếu dần: một từ khoá buột ra ở lượt 1 cho phép agent nói thẳng nó ở lượt 3. "Không lộ đáp án" là điều kiện cứng, không đánh đổi khi chưa đo được |
+| 18/9 04:15 | Trí nhớ xuyên buổi dạng knowledge graph (§4c): đỉnh là mệnh đề học viên tự nói, cạnh chỉ sinh từ liên từ của chính họ, gộp xuyên tài liệu, gỡ khi hoá ra hiểu sai; trang `/graph` vẽ bản đồ, câu hỏi ngược bắc cầu sang buổi trước | Học trò quên sạch sau mỗi phiên nên học viên không thật sự *dạy* nó, chỉ bị nó kiểm tra — mất protégé effect, là cơ chế chính của D3 (§3) |
 | 18/9 02:10 | Bắt bộ chấm chép đúng mã đoạn của nguồn (mô tả ngay trong schema), và báo lỗi to khi một lượt mất sạch căn cứ | Lượt đo 3× bắt được: model tự đặt mã `s1..s4` thay cho mã có sẵn, bộ lọc mã bịa ném sạch evidence, F01 và F02 trượt 0/3 vì bộ chấm hỏng chứ không phải vì lời giảng. Sau khi sửa: cả hai đạt 3/3 |
