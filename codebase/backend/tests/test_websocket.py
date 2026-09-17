@@ -63,8 +63,9 @@ def _one_turn(ws) -> list:
         if not m.get("text"):
             continue
         body = json.loads(m["text"])
-        if body["type"] == "transcript" and body.get("filler") is False:
-            msgs.append(ws.receive())  # gói audio của câu chốt
+        # Lượt kết thúc ở state KẾT QUẢ, và state đó đến sau cùng — sau cả câu
+        # hỏi lẫn tiếng. Xem test_mic_chi_mo_sau_khi_agent_da_hoi_xong.
+        if body["type"] == "state" and body["state"] != "CHECKING":
             return msgs
         if body["type"] in ("session_end", "error"):
             return msgs
@@ -204,3 +205,27 @@ def test_state_mang_theo_luat_mic_cua_chinh_state_do(client):
     responding = states["STUDENT_RESPONDING"]
     assert responding["mic_open"] is True
     assert responding["silence_ms"] > teaching["silence_ms"]
+
+
+def test_mic_chi_mo_sau_khi_agent_da_hoi_xong(client):
+    """Đo được trên provider thật: state mở mic từng tới trước tiếng agent 2,4
+    giây, vì server gửi state ngay khi chấm xong, lúc TTS còn đang tổng hợp.
+    Giao diện báo "tới lượt bạn" khi agent còn chưa kịp hỏi."""
+    with client.websocket_connect("/ws/session") as ws:
+        _opening(ws)
+        msgs = _one_turn(ws)
+
+    order = []
+    for m in msgs:
+        if m.get("bytes"):
+            order.append("audio")
+        elif m.get("text"):
+            body = json.loads(m["text"])
+            if body["type"] == "transcript" and body.get("role") == "agent":
+                order.append("question")
+            elif body["type"] == "state" and body.get("mic_open"):
+                order.append("mic_open")
+
+    assert order[-1] == "mic_open", order
+    assert order.index("question") < order.index("mic_open")
+    assert max(i for i, k in enumerate(order) if k == "audio") < order.index("mic_open")
