@@ -155,17 +155,6 @@ async def run_turn(
         result = await asyncio.wait_for(reasoner, timeout=reasoner_timeout_s)
         said = sanitize_spoken(result["agent_says"])
         yield Event(
-            "state",
-            {
-                "turn_state": result["turn_state"],
-                "verdict": result.get("verdict"),
-                # Căn cứ chấm, gửi nguyên về client: đây là dữ liệu THẬT model
-                # vừa dùng để quyết định, và là thứ làm học viên tin được rằng
-                # hệ thống bám slide chứ không phán bừa.
-                "evidence": result.get("evidence") or [],
-            },
-        )
-        yield Event(
             "transcript",
             {
                 "role": "agent",
@@ -185,6 +174,20 @@ async def run_turn(
             first_audio_ms = _mark(first_audio_ms, started)
             yield Event("audio", chunk)
 
+        # State đi SAU câu hỏi và tiếng, không phải trước. State mở mic cho học
+        # viên; gửi nó trước thì đo được mic mở sẵn 2,4 giây trong lúc TTS còn
+        # đang tổng hợp — giao diện báo "tới lượt bạn" khi agent còn chưa hỏi.
+        yield Event(
+            "state",
+            {
+                "turn_state": result["turn_state"],
+                "verdict": result.get("verdict"),
+                # Căn cứ chấm, gửi nguyên về client: đây là dữ liệu THẬT model
+                # vừa dùng để quyết định, và là thứ làm học viên tin được rằng
+                # hệ thống bám slide chứ không phán bừa.
+                "evidence": result.get("evidence") or [],
+            },
+        )
         yield Event(
             "turn_done",
             {
