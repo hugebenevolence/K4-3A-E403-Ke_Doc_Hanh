@@ -37,8 +37,8 @@ export default function SourcePanel({
   selectable,
   selectedIds,
   coveredIds,
-  revealed,
-  setRevealed,
+  revealedIds,
+  setRevealedIds,
   focusedSpan,
   focusKey,
   sourcePage,
@@ -50,6 +50,15 @@ export default function SourcePanel({
   const source = useMemo(() => deckPdf(deck.slug), [deck.slug]);
   const title = outline.find((row) => row.page === page)?.title || `Slide ${page}`;
   const inSession = !selectable;
+  const allRevealed = coveredIds.size > 0 && [...coveredIds].every((id) => revealedIds.has(id));
+  function toggleReveal(id) {
+    setRevealedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const [emptyHint, setEmptyHint] = useState(false);
   const hintTimer = useRef(null);
@@ -164,8 +173,12 @@ export default function SourcePanel({
             className="shrink-0 overflow-hidden border-b border-neutral-200 bg-white"
           >
             <div className="flex items-center gap-1.5 px-4 py-2">
-              <Button size="sm" pressed={revealed} onClick={() => setRevealed((r) => !r)}>
-                {revealed ? "Che lại" : "Xem phần đang giảng"}
+              <Button
+                size="sm"
+                pressed={allRevealed}
+                onClick={() => setRevealedIds(allRevealed ? new Set() : new Set(coveredIds))}
+              >
+                {allRevealed ? "Che lại tất cả" : "Xem tất cả"}
               </Button>
               <Button size="sm" pressed={spotlight} onClick={() => setSpotlight((s) => !s)} title="Phím F">
                 Làm mờ phần khác
@@ -189,12 +202,12 @@ export default function SourcePanel({
             selectedIds={selectedIds}
             coveredIds={coveredIds}
             spotlight={spotlight}
-            revealed={revealed}
+            revealedIds={revealedIds}
             focusedSpan={focusedSpan}
             focusKey={focusKey}
             onSelect={select}
             onEmptyDrag={showEmptyHint}
-            onReveal={() => setRevealed(true)}
+            onToggleReveal={toggleReveal}
             onPages={onPages}
           />
         </div>

@@ -39,7 +39,8 @@ export default function Learn() {
   const [selection, setSelection] = useState({ page: null, ids: [] });
   const [active, setActive] = useState([]);
   const [taught, setTaught] = useState(() => taughtPages(slug));
-  const [revealed, setRevealed] = useState(false);
+  // Những ô đang giảng mà học viên đã bấm mở ra xem; còn lại vẫn bị che.
+  const [revealedIds, setRevealedIds] = useState(NONE);
   const spaceHeld = useRef(false);
 
   const session = useSession(slug);
@@ -98,7 +99,7 @@ export default function Learn() {
     const ids = selectedHere.length && !thin ? selectedHere : blocksOnPage.map((b) => b.span_id);
     setActive(ids);
     setSelection({ page, ids });
-    setRevealed(false);
+    setRevealedIds(NONE);
     setFocus((f) => ({ id: null, n: f.n }));
     session.start(ids);
   }, [selectedHere, thin, blocksOnPage, page, session]);
@@ -107,7 +108,7 @@ export default function Learn() {
    *  đang xem, để học viên chọn ngay trên trang họ vừa lật tới. */
   const restart = useCallback(() => {
     session.reset();
-    setRevealed(false);
+    setRevealedIds(NONE);
     setSpotlight(false);
     setSelection({ page: null, ids: [] });
   }, [session]);
@@ -115,7 +116,7 @@ export default function Learn() {
   /** Giảng lại đúng phần vừa giảng: che lại và mở phiên mới. */
   const retry = useCallback(() => {
     session.reset();
-    setRevealed(false);
+    setRevealedIds(NONE);
     setFocus((f) => ({ id: null, n: f.n }));
     setPage(sessionPage);
     session.start(active);
@@ -133,12 +134,15 @@ export default function Learn() {
     (span) => {
       const where = byId.get(span.span_id) ?? span;
       if (where.page) setPage(where.page);
-      // Bấm "Mở" là bước quay lại nguồn của Feynman: mở vùng gập ra luôn.
-      setRevealed(true);
+      // Bấm "Xem" là bước quay lại nguồn của Feynman: mở đúng ô được nhắc tới
+      // (hoặc cả vùng, nếu thẻ trỏ ra ngoài vùng đang che).
+      setRevealedIds((prev) =>
+        active.includes(span.span_id) ? new Set([...prev, span.span_id]) : new Set(active),
+      );
       // Tăng bộ đếm để khung "đáp xuống" chạy lại cả khi mở lại đúng vùng cũ.
       setFocus((f) => ({ id: span.span_id, n: f.n + 1 }));
     },
-    [byId],
+    [byId, active],
   );
 
   // Phím tắt. Bỏ qua khi con trỏ đang ở ô nhập chữ — lúc đó bàn phím thuộc về
@@ -253,8 +257,8 @@ export default function Learn() {
         selectable={!inSession}
         selectedIds={shownIds}
         coveredIds={inSession ? shownIds : NONE}
-        revealed={revealed}
-        setRevealed={setRevealed}
+        revealedIds={revealedIds}
+        setRevealedIds={setRevealedIds}
         focusedSpan={focus.id}
         focusKey={focus.n}
         sourcePage={sessionPage}

@@ -44,12 +44,12 @@ export default function SlideView({
   selectedIds,
   coveredIds,
   spotlight = false,
-  revealed,
+  revealedIds,
   focusedSpan,
   focusKey = 0,
   onSelect,
   onEmptyDrag,
-  onReveal,
+  onToggleReveal,
   onPages,
 }) {
   const canvas = useRef(null);
@@ -333,35 +333,53 @@ export default function SlideView({
 
       {/* Gập vùng đang giảng: Feynman bảo "đừng nhìn ghi chú" — nhìn chữ trên
           slide mà đọc lại thì không còn là giảng, và bộ chấm không phân biệt
-          được. Bấm vào thì mở ra (bước xem lại nguồn). */}
-      <AnimatePresence>
-        {scale > 0 &&
-          !revealed &&
-          covered.map((b) => (
-            <motion.button
+          được. Mỗi ô bật tắt riêng: bấm để xem đúng chỗ đang bí, xem xong bấm
+          lại để che và giảng tiếp — không phải lên thanh công cụ tìm nút. */}
+      {scale > 0 &&
+        covered.map((b) => {
+          const open = revealedIds.has(b.span_id);
+          // Nhãn chỉ hiện trên ô đủ rộng. Slide sơ đồ có hàng chục nhãn chữ
+          // tí hon; nhét chữ vào từng ô là ra một đống nhãn đè lên nhau.
+          const roomy = (b.bbox[2] - b.bbox[0]) * scale >= 150 && (b.bbox[3] - b.bbox[1]) * scale >= 26;
+          return (
+            <button
               key={`cover-${b.span_id}`}
               style={style(b.bbox)}
-              // Che "kéo rèm" từ trái sang, mở thì rút về — nhìn là biết vùng
-              // này đang bị che chứ không phải slide vẽ lỗi.
-              initial={{ opacity: 0, clipPath: "inset(0 100% 0 0 round 6px)" }}
-              animate={{ opacity: 1, clipPath: "inset(0 0% 0 0 round 6px)" }}
-              exit={{ opacity: 0, clipPath: "inset(0 0 0 100% round 6px)" }}
-              transition={{ duration: 0.45, ease: EASE }}
-              onClick={onReveal}
-              title="Bấm để xem lại phần này"
-              className="cover absolute grid place-items-center overflow-hidden rounded-md"
+              onClick={() => onToggleReveal(b.span_id)}
+              aria-pressed={open}
+              title={open ? "Bấm để che lại" : "Bấm để xem"}
+              className="group/cover absolute grid cursor-pointer place-items-center rounded-md"
             >
-              {/* Nhãn chỉ hiện trên ô đủ rộng. Slide sơ đồ có hàng chục nhãn
-                  chữ tí hon; nhét chữ vào từng ô là ra một đống "Đang gi…"
-                  chi chít đè lên nhau. Ô nhỏ chỉ cần sọc là đủ nhận ra. */}
-              {(b.bbox[2] - b.bbox[0]) * scale >= 150 && (b.bbox[3] - b.bbox[1]) * scale >= 26 && (
-                <span className="rounded-full bg-neutral-900 px-2.5 py-1 text-[11px] leading-none font-medium whitespace-nowrap text-white shadow-sm">
-                  Bấm để xem
+              <AnimatePresence>
+                {!open && (
+                  // Che "kéo rèm" từ trái sang, mở thì rút về — nhìn là biết
+                  // vùng này đang bị che chứ không phải slide vẽ lỗi.
+                  <motion.span
+                    key="cover"
+                    className="cover absolute inset-0 rounded-md"
+                    initial={{ opacity: 0, clipPath: "inset(0 100% 0 0 round 6px)" }}
+                    animate={{ opacity: 1, clipPath: "inset(0 0% 0 0 round 6px)" }}
+                    exit={{ opacity: 0, clipPath: "inset(0 0 0 100% round 6px)" }}
+                    transition={{ duration: 0.45, ease: EASE }}
+                  />
+                )}
+              </AnimatePresence>
+              {/* Đang mở: viền đứt hiện khi rê chuột, để biết bấm vào đây là che lại. */}
+              {open && (
+                <span className="absolute inset-0 rounded-md border-[1.5px] border-dashed border-transparent transition-colors group-hover/cover:border-neutral-900/70" />
+              )}
+              {roomy && (
+                <span
+                  className={`relative rounded-full bg-neutral-900 px-2.5 py-1 text-[11px] leading-none font-medium whitespace-nowrap text-white shadow-sm transition-opacity duration-200 ${
+                    open ? "opacity-0 group-hover/cover:opacity-100" : ""
+                  }`}
+                >
+                  {open ? "Bấm để che" : "Bấm để xem"}
                 </span>
               )}
-            </motion.button>
-          ))}
-      </AnimatePresence>
+            </button>
+          );
+        })}
     </div>
   );
 }
