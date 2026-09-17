@@ -129,7 +129,11 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
 
   **Chỗ hổng đang có.** Học trò mất trí nhớ sau mỗi phiên: nó sinh ra ngây thơ, được dạy, rồi quên sạch. Học viên không thật sự *dạy* nó, chỉ bị nó kiểm tra — mất đúng thứ làm học-bằng-cách-dạy hiệu quả, là việc người ta quan tâm tới học trò của mình hơn tới điểm của mình (protégé effect, §3).
 
-  **Cấu trúc.** Một đồ thị tri thức cho mỗi cặp (học viên × bài):
+  **Phạm vi: xuyên tài liệu.** Đồ thị là của **một học viên trên toàn bộ tài liệu môn học**, không bó trong một bài. Cùng một khái niệm được giảng ở hai bài khác nhau thì nối vào cùng một đỉnh, kèm cả hai `span_id` nguồn. Đây là chỗ giá trị thật: học viên thấy được thứ mình học ở Day 1 dính vào thứ ở Day 2 chỗ nào — thứ mà đọc từng slide rời không bao giờ thấy.
+
+  **Hiển thị: đồ thị xem được, kiểu Obsidian.** Ngoài lớp phủ trên dàn ý, có một khung nhìn đồ thị riêng: đỉnh là khái niệm bạn đã giảng được, cạnh là liên hệ bạn đã tự nối, độ đậm theo số lần bạn giảng lại được. Vùng tối trên đồ thị = phần bạn chưa giảng nổi. Bấm vào đỉnh thì mở đúng ô slide và câu bạn đã nói về nó. Mỗi đỉnh cũng chính là một ghi chú bằng lời của chính bạn.
+
+  **Cấu trúc.** Một đồ thị tri thức cho mỗi học viên, gom theo môn:
   - **Đỉnh** = một mệnh đề học viên đã nói ra, gắn `span_id` của ô slide, câu nguyên gốc của họ, và phiên nào.
   - **Cạnh** = quan hệ giữa hai mệnh đề, **chỉ tạo khi chính học viên nối chúng trong lời giảng** ("vì… nên…", "sau đó…", "khác với…").
   - Trạng thái mỗi ô slide suy ra từ đồ thị: học trò đã hiểu ô này nhờ bạn, hay còn tối.
