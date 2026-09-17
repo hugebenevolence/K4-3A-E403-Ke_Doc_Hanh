@@ -8,12 +8,12 @@
 
 | Họ và Tên | Mã Học Viên | Vai trò chính | Phần việc đảm nhiệm trong dự án |
 |---|---|---|---|
-|  |  |  |  |
-|  |  |  |  |
-|  |  |  |  |
-|  |  |  |  |
+| Nguyễn Ngọc Bảo | 2A202602951 | Lead · Spec | Chủ trì `spec.md` §1–§9; dẫn demo và dry run; gom phân tích của cả nhóm vào spec |
+| Trần Đại Nhân | 2A202602642 | Tech | Backend (LangGraph, guard tất định, bộ chấm), frontend, deploy; chạy máy lúc demo |
+| Nguyễn Tú Tài | 2A202602455 | Evidence | Mining chatlog cho §1–§2 (`eval/evidence/`); mời và ghi nhật ký người ngoài dùng thử (`validation/`) |
+| Nguyễn Phú Bình | 2A202602410 | Prompt & Eval | Prompt versioning và golden set 26 case (`eval/golden-set/`); chấm tay chiều D3; cùng làm validation |
 
-> Nhóm copy nguyên file README này về repo của mình, rồi điền bảng trên. Cột **Phần việc đảm nhiệm** ghi càng cụ thể càng tốt.
+Phân tích, research và thiết kế là việc chung — cả bốn người cùng bàn. Bảng trên ghi **ai chịu trách nhiệm giải thích được phần nào** khi giám khảo hỏi ngẫu nhiên ở CP5.
 
 - Thời lượng: **47,5 giờ** từ phát đề đến thuyết trình (ca 3A) — LAB 5 (phát đề + build) · LEC 6 (tiếp tục build theo ca) · LAB 6 (vòng thi)
 - Nhóm: **3-4 người** · thi theo phòng (E403 / E402), chia cụm rồi chung kết phòng — xem *Thể thức thi*

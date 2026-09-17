@@ -113,6 +113,25 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
   - *AI luôn phải* đối chiếu với đúng vùng slide đang giảng và chỉ ra vị trí khi đóng phiên.
   - *AI không được* nói ra ý học viên chưa nói hay xác nhận một ý sai, kể cả khi học viên xin đáp án.
   - *Nếu AI chấm yếu, học viên không phiền* bị hỏi thêm một câu, miễn là câu hỏi nhắm đúng chỗ và bỏ qua được.
+- **§4c. Trí nhớ của học trò — knowledge graph** *(phần mở rộng, **CHƯA có trong bản build**)*
+
+  **Chỗ hổng đang có.** Học trò mất trí nhớ sau mỗi phiên: nó sinh ra ngây thơ, được dạy, rồi quên sạch. Học viên không thật sự *dạy* nó, chỉ bị nó kiểm tra — mất đúng thứ làm học-bằng-cách-dạy hiệu quả, là việc người ta quan tâm tới học trò của mình hơn tới điểm của mình (protégé effect, §3).
+
+  **Cấu trúc.** Một đồ thị tri thức cho mỗi cặp (học viên × bài):
+  - **Đỉnh** = một mệnh đề học viên đã nói ra, gắn `span_id` của ô slide, câu nguyên gốc của họ, và phiên nào.
+  - **Cạnh** = quan hệ giữa hai mệnh đề, **chỉ tạo khi chính học viên nối chúng trong lời giảng** ("vì… nên…", "sau đó…", "khác với…").
+  - Trạng thái mỗi ô slide suy ra từ đồ thị: học trò đã hiểu ô này nhờ bạn, hay còn tối.
+
+  **Luật cưỡng chế bằng code, không bằng prompt.** Không đỉnh hay cạnh nào được vào đồ thị nếu không truy ngược được về một câu học viên đã nói — dùng lại đúng `_heard()` và `leaks_answer()` đang chạy. Đây là ranh giới làm nó khác ChatGPT: model *biết* RLHF là gì, nhưng **học trò của bạn thì không, cho tới khi bạn giảng**. [TeachYou (CHI 2024)](https://dl.acm.org/doi/10.1145/3613904.3642349) gọi "confining the knowledge level of LLM agents" là bài toán khó nhất của teachable agent; ta giải bằng luật tất định chứ không bằng lời dặn.
+
+  **Học trò dùng đồ thị để hỏi.** Câu hỏi ngược được phép bắc cầu sang mệnh đề học viên đã dạy ở phiên trước: *"Bạn dạy mình là model chỉ đoán chữ tiếp theo thôi — vậy cái xếp hạng này làm nó đổi kiểu gì?"*. Câu hỏi này không tutor nào hỏi được vì nó dựng từ chính lời học viên, và nó ép nối các mảnh rời — đúng bước từ *knowledge-telling* sang *knowledge-building* mà TeachYou chỉ ra là chỗ học-bằng-cách-dạy hay bị kẹt.
+
+  **Sửa được.** Học viên dạy sai rồi tự sửa (case R02) thì mệnh đề cũ bị thay, không chồng thêm — nếu không, đồ thị tích lại chính hiểu lầm của họ.
+
+  **Hạ tầng đã có:** `build_graph()` compile sẵn cả checkpointer lẫn store xuyên phiên; `StudentProfile.concepts_taught` / `recurring_gaps` đã ghi server và `recurring_gaps` đã được bơm vào prompt hỏi ngược. Thiếu: lưu cả phần **đã dạy được** chứ không chỉ chỗ vấp, API đọc đồ thị, và lớp hiển thị trên dàn ý.
+
+  **Rủi ro + điều kiện build.** Buổi đầu đồ thị rỗng nên không khác bản hiện tại; demo phải seed sẵn một tài khoản đã dạy vài slide và **nói rõ là seed**. Chỉ build sau khi `validation/` có đủ 5 người ngoài (R6 — 8 điểm đang bỏ trống), vì đây là phần mở rộng còn R6 là điểm chắc.
+
 - **§4b. Nguyên tắc đã áp dụng**
 
   | Nguyên tắc | Áp cụ thể vào đâu trong prototype |
@@ -219,13 +238,23 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
 
 - **Phân công có tên** *(nhóm điền theo bảng README)*:
 
-  | Phần | Người |
+  | Phần | Người phụ trách |
   |---|---|
-  | Spec | [điền tên] |
-  | Evidence / mining | [điền tên] |
-  | Prompt + golden set | [điền tên] |
-  | Code (backend, frontend, deploy) | [điền tên] |
-  | Demo | [điền tên] |
+  | Spec §1–§9 | **Nguyễn Ngọc Bảo** (lead) |
+  | Evidence & mining | **Nguyễn Tú Tài** |
+  | Prompt + golden set | **Nguyễn Phú Bình** |
+  | Code (backend, frontend, deploy) | **Trần Đại Nhân** (tech) |
+  | Validation R6 — mời và ghi nhật ký người ngoài | **Nguyễn Tú Tài** · **Nguyễn Phú Bình** |
+  | Demo + dry run | **Nguyễn Ngọc Bảo** (dẫn) · **Trần Đại Nhân** (chạy máy) |
+
+  | Thành viên | Mã học viên |
+  |---|---|
+  | Nguyễn Ngọc Bảo | 2A202602951 |
+  | Trần Đại Nhân | 2A202602642 |
+  | Nguyễn Tú Tài | 2A202602455 |
+  | Nguyễn Phú Bình | 2A202602410 |
+
+  Phân tích và research là việc chung, ai cũng tham gia. Nhưng mỗi dòng trên có **một người chịu trách nhiệm giải thích được phần đó** — CP5 hỏi ngẫu nhiên, không giải thích được thì phần đó 0 điểm.
 
 - **Willing users (≥2 tên)** + kế hoạch validation *(bonus)*:
   - Willing users: [điền ≥2 tên học viên ngoài nhóm].
@@ -257,3 +286,4 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
 | 17/9 19:50 | Harness golden set mở rộng vùng chọn quá mỏng ra cả trang, đúng như frontend | A03 ghi rõ "mở rộng ra cả trang" nhưng harness chạy trên mỗi dòng tiêu đề — dựng ra phiên mà sản phẩm không tạo được |
 | 17/9 19:55 | Dò cụm cấm của D2 giữ nguyên dấu tiếng Việt | M03 bị ghi là lộ "thực ra" vì câu sạch "kết thúc ra sao" mất dấu thành "thuc ra" |
 | 17/9 20:05 | Chặn bằng luật hai kiểu tuột vai: học trò nhận sẽ giảng, và học trò bám theo câu lạc đề | Lượt 3 hỏng cả ba case lớp ③ (O01, O02, O03) dù prompt đã cấm sẵn — đúng chỗ prompt suông không giữ được |
+| 17/9 20:50 | Khai phạm vi mở rộng: trí nhớ xuyên phiên của học trò dựng thành knowledge graph (§4c) | Học trò đang quên sạch sau mỗi phiên, nên học viên không thật sự dạy nó — mất protégé effect, là cơ chế chính của D3 |
