@@ -78,7 +78,10 @@ def _lesson_file():
     Hai chế độ dùng CHUNG toàn bộ backend — chỉ khác file bài và prompt chấm.
     Đó là điểm của việc Span mang được cả toạ độ trang lẫn khoảng dòng."""
     if settings.lesson_mode == "code":
-        return settings.demo_code_lesson_file
+        if not settings.enable_code_mode:
+            log.warning("LESSON_MODE=code nhưng chế độ code đang tạm ẩn — dùng bài slide")
+        else:
+            return settings.demo_code_lesson_file
     # Bài slide thật nếu đã nạp, không thì bài demo.
     return (
         settings.lesson_file if settings.lesson_file.is_file() else settings.demo_lesson_file
@@ -187,6 +190,29 @@ async def teach_back_session(ws: WebSocket):
         thì họ nói vào khoảng không, không biết mic có ăn hay không."""
         await ws.send_json({"type": "partial", "text": text})
 
+    async def send_state(state: str, **extra) -> None:
+        """Gửi state kèm luật mic của chính state đó.
+
+        Ngưỡng im lặng là quyết định sư phạm chứ không phải hằng số giao diện:
+        im lặng sau một câu hỏi ngược nghĩa là học viên đang nghĩ, im lặng giữa
+        lúc đang giảng nghĩa là hết lượt. Luật ở domain/session.py, frontend
+        chỉ thi hành.
+
+        Trước đây frontend không hề biết tới luật này — nó chỉ nhận mỗi tên
+        state — nên hai thuộc tính kia là code chết, và học viên vừa bị hỏi
+        xong, ngập ngừng vài giây là bị cắt lời.
+        """
+        turn = TurnState[state]
+        await ws.send_json(
+            {
+                "type": "state",
+                "state": state,
+                "mic_open": turn.mic_open,
+                "silence_ms": turn.silence_tolerance_ms,
+                **extra,
+            }
+        )
+
     # Mở bài bằng một câu hỏi cụ thể thay vì để học viên nhìn ô trống tự nghĩ
     # xem nên nói gì. Hỏng thì vẫn vào phiên được — mất câu mở bài còn hơn mất
     # cả phiên vì một lượt gọi LLM trục trặc.
@@ -203,7 +229,7 @@ async def teach_back_session(ws: WebSocket):
     except Exception:
         log.exception("Mở bài hỏng ở phiên %s", session_id)
 
-    await ws.send_json({"type": "state", "state": TurnState.STUDENT_TEACHING.name})
+    await send_state(TurnState.STUDENT_TEACHING.name)
 
     try:
         while True:
@@ -236,10 +262,10 @@ async def teach_back_session(ws: WebSocket):
                 if live is not None:
                     await live.abort()
                     live = None
-                await ws.send_json({"type": "state", "state": TurnState.CHECKING.name})
+                await send_state(TurnState.CHECKING.name)
                 student_text = str(command.get("text", ""))
             elif command.get("type") == "explanation_done":
-                await ws.send_json({"type": "state", "state": TurnState.CHECKING.name})
+                await send_state(TurnState.CHECKING.name)
                 if live is None:
                     student_text = ""
                 else:
@@ -256,9 +282,7 @@ async def teach_back_session(ws: WebSocket):
                                 "message": "Mình chưa nghe rõ được. Bạn thử lại, hoặc gõ chữ cũng được.",
                             }
                         )
-                        await ws.send_json(
-                            {"type": "state", "state": turn_state_for_retry(first_turn)}
-                        )
+                        await send_state(turn_state_for_retry(first_turn))
                         continue
                     finally:
                         live = None
@@ -272,7 +296,7 @@ async def teach_back_session(ws: WebSocket):
                 await ws.send_json(
                     {"type": "error", "message": "Mình chưa nghe thấy gì, bạn thử nói lại nhé."}
                 )
-                await ws.send_json({"type": "state", "state": turn_state_for_retry(first_turn)})
+                await send_state(turn_state_for_retry(first_turn))
                 continue
 
             await ws.send_json(
@@ -307,13 +331,10 @@ async def teach_back_session(ws: WebSocket):
                         await ws.send_bytes(event.payload)
                     elif event.kind == "state":
                         turn_state = event.payload["turn_state"]
-                        await ws.send_json(
-                            {
-                                "type": "state",
-                                "state": turn_state,
-                                "verdict": event.payload.get("verdict"),
-                                "evidence": event.payload.get("evidence") or [],
-                            }
+                        await send_state(
+                            turn_state,
+                            verdict=event.payload.get("verdict"),
+                            evidence=event.payload.get("evidence") or [],
                         )
                     elif event.kind == "activity":
                         await ws.send_json({"type": "activity", **event.payload})
@@ -339,7 +360,7 @@ async def teach_back_session(ws: WebSocket):
                     {"type": "error", "message": "Mình nghe chưa rõ, bạn nói lại giúp mình nhé."}
                 )
                 turn_state = TurnState.STUDENT_TEACHING.name
-                await ws.send_json({"type": "state", "state": turn_state})
+                await send_state(turn_state)
 
             if TurnState[turn_state].is_terminal:
                 await ws.send_json(
