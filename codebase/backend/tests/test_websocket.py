@@ -27,6 +27,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "use_mocks", True)
     monkeypatch.setattr(settings, "session_log_file", tmp_path / "s.jsonl")
     monkeypatch.setattr(settings, "profile_file", tmp_path / "p.json")
+    # Tắt đăng nhập bất kể .env máy đang đặt MEMBERS gì — test đăng nhập nằm riêng.
+    monkeypatch.setattr(settings, "members", "")
     return TestClient(app)
 
 
@@ -72,11 +74,11 @@ def _one_turn(ws) -> list:
 
 
 def test_health(client):
-    assert client.get("/health").json()["status"] == "ok"
+    assert client.get("/api/health").json()["status"] == "ok"
 
 
 def test_mot_luot_day_đay_du(client):
-    with client.websocket_connect("/ws/session") as ws:
+    with client.websocket_connect("/api/ws/session") as ws:
         assert _opening(ws), "phien phai mo bang mot cau hoi cu the"
         msgs = _one_turn(ws)
 
@@ -97,16 +99,16 @@ def test_mot_luot_day_đay_du(client):
 
 
 def test_ngat_ket_noi_giua_chung_khong_lam_server_no(client):
-    with client.websocket_connect("/ws/session") as ws:
+    with client.websocket_connect("/api/ws/session") as ws:
         ws.receive_json()
         ws.send_bytes(b"\x00" * 50)
     # Vao lai duoc nghia la handler da thoat sach, khong ket treo.
-    with client.websocket_connect("/ws/session") as ws:
+    with client.websocket_connect("/api/ws/session") as ws:
         assert _opening(ws) is not None
 
 
 def test_lesson_lay_tu_file_chu_khong_hardcode(client):
-    body = client.get("/lesson").json()
+    body = client.get("/api/lesson").json()
     assert body["concept"] and body["spans"]
     assert all(s["span_id"].startswith("[") for s in body["spans"])
 
@@ -114,9 +116,9 @@ def test_lesson_lay_tu_file_chu_khong_hardcode(client):
 def test_ket_phien_goi_y_dung_doan_co_that(client):
     """Hết lượt hỏi thì phải trỏ được về đoạn CÓ THẬT để xem lại — nếu bộ lọc
     mã bịa loại sạch evidence thì tính năng này im lặng chết."""
-    spans = [s["span_id"] for s in client.get("/lesson").json()["spans"]]
+    spans = [s["span_id"] for s in client.get("/api/lesson").json()["spans"]]
 
-    with client.websocket_connect("/ws/session") as ws:
+    with client.websocket_connect("/api/ws/session") as ws:
         _opening(ws)
         for _ in range(MAX_FOLLOWUPS + 1):
             ws.send_bytes(b"\x00" * 100)
@@ -138,7 +140,7 @@ def test_ket_phien_goi_y_dung_doan_co_that(client):
 def test_bam_chot_luot_ma_chua_noi_gi_thi_khong_bi_tinh_mot_luot(client, tmp_path):
     """Bấm nhầm hai lần, hoặc bấm trước khi kịp nói. Chạy tiếp là tiêu mất một
     lượt hỏi ngược vì lời rỗng chắc chắn bị chấm chưa đủ — phạt oan học viên."""
-    with client.websocket_connect("/ws/session") as ws:
+    with client.websocket_connect("/api/ws/session") as ws:
         _opening(ws)
         ws.send_text(DONE)  # chốt lượt mà chưa gửi byte audio nào
         assert ws.receive_json()["state"] == "CHECKING"
@@ -151,7 +153,7 @@ def test_bam_chot_luot_ma_chua_noi_gi_thi_khong_bi_tinh_mot_luot(client, tmp_pat
 
 
 def test_moi_luot_deu_duoc_ghi_log_replay_duoc(client, tmp_path):
-    with client.websocket_connect("/ws/session") as ws:
+    with client.websocket_connect("/api/ws/session") as ws:
         _opening(ws)
         _one_turn(ws)
         _one_turn(ws)
@@ -176,7 +178,7 @@ def test_state_mang_theo_luat_mic_cua_chinh_state_do(client):
     tên state nên frontend không có cách nào biết mà thi hành.
     """
     states: dict[str, dict] = {}
-    with client.websocket_connect("/ws/session") as ws:
+    with client.websocket_connect("/api/ws/session") as ws:
         # Gom state ngay từ message đầu: câu mở bài cũng đã kèm một state rồi.
         sent = False
         for _ in range(60):
@@ -211,7 +213,7 @@ def test_mic_chi_mo_sau_khi_agent_da_hoi_xong(client):
     """Đo được trên provider thật: state mở mic từng tới trước tiếng agent 2,4
     giây, vì server gửi state ngay khi chấm xong, lúc TTS còn đang tổng hợp.
     Giao diện báo "tới lượt bạn" khi agent còn chưa kịp hỏi."""
-    with client.websocket_connect("/ws/session") as ws:
+    with client.websocket_connect("/api/ws/session") as ws:
         _opening(ws)
         msgs = _one_turn(ws)
 
@@ -237,8 +239,8 @@ def test_phien_day_dung_vung_hoc_vien_chon_chu_khong_co_dinh_mot_trang(client, t
     from app import main
     from tests.test_selection import DECK
 
-    monkeypatch.setattr(main, "_current_deck", lambda: DECK)
-    with client.websocket_connect("/ws/session?spans=[d-p21-02]") as ws:
+    monkeypatch.setattr(main, "_find_deck", lambda slug: DECK)
+    with client.websocket_connect("/api/ws/session?spans=[d-p21-02]") as ws:
         _opening(ws)
         _one_turn(ws)
 
@@ -250,7 +252,7 @@ def test_vung_chon_khong_con_khop_slide_thi_bao_ro_chu_khong_cham_nguon_rong(cli
     from app import main
     from tests.test_selection import DECK
 
-    monkeypatch.setattr(main, "_current_deck", lambda: DECK)
-    with client.websocket_connect("/ws/session?spans=[khong-ton-tai]") as ws:
+    monkeypatch.setattr(main, "_find_deck", lambda slug: DECK)
+    with client.websocket_connect("/api/ws/session?spans=[khong-ton-tai]") as ws:
         msg = ws.receive_json()
     assert msg["type"] == "error"
