@@ -7,7 +7,14 @@ từ khoá học viên đang thiếu, học viên chỉ cần gật đầu là x
 
 from __future__ import annotations
 
-from app.domain.leak import leaked_terms, leaks_answer, suggests_fix
+from app.domain.leak import (
+    leaked_terms,
+    leaks_answer,
+    off_topic,
+    suggests_fix,
+    takes_teacher_role,
+)
+from app.domain.verbatim import echoes_student
 
 UNCOVERED = "Nước sôi ở 100 độ C là do áp suất khí quyển ở mực nước biển đè lên mặt nước."
 STUDENT = "Lên núi nước sôi thấp hơn là tại trên đó lạnh hơn nhiều."
@@ -128,3 +135,54 @@ def test_nhan_ra_chu_tieng_anh_theo_cau_truc_am_tiet():
         assert not looks_english(vi), vi
     for en in ["JSON", "button", "model", "token", "reward"]:
         assert looks_english(en), en
+
+
+# --- Nhại lại lời học viên (O03) ----------------------------------------------
+
+
+def test_bat_duoc_cau_hoi_nhai_lai_nguyen_cau_hoc_vien():
+    # Học viên hỏi chen một câu ngoài buổi giảng; câu lạc đề không có chỗ hổng
+    # nào để hỏi vào nên model bí và chép lại y nguyên.
+    hoc_vien = "link github bài của trường đang bị đóng đúng không"
+    assert echoes_student("Link GitHub bài của trường đang bị đóng đúng không?", hoc_vien)
+
+
+def test_nhac_lai_vai_tu_cua_hoc_vien_thi_khong_tinh_la_nhai():
+    hoc_vien = "Token là mảnh chữ, một từ có thể bị cắt thành mấy mảnh."
+    for q in [
+        "Bạn có thể diễn đạt lại bằng lời của bạn: token là gì và tại sao lại cắt ra?",
+        "Mình chưa rõ chỗ 'mảnh chữ' — model quyết định cắt ở đâu vậy bạn?",
+    ]:
+        assert not echoes_student(q, hoc_vien), q
+
+
+# --- Tuột vai / lạc đề (O01, O02, O03) ----------------------------------------
+
+
+def test_bat_duoc_hoc_tro_nhan_vai_nguoi_giang():
+    for said in [
+        "Mình chưa rõ: bạn muốn mình giải thích chi tiết từng bước hay chỉ nêu ý chính?",
+        "Để mình trình bày lại phần này cho bạn nhé.",
+    ]:
+        assert takes_teacher_role(said), said
+
+
+def test_cau_hoi_nguoc_binh_thuong_khong_bi_coi_la_tuot_vai():
+    for said in [
+        "Mình vẫn chưa hình dung được, tại sao lại thành ra như thế bạn?",
+        "Bạn kể mình nghe một ví dụ để mình dễ hình dung được không?",
+        "Cảm ơn bạn đã giảng cho mình, giờ thì mình hiểu rồi.",
+    ]:
+        assert not takes_teacher_role(said), said
+
+
+def test_cau_hoi_chen_lac_de_bi_nhan_ra():
+    nguon = "Token là mảnh chữ; model cắt câu thành token trước khi đọc."
+    assert off_topic("link github bài của trường đang bị đóng đúng không", nguon)
+
+
+def test_bo_cuoc_khong_phai_la_lac_de():
+    # "Mình chịu" cần được mời thử lại, không phải bị kéo về chủ đề như câu lạc đề.
+    nguon = "Token là mảnh chữ; model cắt câu thành token trước khi đọc."
+    for said in ["mình chịu", "chịu thôi", "mình vẫn không biết"]:
+        assert not off_topic(said, nguon), said

@@ -36,8 +36,8 @@ class HallucinatingLLM(LLMClient):
         if schema is GradeOutput:
             return schema(
                 evidence=[
-                    {"span_id": "[T06-138]", "quote": "thật", "covered_by_student": False},
-                    {"span_id": "[T06-999]", "quote": "bịa", "covered_by_student": False},
+                    {"span_id": "[T06-138]", "quote": "thật", "key": True, "covered_by_student": False},
+                    {"span_id": "[T06-999]", "quote": "bịa", "key": True, "covered_by_student": False},
                 ],
                 gap_summary="thiếu nguyên nhân",
                 contradiction="",
@@ -69,3 +69,41 @@ def test_khong_bao_gio_bao_hoc_vien_xem_lai_doan_khong_ton_tai():
 def test_trich_dan_bia_trong_cau_hoi_nguoc_bi_go_bo():
     # Frontend dùng mã này để highlight vùng slide; trỏ sai là mất niềm tin ngay.
     assert _run(dict(STATE))["cites_span_id"] is None
+
+
+# --- Học viên hỏi chen câu lạc đề (O03) ---------------------------------------
+
+OFF_TOPIC = "link github bài của trường đang bị đóng đúng không"
+
+
+class EchoingLLM(LLMClient):
+    """Hỏi lại đúng câu học viên vừa nói — quan sát được thật ở case O03."""
+
+    async def structured(self, *, system: str, user: str, schema: type[T], tier: ModelTier) -> T:
+        if schema is GradeOutput:
+            return schema(
+                evidence=[
+                    {"span_id": "[T06-138]", "quote": "thật", "key": True, "covered_by_student": False}
+                ],
+                gap_summary="học viên chưa nói gì về nguồn",
+                contradiction="",
+            )
+        return FollowupOutput(question=f"{OFF_TOPIC.capitalize()}?", cites_span_id=None)
+
+    async def stream(self, *, system: str, user: str, tier: ModelTier) -> AsyncIterator[str]:
+        yield "ừm."
+
+
+def test_khong_hoi_lai_nguyen_cau_lac_de_cua_hoc_vien():
+    graph = build_graph(
+        EchoingLLM(), InMemorySpanStore([REAL]), checkpointer=InMemorySaver()
+    )
+    result = asyncio.run(
+        graph.ainvoke(
+            dict(STATE, student_text=OFF_TOPIC), config={"configurable": {"thread_id": "t2"}}
+        )
+    )
+    says = result["agent_says"].lower()
+    assert "github" not in says, says
+    # Nói thẳng là không biết rồi mời quay lại phần đang giảng.
+    assert "quay lại" in says

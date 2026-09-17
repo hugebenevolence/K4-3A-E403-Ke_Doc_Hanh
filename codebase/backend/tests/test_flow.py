@@ -14,7 +14,7 @@ from app.config import settings
 from app.domain.session import MAX_FOLLOWUPS, TeachBackSession, TurnState
 from app.domain.span import Span
 from app.domain.verbatim import is_verbatim_paste
-from app.domain.verdict import Evidence, GradeResult, Verdict
+from app.domain.verdict import Evidence, GradeResult, Verdict, decide
 from app.graph.build import build_graph
 
 SOURCE = Span(
@@ -126,3 +126,17 @@ def test_cat_cau_cho_tts():
         ]
 
     asyncio.run(main())
+
+
+def test_chi_tiet_phu_chua_noi_toi_van_duoc_coi_la_da_giang():
+    """Đủ = nắm CƠ CHẾ CHÍNH, không phải nhắc hết mọi chi tiết trên slide.
+
+    Đo trên lượt chạy golden set đầu tiên: 6/9 case học viên giảng đúng cơ chế
+    và tự lấy ví dụ vẫn bị chấm thiếu, chỉ vì chưa nhắc con số hay tên riêng.
+    """
+    chinh = Evidence("[T06-138]", "cơ chế", covered_by_student=True, key=True)
+    phu = Evidence("[T06-139]", "con số ví dụ", covered_by_student=False, key=False)
+    assert decide((chinh, phu), "", verbatim=False) is Verdict.SUFFICIENT
+    # Thiếu ý CHÍNH thì vẫn là chưa đủ.
+    thieu_chinh = Evidence("[T06-138]", "cơ chế", covered_by_student=False, key=True)
+    assert decide((thieu_chinh, phu), "", verbatim=False) is Verdict.INCOMPLETE
