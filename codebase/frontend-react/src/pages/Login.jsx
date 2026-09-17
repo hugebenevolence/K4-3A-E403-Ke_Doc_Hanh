@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth";
 import { blurIn, EASE } from "../motion";
-import { Brand, DotGrid } from "../site";
+import { Brand } from "../site";
 
 function Field({ label, ...props }) {
   return (
@@ -36,7 +36,7 @@ export default function Login() {
   async function submit(e) {
     e.preventDefault();
     if (!username.trim() || !password) {
-      setError("Nhập tên thành viên và mật khẩu");
+      setError("Nhập tên đăng nhập và mật khẩu");
       setAttempt((n) => n + 1);
       return;
     }
@@ -46,37 +46,33 @@ export default function Login() {
       await login(username.trim(), password);
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err.status === 401 ? "Sai tên thành viên hoặc mật khẩu" : err.message);
+      setError(err.status === 401 ? "Sai tên đăng nhập hoặc mật khẩu" : err.message);
       setAttempt((n) => n + 1);
       setBusy(false);
     }
   }
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-white font-sans text-neutral-900 antialiased">
-      <DotGrid />
-      <div className="relative mx-auto flex h-14 max-w-6xl items-center px-4 sm:px-6">
+    <div className="min-h-screen bg-neutral-50 font-sans text-neutral-900 antialiased">
+      <div className="mx-auto flex h-14 max-w-6xl items-center px-4 sm:px-6">
         <Brand />
       </div>
 
-      <div className="relative grid min-h-[calc(100vh-56px)] place-items-center px-4 pb-16">
+      <div className="grid min-h-[calc(100vh-56px)] place-items-center px-4 pb-16">
         <motion.div
           key={attempt}
           initial={attempt ? { x: 0 } : { opacity: 0, y: 16, filter: "blur(10px)" }}
           animate={attempt ? { x: [0, -8, 7, -5, 3, 0] } : { opacity: 1, y: 0, filter: "blur(0px)" }}
           transition={attempt ? { duration: 0.4 } : { duration: 0.7, ease: EASE }}
-          className="w-full max-w-[380px]"
+          className="w-full max-w-95"
         >
-          <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-[0_24px_80px_-32px_rgb(0_0_0/0.25)] sm:p-8">
-            <p className="m-0 text-[12px] font-medium text-neutral-400">Bản thử nghiệm nội bộ</p>
-            <h1 className="m-0 mt-1 text-[24px] font-semibold tracking-[-0.02em]">Đăng nhập</h1>
-            <p className="m-0 mt-1.5 text-[14px] leading-relaxed text-neutral-500">
-              Dùng tài khoản nhóm đã gửi cho bạn để vào thư viện slide.
-            </p>
+          <div className="rounded-2xl border border-neutral-200 bg-white p-6 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_24px_60px_-30px_rgb(0_0_0/0.2)] sm:p-8">
+            <h1 className="m-0 text-[24px] font-semibold tracking-[-0.02em]">Đăng nhập</h1>
+            <p className="m-0 mt-1 text-[14px] text-neutral-500">Dùng tài khoản nhóm đã cấp cho bạn.</p>
 
             <form onSubmit={submit} className="mt-6 space-y-4" noValidate>
               <Field
-                label="Tên thành viên"
+                label="Tên đăng nhập"
                 name="username"
                 autoComplete="username"
                 autoCapitalize="none"
@@ -116,10 +112,6 @@ export default function Login() {
               </motion.button>
             </form>
           </div>
-
-          <p className="m-0 mt-5 text-center text-[13px] text-neutral-500">
-            Chưa có tài khoản? Nhắn nhóm Kẻ Độc Hành để được cấp.
-          </p>
         </motion.div>
       </div>
     </div>
