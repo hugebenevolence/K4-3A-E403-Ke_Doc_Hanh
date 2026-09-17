@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     # "slide" hoặc "code" — đổi chế độ bài học mà không sửa dòng code nào.
     lesson_mode: str = "slide"
 
+    # Dạy-lại-CODE tạm ẩn. Đường nói mới là chỗ sản phẩm đứng hay ngã, nên dồn
+    # sức vào đó trước; phần code vẫn còn nguyên (fixtures/demo_code_lesson.json,
+    # prompts/grader_code/, frontend CodeView.jsx) và bật lại bằng đúng cờ này.
+    enable_code_mode: bool = False
+
     # File slide để frontend render. Nằm ngoài repo vì thuộc data pack.
     slides_pdf: Path | None = None
     session_log_file: Path = BACKEND_DIR / "var" / "sessions.jsonl"

@@ -1,3 +1,10 @@
+// TẠM ẨN — không màn hình nào import file này lúc này.
+//
+// Dạy-lại-CODE chạy được rồi (backend còn nguyên: prompts/grader_code/,
+// fixtures/demo_code_lesson.json), nhưng đường NÓI mới là chỗ sản phẩm đứng
+// hay ngã, nên dồn sức vào đó trước. Bật lại bằng ENABLE_CODE_MODE=true ở
+// backend rồi cắm lại component này vào App.jsx.
+//
 // Trình soạn code, dùng Monaco (chính editor của VS Code).
 //
 // Tô sáng đúng khoảng dòng agent đang bàn tới — đây là điểm khác biệt với mọi
