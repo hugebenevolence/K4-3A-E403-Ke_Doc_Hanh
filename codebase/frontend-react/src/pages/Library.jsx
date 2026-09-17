@@ -60,6 +60,9 @@ export default function Library() {
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6">
           <Brand />
           <div className="ml-auto flex items-center gap-1">
+            <LinkButton to="/graph" variant="quiet">
+              Bản đồ
+            </LinkButton>
             {member?.name && (
               <span className="mr-1 flex items-center gap-2 text-[13px] text-neutral-600">
                 <span className="grid size-7 place-items-center rounded-full bg-neutral-100 text-[12px] font-semibold uppercase text-neutral-700">

@@ -19,6 +19,11 @@ class Settings(BaseSettings):
 
     use_mocks: bool = True
 
+    # Mức log của chính app (không phải của uvicorn). Để INFO vì phần chẩn
+    # đoán đáng giá nhất — vì sao một câu không lên được đồ thị, lượt nào
+    # ăn cache — đều ghi ở mức này; để WARNING là chúng biến mất im lặng.
+    log_level: str = "INFO"
+
     openai_api_key: str = ""
     speechmatics_api_key: str = ""
     fpt_ai_api_key: str = ""
@@ -86,6 +91,9 @@ class Settings(BaseSettings):
     # phải lời cuối — bật lại để thử khi có bản ghi giọng người thật.
     enable_generated_pronunciations: bool = False
     profile_file: Path = BACKEND_DIR / "var" / "profiles.json"
+    # Đồ thị tri thức của từng học viên (spec §4c). Tách khỏi hồ sơ vì nó là
+    # thứ khác hẳn: hồ sơ ghi chỗ hay vấp, đồ thị ghi thứ đã dạy được.
+    graph_file: Path = BACKEND_DIR / "var" / "graphs.json"
 
     # CHƯA ĐƯỢC LẮP, cố ý để lại đường: checkpointer hiện là InMemorySaver tạo
     # theo từng kết nối, nên rớt mạng hay restart là mất mạch buổi đang dở. Đổi

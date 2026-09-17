@@ -395,6 +395,24 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
                 "nhẹ điều đó, nhưng đừng làm bạn ấy thấy bị chấm điểm."
             )
 
+        # Bắc cầu sang thứ học viên đã DẠY ĐƯỢC ở buổi trước (spec §4c). Đây là
+        # câu hỏi không tutor nào hỏi được, vì nó dựng từ chính lời họ: "bạn dạy
+        # mình là model chỉ đoán chữ tiếp theo — vậy cái xếp hạng này làm nó đổi
+        # kiểu gì?". Và nó ép nối các mảnh rời, đúng bước từ knowledge-telling
+        # sang knowledge-building.
+        #
+        # An toàn theo đúng lý do `_heard` an toàn: `said` là NGUYÊN VĂN câu của
+        # học viên, nhắc lại lời họ thì không phải lộ. Bộ lọc lộ đáp án vẫn chạy
+        # sau đó như thường.
+        if da_day := state.get("known_claims") or []:
+            history += "\n\nBuổi trước chính bạn ấy đã dạy mình mấy ý này:\n" + "\n".join(
+                f"- {c['said']}" for c in da_day
+            )
+            history += (
+                "\n\nNếu ý nào trong số đó nối được với chỗ hổng lần này, hãy bắc cầu "
+                "sang nó bằng chính lời bạn ấy — nhắc lại lời họ thì không phải nói hộ."
+            )
+
         code = state.get("code") or ""
         system = registry.compose_system(
             "student_persona", PERSONA_VERSION, source, code=code

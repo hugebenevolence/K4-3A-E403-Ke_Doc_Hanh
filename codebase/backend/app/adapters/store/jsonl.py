@@ -12,8 +12,9 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
+from app.domain.graph import Claim, KnowledgeGraph, Link
 from app.domain.log import StudentProfile, TurnLog
-from app.ports.store import ProfileStore, SessionLog
+from app.ports.store import GraphStore, ProfileStore, SessionLog
 
 log = logging.getLogger(__name__)
 
@@ -55,10 +56,25 @@ class JsonlSessionLog(SessionLog):
         )
 
 
-class JsonProfileStore(ProfileStore):
+class _JsonMap:
+    """Một file JSON dạng {khoá: bản ghi}, đọc/ghi an toàn.
+
+    Tách ra vì hồ sơ học viên và đồ thị tri thức cần y hệt hai luật này — ghi
+    nguyên tử và dọn file hỏng — và chép lại luật thì kiểu gì cũng có một bản
+    trôi lệch, đúng lúc mất dữ liệu mới biết.
+    """
+
     def __init__(self, path: Path):
         self._path = path
         path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _write(self, data: dict) -> None:
+        # Ghi ra file tạm rồi ĐỔI CHỖ, không ghi đè thẳng: `write_text` cắt file
+        # về rỗng trước khi viết, nên tắt server đúng lúc đó là còn lại một file
+        # JSON cụt — và file hỏng thì mọi phiên sau đều không mở được.
+        tmp = self._path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(self._path)
 
     def _all(self) -> dict:
         if not self._path.is_file():
@@ -76,8 +92,12 @@ class JsonProfileStore(ProfileStore):
             stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
             broken = self._path.with_name(f"{self._path.stem}.hong-{stamp}.json")
             self._path.replace(broken)
-            log.error("Hồ sơ học viên hỏng, đã chuyển sang %s và bắt đầu lại", broken)
+            log.error("File %s hỏng, đã chuyển sang %s và bắt đầu lại", self._path.name, broken)
             return {}
+
+
+class JsonProfileStore(_JsonMap, ProfileStore):
+    """Hồ sơ học viên: khái niệm đã dạy và chỗ hay vấp, theo từng người."""
 
     async def load(self, student_id: str) -> StudentProfile:
         raw = self._all().get(student_id)
@@ -88,9 +108,30 @@ class JsonProfileStore(ProfileStore):
     async def save(self, profile: StudentProfile) -> None:
         data = self._all()
         data[profile.student_id] = asdict(profile)
-        # Ghi ra file tạm rồi ĐỔI CHỖ, không ghi đè thẳng: `write_text` cắt file
-        # về rỗng trước khi viết, nên tắt server đúng lúc đó là còn lại một file
-        # JSON cụt — và hồ sơ hỏng thì mọi phiên sau đều không mở được.
-        tmp = self._path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(self._path)
+        self._write(data)
+
+
+class JsonGraphStore(_JsonMap, GraphStore):
+    """Đồ thị tri thức, một bản ghi cho mỗi học viên.
+
+    Cạnh lưu thành danh sách chứ không phải dict, vì khoá của nó là một CẶP
+    khái niệm — JSON không có khoá kiểu tuple, và ép thành chuỗi "a|b" thì đến
+    khi khái niệm có dấu gạch đứng là hỏng im lặng.
+    """
+
+    async def load(self, student_id: str) -> KnowledgeGraph:
+        raw = self._all().get(student_id)
+        if raw is None:
+            return KnowledgeGraph(student_id=student_id)
+        claims = {c["concept"]: Claim(**{**c, "span_ids": tuple(c["span_ids"]), "sessions": tuple(c["sessions"])})
+                  for c in raw.get("claims", [])}
+        links = {(l["source"], l["target"]): Link(**l) for l in raw.get("links", [])}
+        return KnowledgeGraph(student_id=student_id, claims=claims, links=links)
+
+    async def save(self, graph: KnowledgeGraph) -> None:
+        data = self._all()
+        data[graph.student_id] = {
+            "claims": [asdict(c) for c in graph.claims.values()],
+            "links": [asdict(l) for l in graph.links.values()],
+        }
+        self._write(data)

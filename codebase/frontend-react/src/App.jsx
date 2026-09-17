@@ -10,6 +10,7 @@ import Login from "./pages/Login";
 // trang giới thiệu mở ngay cả trên mạng chậm.
 const Library = lazy(() => import("./pages/Library"));
 const Learn = lazy(() => import("./pages/Learn"));
+const Graph = lazy(() => import("./pages/Graph"));
 
 export default function App() {
   return (
@@ -23,6 +24,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <Library />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/graph"
+            element={
+              <RequireAuth>
+                <Graph />
               </RequireAuth>
             }
           />

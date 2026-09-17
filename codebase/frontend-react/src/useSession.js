@@ -18,7 +18,7 @@ const SAMPLE_RATE = 16000;
  *  Không có nó thì server dùng chung một hồ sơ "demo" cho MỌI người, và agent
  *  nói với người lần đầu vào rằng "buổi trước bạn có nhắc chỗ này" — một sản
  *  phẩm dạy về hallucination lại tự bịa ra trí nhớ. */
-function studentId() {
+export function studentId() {
   try {
     let id = localStorage.getItem("giang-lai-student");
     if (!id) {

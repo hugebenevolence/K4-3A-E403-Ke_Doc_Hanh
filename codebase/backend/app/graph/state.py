@@ -42,6 +42,15 @@ class TeachBackState(TypedDict, total=False):
     # sau agent không biết mình đã hỏi gì và hỏi lại y câu cũ.
     asked_questions: Annotated[list[str], operator.add]
 
+    # Những điều học viên ĐÃ dạy được ở các buổi trước, lấy từ đồ thị tri thức
+    # (spec §4c). Mỗi phần tử: {"concept", "said"} — `said` là NGUYÊN VĂN câu
+    # của chính họ, nên nhắc lại không phải là lộ đáp án.
+    #
+    # Rỗng ở buổi đầu, và khi rỗng thì mọi thứ chạy y như trước khi có đồ thị —
+    # đó là lý do lượt đo golden set (chạy trên tài khoản không có đồ thị) vẫn
+    # so sánh được với các lượt cũ.
+    known_claims: list[dict[str, str]]
+
     # Nạp từ hồ sơ học viên lúc mở phiên: span_id -> số buổi trước đã vấp.
     # Cho phép agent nhận ra "chỗ này lần trước cũng chưa thông".
     recurring_gaps: dict[str, int]

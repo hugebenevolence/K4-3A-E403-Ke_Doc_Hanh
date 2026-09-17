@@ -33,7 +33,7 @@ from app.adapters.knowledge.local import load_lesson
 from app.adapters.knowledge.pdf import Deck, attach_descriptions, deck_slug, load_deck
 from app.adapters.knowledge.selection import lesson_from_selection
 from app.adapters.llm.mock import MockLLM
-from app.adapters.store.jsonl import JsonlSessionLog, JsonProfileStore
+from app.adapters.store.jsonl import JsonGraphStore, JsonlSessionLog, JsonProfileStore
 from app.adapters.stt.mock import MockSTT
 from app.adapters.tts.mock import MockTTS
 from app.api.auth import (
@@ -44,13 +44,16 @@ from app.api.auth import (
     verify_token,
 )
 from app.api.live_turn import LiveTurn
+from app.api.graph_sync import absorb_turn, known_claims
 from app.api.pronunciations import PronunciationCache
 from app.api.session import TALKER_VERSION, run_turn
 from app.config import settings
+from app.domain.graph import LINK_LABEL
 from app.domain.lesson import Lesson
 from app.domain.log import TurnLog
 from app.domain.sanitize import sanitize_spoken, tame_shouting
 from app.domain.session import TurnState
+from app.domain.terms import extract_terms
 from app.domain.verdict import Evidence, GradeResult, Verdict
 from app.graph.build import build_graph
 from app.graph.nodes import (
@@ -61,9 +64,17 @@ from app.graph.nodes import (
 )
 from app.ports.knowledge import SpanStore
 from app.ports.llm import LLMClient, LLMUnavailable
-from app.ports.store import ProfileStore, SessionLog
+from app.ports.store import GraphStore, ProfileStore, SessionLog
 from app.ports.stt import SpeechToText
 from app.ports.tts import TextToSpeech
+
+# uvicorn chỉ cấu hình logger CỦA NÓ; logger của app rơi về root với mức
+# WARNING, nên mọi dòng INFO ta cất công viết ra đều bị nuốt. Đặt ở đây
+# một lần cho cả tiến trình.
+logging.basicConfig(
+    level=settings.log_level.upper(),
+    format="%(levelname)s  %(name)s  %(message)s",
+)
 
 log = logging.getLogger(__name__)
 
@@ -80,20 +91,21 @@ app.add_middleware(
 )
 
 def _build_deps(selection: list[str] | None = None, deck: str | None = None) -> tuple[
-    Lesson, SpanStore, LLMClient, SpeechToText, TextToSpeech, SessionLog, ProfileStore
+    Lesson, SpanStore, LLMClient, SpeechToText, TextToSpeech, SessionLog, ProfileStore, GraphStore
 ]:
     # Gọi mỗi lần mở kết nối. Với mock thì không sao, nhưng khi viết adapter
     # thật thì HTTP client phải là singleton ở tầng module — tạo client mới cho
     # mỗi phiên sẽ mở thừa connection pool và sớm muộn cạn socket.
     session_log = JsonlSessionLog(settings.session_log_file)
     profiles = JsonProfileStore(settings.profile_file)
+    graphs = JsonGraphStore(settings.graph_file)
 
     lesson, spans = _lesson(selection, deck)
     if settings.use_mocks:
-        return lesson, spans, MockLLM(), MockSTT(), MockTTS(), session_log, profiles
+        return lesson, spans, MockLLM(), MockSTT(), MockTTS(), session_log, profiles, graphs
 
     llm, tts = _shared_providers()
-    return lesson, spans, llm, _speech_to_text(lesson), tts, session_log, profiles
+    return lesson, spans, llm, _speech_to_text(lesson), tts, session_log, profiles, graphs
 
 
 def _lesson(selection: list[str] | None, deck: str | None = None):
@@ -287,6 +299,93 @@ def _deck_or_404(slug: str) -> Deck:
     return deck
 
 
+MAX_DIM_PER_DECK = 18
+"""Số khái niệm CHƯA giảng nổi hiện mỗi bộ slide — "vùng tối" của đồ thị.
+
+Hiện hết thì màn hình thành một đám mây chữ và phần sáng (thứ học viên đã dạy
+được) chìm nghỉm, đúng cái mà đồ thị sinh ra để làm nổi lên.
+"""
+
+
+def _span_index() -> dict[str, tuple[str, int]]:
+    """span_id -> (mã bộ slide, số trang), gom qua MỌI bộ đang cấu hình.
+
+    Đồ thị là XUYÊN TÀI LIỆU nên một đỉnh có thể neo vào cả d1 lẫn d2; tra cứu
+    theo từng bộ riêng lẻ sẽ làm rơi mất đúng những cạnh đáng giá nhất.
+    """
+    index: dict[str, tuple[str, int]] = {}
+    for slug in _deck_paths():
+        deck = _find_deck(slug)
+        if deck is None:
+            continue
+        for span in deck.spans:
+            if span.page:
+                index[span.span_id] = (slug, span.page)
+    return index
+
+
+@api.get("/graph")
+async def knowledge_graph(
+    student_id: str = "demo", member: str = Depends(require_member)
+):
+    """Đồ thị tri thức của học viên đang đăng nhập (spec §4c).
+
+    Đỉnh sáng = mệnh đề họ đã tự nói ra và bộ chấm xác nhận có căn cứ; cạnh =
+    quan hệ chính họ nối; vùng tối = khái niệm của bài mà họ chưa giảng nổi.
+    """
+    who = member if _members() else student_id
+    graph = await JsonGraphStore(settings.graph_file).load(who)
+    index = _span_index()
+
+    claims = []
+    for claim in graph.claims.values():
+        cho = [index[s] for s in claim.span_ids if s in index]
+        claims.append(
+            {
+                "concept": claim.concept,
+                "said": claim.said,
+                "span_ids": list(claim.span_ids),
+                "times_taught": claim.times_taught,
+                # Chỗ đầu tiên để bấm vào là mở đúng slide đó ra xem lại.
+                "deck": cho[0][0] if cho else None,
+                "page": cho[0][1] if cho else None,
+                "also_on": [{"deck": d, "page": p} for d, p in cho[1:]],
+            }
+        )
+
+    da_co = set(graph.claims)
+    dim = []
+    for slug in _deck_paths():
+        deck = _find_deck(slug)
+        if deck is None:
+            continue
+        trang_dau: dict[str, int] = {}
+        for span in deck.spans:
+            for term in extract_terms(span.text):
+                trang_dau.setdefault(term.lower(), span.page or 1)
+        con_toi = [t for t in deck.terms if t.lower() not in da_co]
+        dim += [
+            {"concept": t.lower(), "deck": slug, "page": trang_dau.get(t.lower(), 1)}
+            for t in con_toi[:MAX_DIM_PER_DECK]
+        ]
+
+    return {
+        "student_id": who,
+        "claims": sorted(claims, key=lambda c: -c["times_taught"]),
+        "links": [
+            {
+                "source": l.source,
+                "target": l.target,
+                "kind": l.kind,
+                "label": LINK_LABEL.get(l.kind, l.kind),
+                "evidence": l.evidence,
+            }
+            for l in graph.links.values()
+        ],
+        "dim": dim,
+    }
+
+
 @api.get("/decks")
 async def decks(member: str = Depends(require_member)):
     """Thư viện: các bộ slide chọn được để học."""
@@ -362,7 +461,7 @@ async def teach_back_session(ws: WebSocket):
     # Vùng học viên đã chọn trên slide, gửi kèm lúc mở kết nối.
     selection = [sid for sid in (ws.query_params.get("spans") or "").split(",") if sid]
     try:
-        lesson, spans, llm, stt, tts, session_log, profiles = _build_deps(
+        lesson, spans, llm, stt, tts, session_log, profiles, graphs = _build_deps(
             selection, ws.query_params.get("deck")
         )
     except ValueError as exc:
@@ -402,6 +501,10 @@ async def teach_back_session(ws: WebSocket):
     # dù học trên máy nào.
     student_id = member if _members() else ws.query_params.get("student_id", "demo")
     profile = await profiles.load(student_id)
+    # Đồ thị tri thức: thứ học viên đã DẠY ĐƯỢC qua mọi buổi, mọi tài liệu.
+    # KHÔNG đặt tên `graph`: biến đó đã là LangGraph đã compile ở ngay trên,
+    # và đè lên nó thì mọi lượt chấm chết với 'KnowledgeGraph has no astream'.
+    knowledge = await graphs.load(student_id)
 
     live: LiveTurn | None = None
     last_grade: GradeResult | None = None
@@ -579,6 +682,7 @@ async def teach_back_session(ws: WebSocket):
                     "vocabulary": list(lesson.vocabulary),
                     "followups_asked": 0,
                     "recurring_gaps": dict(profile.recurring_gaps),
+                    "known_claims": known_claims(knowledge, list(lesson.source_span_ids)),
                     "code": live_code,
                     # Câu mở bài sinh ngoài graph nên graph không tự biết nó.
                     # Không đưa vào thì lượt đầu bị chấm như một lời giảng tự
@@ -616,6 +720,18 @@ async def teach_back_session(ws: WebSocket):
                             session_log, session_id, turn_index, student_text, event
                         )
                         review_spans = event.payload["result"].get("review_span_ids", [])
+                        # Đồ thị lưu NGAY sau mỗi lượt, không đợi kết phiên như
+                        # hồ sơ: đây là trí nhớ của học trò, mà học viên đóng
+                        # tab giữa chừng là chuyện thường — mất thứ họ vừa dạy
+                        # được thì đúng cái tính năng này sinh ra để tránh.
+                        await absorb_turn(
+                            knowledge,
+                            spans,
+                            student_text=student_text,
+                            evidence=event.payload["result"].get("evidence") or [],
+                            session_id=session_id,
+                        )
+                        await graphs.save(knowledge)
                         turn_index += 1
                     else:
                         await ws.send_json({"type": "transcript", **event.payload})
