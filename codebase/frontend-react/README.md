@@ -14,31 +14,40 @@ trên localhost hoặc HTTPS.
 
 ## Bố cục
 
+Ba cột theo khuôn của Profound (thanh bên · hội thoại · tài liệu), nền trắng:
+
 | Tệp | Việc |
 | --- | --- |
+| `src/App.jsx` | Khung ba cột, phím tắt (giữ Space để nói) |
+| `src/Sidebar.jsx` | Bài đang học, dàn ý slide có tiêu đề thật, lọc "đang dạy" |
+| `src/Conversation.jsx` | Hội thoại: dòng "Đã nghĩ trong Xs · vai nào làm", thẻ trỏ nguồn, ô nhập nói/gõ |
+| `src/SourcePanel.jsx` | Khung slide: tab, thanh công cụ, chuyển trang có hiệu ứng |
+| `src/SlideView.jsx` | Vẽ PDF bằng PDF.js, khoanh vùng theo bbox, vẽ lại khi khung co giãn |
 | `src/useSession.js` | WebSocket, mic, hàng đợi phát tiếng — toàn bộ trạng thái phiên |
-| `src/App.jsx` | Khung màn hình, phím tắt, chọn chế độ slide hay code |
-| `src/TeachPanel.jsx` | Lời thoại hai bên và các nút điều khiển |
-| `src/SlideView.jsx` | Vẽ PDF bằng PDF.js, khoanh vùng theo bbox |
-| `src/CodeView.jsx` | Monaco, tô sáng khoảng dòng agent đang bàn |
-| `src/ui.jsx` | Nút, nhãn, chỉ báo trạng thái dùng chung |
+| `src/vad.js` | Nhận ra lúc học viên nói xong (có test: `npm test`) |
+| `src/ui.jsx`, `src/motion.js` | Thành phần dùng chung và nhịp chuyển động chung |
 | `public/pcm-worklet.js` | Lấy PCM16 thô cho STT (MediaRecorder cho ra webm/opus, STT không nhận) |
 
 ## Quy ước giao diện
 
-Đơn sắc trắng–đen–xám, không icon, không màu thương hiệu. Chỗ duy nhất được
-phép nổi bật là vùng nội dung agent đang hỏi tới — mọi mảng màu khác đều tranh
-sự chú ý với chính việc học viên đang làm.
+Nền trắng, đơn sắc trắng–đen–xám, không icon. Chỗ duy nhất được phép nổi bật là
+vùng slide agent đang hỏi tới.
 
-Style viết bằng Tailwind. `src/styles.css` chỉ giữ những gì Tailwind không với
-tới: decoration do Monaco tự chèn vào DOM, overlay trên canvas PDF cần toạ độ
-tính bằng JS, và keyframe của chỉ báo trạng thái.
+Chuyển động dùng thư viện `motion`, cùng một nhịp (`src/motion.js`): nội dung
+mới hiện ra từ trạng thái nhoè, lời agent hiện dần từng từ, nền của mục đang
+chọn trượt theo. Ai bật "giảm chuyển động" trong hệ điều hành thì tất cả tự tắt.
+
+Thẻ trỏ nguồn trong hội thoại **cố ý không trích nguyên văn** đoạn slide: đo
+trên LLM thật thì trích dẫn nằm ngay dưới câu hỏi ngược chính là đáp án.
+
+Style viết bằng Tailwind. `src/styles.css` chỉ giữ overlay vẽ bằng toạ độ JS
+trên canvas PDF và các keyframe.
 
 ## Phím tắt
 
 | Phím | Việc |
 | --- | --- |
-| `Space` | Xong lượt nói, hoặc bỏ qua khi agent đang nói |
+| Giữ `Space` | Nói; thả ra là gửi. Khi agent đang nói thì bấm để bỏ qua |
 | `←` `→` | Lật slide |
 | `G` | Về trang đang dạy |
 | `F` | Bật/tắt chế độ vùng đang dạy |
