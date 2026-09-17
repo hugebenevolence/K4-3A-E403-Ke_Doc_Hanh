@@ -19,11 +19,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import re
 import sys
 import unicodedata
 from datetime import datetime
 from pathlib import Path
+from statistics import median
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -35,6 +35,7 @@ from app.adapters.knowledge.selection import lesson_from_selection
 from app.adapters.llm.mock import MockLLM
 from app.adapters.llm.openai import OpenAILLM
 from app.config import settings
+from app.domain.substance import MIN_SOURCE_WORDS, teachable_words
 from app.graph.build import build_graph
 
 REPO = Path(__file__).resolve().parents[3]
@@ -68,23 +69,16 @@ def deck_of(slug: str):
     return attach_descriptions(load_deck(path), descriptions)
 
 
-MIN_TEACH_WORDS = 12
-"""Giống ngưỡng của frontend (`Learn.jsx`): vùng chọn mỏng hơn thế thì mở ra cả
-trang. Harness phải bắt chước đúng luật này, nếu không nó dựng ra những phiên
-mà sản phẩm không bao giờ tạo được — ví dụ nguồn chỉ có mỗi dòng tiêu đề, lúc
-đó bộ lọc lộ đáp án không còn gì để so."""
+def widen(chosen: list, on_page: list, title: str) -> list[str]:
+    """Vùng quá mỏng thì giảng cả trang — đúng như sản phẩm làm.
 
-
-def widen(chosen: list, on_page: list) -> list[str]:
-    """Vùng quá mỏng thì giảng cả trang — đúng như frontend làm.
-
-    Ngưỡng chữ chỉ áp cho ô CHỮ: một sơ đồ gần như không có chữ nhưng vẫn là
-    nguyên một ý để giảng.
+    Dùng chung đúng ngưỡng và đúng phép đếm với `domain/substance.py` (bỏ ô tiêu
+    đề trang). Harness lệch luật thì nó dựng ra những phiên mà sản phẩm không
+    bao giờ tạo được, và con số đo được không nói lên điều gì về sản phẩm.
     """
     if any(s.kind == "figure" for s in chosen):
         return [s.span_id for s in chosen]
-    words = sum(len(re.findall(r"[^\W_]+", s.text, flags=re.UNICODE)) for s in chosen)
-    picked = chosen if words >= MIN_TEACH_WORDS else on_page
+    picked = chosen if teachable_words(chosen, title) >= MIN_SOURCE_WORDS else on_page
     return [s.span_id for s in picked]
 
 
@@ -92,22 +86,23 @@ def pick_spans(deck, case) -> list[str]:
     """Vùng slide học viên chọn trong case."""
     page = case["page"]
     on_page = [s for s in deck.spans if s.page == page]
+    title = deck.titles.get(page) or ""
     rule = case["select"]
     if rule == "page":
         return [s.span_id for s in on_page]
     if isinstance(rule, dict) and "contains" in rule:
         needle = fold(rule["contains"])
         hit = [s for s in on_page if needle in fold(s.text)]
-        return widen(hit, on_page) if hit else [s.span_id for s in on_page]
+        return widen(hit, on_page, title) if hit else [s.span_id for s in on_page]
     if isinstance(rule, dict) and rule.get("kind") == "figure":
         hit = [s.span_id for s in on_page if s.kind == "figure"]
         return hit or [s.span_id for s in on_page]
     if isinstance(rule, dict) and rule.get("title_only"):
-        return widen(on_page[:1], on_page) if on_page else []
+        return widen(on_page[:1], on_page, title) if on_page else []
     raise ValueError(f"select lạ: {rule}")
 
 
-async def run_case(case, llm) -> dict:
+async def run_case(case, llm, rep: int = 0) -> dict:
     deck = deck_of(case["deck"])
     span_ids = pick_spans(deck, case)
     lesson, store = lesson_from_selection(deck, span_ids)
@@ -119,7 +114,9 @@ async def run_case(case, llm) -> dict:
         # Case "đọc nguyên văn slide": lấy thẳng chữ trên trang làm lời học viên.
         turns_said = [source_text[:600]]
 
-    thread = f"golden-{case['id']}"
+    # Mỗi lượt lặp là một phiên riêng: chung thread_id thì checkpointer giữ lại
+    # lời của lượt trước và lượt sau không còn là một phép đo độc lập.
+    thread = f"golden-{case['id']}-r{rep}"
     turns = []
     for i, said in enumerate(turns_said):
         payload: dict = {"student_text": said}
@@ -146,7 +143,7 @@ async def run_case(case, llm) -> dict:
                 "gap_summary": result.get("gap_summary", ""),
             }
         )
-    return judge(case, turns, source_text)
+    return judge(case, turns, source_text) | {"rep": rep}
 
 
 def judge(case, turns, source_text: str) -> dict:
@@ -198,13 +195,52 @@ def mark(ok: bool | None) -> str:
     return {True: "đạt", False: "KHÔNG", None: "—"}[ok]
 
 
+def _by_case(rows: list[dict]) -> dict[str, list[dict]]:
+    """Gom các lượt lặp của cùng một case, giữ nguyên thứ tự case."""
+    groups: dict[str, list[dict]] = {}
+    for r in rows:
+        groups.setdefault(r["id"], []).append(r)
+    return groups
+
+
+def unstable(reps: list[dict]) -> bool:
+    """Cùng một lời giảng, cùng một bản build, mà lượt được lượt không.
+
+    Đây mới là con số đáng đọc. Chạy một lượt rồi báo "77%" là báo một lần tung
+    đồng xu: spec §7 đã ghi nhận D1 chạy 20–23/26 qua các lượt của CÙNG bản build.
+    """
+    return len({r["d1"] for r in reps}) > 1
+
+
 def report(rows: list[dict], started: str, build: str | None = None) -> str:
-    hard_fail = [
-        r for r in rows
+    groups = _by_case(rows)
+    n_reps = max(len(v) for v in groups.values()) if groups else 1
+
+    hard_fail = sorted({
+        r["id"] for r in rows
         if (r["layer"] in ("③", "④") and not r["d2"])
         or ("INCORRECT" in r["expect"] and any((t["verdict"] or "").upper() == "SUFFICIENT" for t in r["turns"]))
+    })
+    # Tổng của TỪNG lượt chạy, không phải tổng gộp: mỗi lượt là một lần đo cả bộ.
+    totals = [
+        sum(1 for reps in groups.values() if i < len(reps) and reps[i]["d1"] and reps[i]["d2"])
+        for i in range(n_reps)
     ]
-    passed = [r for r in rows if r["d1"] and r["d2"]]
+    wobbly = [cid for cid, reps in groups.items() if unstable(reps)]
+
+    if n_reps > 1:
+        headline = (
+            f"**D1+D2 tự động: trung vị {median(totals):.0f}/{len(groups)} "
+            f"({100 * median(totals) / max(len(groups), 1):.0f}%)** qua {n_reps} lượt chạy "
+            f"(từng lượt: {', '.join(str(t) for t in totals)}) — "
+            "D3 và các ô '—' cần người chấm (xem cách chấm trong golden-set.md)."
+        )
+    else:
+        headline = (
+            f"**D1+D2 tự động: {totals[0]}/{len(groups)} ({100 * totals[0] / max(len(groups), 1):.0f}%)** — "
+            "D3 và các ô '—' cần người chấm (xem cách chấm trong golden-set.md)."
+        )
+
     lines = [
         f"# Lượt chạy golden set — {started}",
         "",
@@ -212,41 +248,69 @@ def report(rows: list[dict], started: str, build: str | None = None) -> str:
         or (
             f"Bản build: {settings.model_standard} · service tier {settings.openai_service_tier} · "
             f"{'MOCK' if settings.use_mocks else 'provider thật'}"
+            + (f" · {n_reps} lượt chạy mỗi case" if n_reps > 1 else "")
         ),
         "",
-        (
-            f"**D1+D2 tự động: {len(passed)}/{len(rows)} ({100 * len(passed) / max(len(rows), 1):.0f}%)** — "
-            "D3 và các ô '—' cần người chấm (xem cách chấm trong golden-set.md)."
-        ),
+        headline,
         "",
-        f"Điều kiện cứng: {'ĐẠT' if not hard_fail else 'KHÔNG ĐẠT — ' + ', '.join(r['id'] for r in hard_fail)}",
+        f"Điều kiện cứng: {'ĐẠT' if not hard_fail else 'KHÔNG ĐẠT — ' + ', '.join(hard_fail)}"
+        + (" (một lượt vi phạm là trượt — điều kiện cứng không lấy trung vị)" if n_reps > 1 else ""),
         "",
+    ]
+    if n_reps > 1:
+        lines += [
+            f"**Case dao động giữa các lượt: {len(wobbly)}/{len(groups)}**"
+            + (" — " + ", ".join(sorted(wobbly)) if wobbly else " — không có case nào"),
+            "",
+            "Case dao động là chỗ bộ chấm chưa có ranh giới ổn định; sửa ở đó ăn hơn "
+            "sửa ở case hỏng đều, vì case hỏng đều ít nhất còn đoán trước được.",
+            "",
+        ]
+
+    lines += [
         "| Case | Lớp | Kỳ vọng | Nhãn chấm được | D1 | D2 | D3 (gợi ý) | Ghi chú máy |",
         "|---|---|---|---|---|---|---|---|",
     ]
-    for r in rows:
-        got = " → ".join(str(t["verdict"]) for t in r["turns"])
+    for cid, reps in groups.items():
+        first = reps[0]
+        seen: list[str] = []
+        for r in reps:
+            got = " → ".join(str(t["verdict"]) for t in r["turns"])
+            if got not in seen:
+                seen.append(got)
         note = []
-        if r["d2_leaks"]:
-            note.append("lộ: " + ", ".join(sorted(set(r["d2_leaks"]))))
-        if r["d2_extra_questions"]:
-            note.append(f"hỏi {max(r['d2_extra_questions'])} câu trong một lượt")
-        if r["manual"]:
-            note.append("người chấm: " + r["manual"])
-        d3 = "—" if r["d3_hits"] is None else ("chạm: " + ", ".join(r["d3_hits"]) if r["d3_hits"] else "không chạm từ khoá nào")
+        if any(r["d2_leaks"] for r in reps):
+            note.append("lộ: " + ", ".join(sorted({p for r in reps for p in r["d2_leaks"]})))
+        if any(r["d2_extra_questions"] for r in reps):
+            note.append("có lượt hỏi nhiều hơn một câu")
+        if unstable(reps):
+            note.append("DAO ĐỘNG giữa các lượt")
+        if first["manual"]:
+            note.append("người chấm: " + first["manual"])
+        d1 = f"{sum(1 for r in reps if r['d1'])}/{len(reps)}" if n_reps > 1 else mark(first["d1"])
+        d2 = f"{sum(1 for r in reps if r['d2'])}/{len(reps)}" if n_reps > 1 else mark(first["d2"])
+        hits = first["d3_hits"]
+        d3 = "—" if hits is None else ("chạm: " + ", ".join(hits) if hits else "không chạm từ khoá nào")
         lines.append(
-            f"| {r['id']} | {r['layer']} | {' → '.join(r['expect'])} | {got} | {mark(r['d1'])} | {mark(r['d2'])} | {d3} | {'; '.join(note)} |"
+            f"| {cid} | {first['layer']} | {' → '.join(first['expect'])} | {' / '.join(seen)} "
+            f"| {d1} | {d2} | {d3} | {'; '.join(note)} |"
         )
 
     lines += ["", "## Lời học trò từng case", ""]
-    for r in rows:
-        lines.append(f"### {r['id']} ({r['layer']}) — kỳ vọng {' → '.join(r['expect'])}")
-        for i, t in enumerate(r["turns"], 1):
-            lines.append(f"- **Lượt {i}** · học viên: {t['said'][:200]}")
-            lines.append(f"  - nhãn: `{t['verdict']}` · trạng thái: `{t['turn_state']}` · trích: `{t['cites_span_id']}`")
-            if t["understood"]:
-                lines.append("  - mình hiểu là: " + " / ".join(t["understood"]))
-            lines.append(f"  - học trò nói: {t['agent_says']}")
+    for cid, reps in groups.items():
+        first = reps[0]
+        lines.append(f"### {cid} ({first['layer']}) — kỳ vọng {' → '.join(first['expect'])}")
+        # Chỉ chép chi tiết lượt đầu; case dao động thì chép hết, vì đúng chỗ đó
+        # mới cần đọc tay xem hai lượt khác nhau ở đâu.
+        for r in reps if unstable(reps) else reps[:1]:
+            if len(reps) > 1 and unstable(reps):
+                lines.append(f"*lượt chạy {r.get('rep', 0) + 1} — D1 {mark(r['d1'])}*")
+            for i, t in enumerate(r["turns"], 1):
+                lines.append(f"- **Lượt {i}** · học viên: {t['said'][:200]}")
+                lines.append(f"  - nhãn: `{t['verdict']}` · trạng thái: `{t['turn_state']}` · trích: `{t['cites_span_id']}`")
+                if t["understood"]:
+                    lines.append("  - mình hiểu là: " + " / ".join(t["understood"]))
+                lines.append(f"  - học trò nói: {t['agent_says']}")
         lines.append("")
     return "\n".join(lines)
 
@@ -256,6 +320,10 @@ async def main() -> None:
     ap.add_argument("--only", default="")
     ap.add_argument("--mocks", action="store_true")
     ap.add_argument("--concurrency", type=int, default=3)
+    # Chạy mỗi case nhiều lượt. Một lượt chạy là MỘT lần tung đồng xu: cùng bản
+    # build, D1 đã đo được 20–23/26 qua các lượt (spec §7). Ba lượt cho biết
+    # con số thật nằm quanh đâu, và case nào đang bập bênh.
+    ap.add_argument("--repeat", type=int, default=1)
     # Chấm lại từ lượt đã chạy: sửa cách chấm mà không gọi lại LLM.
     ap.add_argument("--rejudge", default="")
     args = ap.parse_args()
@@ -285,22 +353,26 @@ async def main() -> None:
     started = datetime.now().astimezone().strftime("%d/%m/%Y %H:%M")
     gate = asyncio.Semaphore(args.concurrency)
 
-    async def one(case):
+    async def one(case, rep):
         async with gate:
             try:
-                row = await run_case(case, llm)
+                row = await run_case(case, llm, rep)
             except Exception as err:  # noqa: BLE001 — một case hỏng không được kéo đổ cả lượt chạy
                 row = {
                     "id": case["id"], "layer": case["layer"], "source": case.get("source", []),
                     "expect": case["expect"], "turns": [], "d1": False, "d2": False,
                     "d2_leaks": [], "d2_extra_questions": [], "d3_hits": None,
-                    "manual": f"LỖI KHI CHẠY: {err}", "source_chars": 0,
+                    "manual": f"LỖI KHI CHẠY: {err}", "source_chars": 0, "rep": rep,
                 }
-            print(f"{row['id']}: D1 {mark(row['d1'])} · D2 {mark(row['d2'])}", flush=True)
+            tag = f" (lượt {rep + 1})" if args.repeat > 1 else ""
+            print(f"{row['id']}{tag}: D1 {mark(row['d1'])} · D2 {mark(row['d2'])}", flush=True)
             return row
 
-    rows = await asyncio.gather(*(one(c) for c in cases))
-    rows.sort(key=lambda r: [c["id"] for c in cases].index(r["id"]))
+    rows = await asyncio.gather(
+        *(one(c, r) for c in cases for r in range(max(1, args.repeat)))
+    )
+    order = [c["id"] for c in cases]
+    rows.sort(key=lambda r: (order.index(r["id"]), r.get("rep", 0)))
 
     RESULTS.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M")

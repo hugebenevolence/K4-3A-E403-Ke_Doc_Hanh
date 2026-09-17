@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     # phải lời cuối — bật lại để thử khi có bản ghi giọng người thật.
     enable_generated_pronunciations: bool = False
     profile_file: Path = BACKEND_DIR / "var" / "profiles.json"
+
+    # CHƯA ĐƯỢC LẮP, cố ý để lại đường: checkpointer hiện là InMemorySaver tạo
+    # theo từng kết nối, nên rớt mạng hay restart là mất mạch buổi đang dở. Đổi
+    # sang SQLite thôi thì chưa đủ để nối lại — client còn phải gửi lại
+    # session_id cũ và server phải nhận đúng thread đó. Ngày nào làm nối-lại-phiên
+    # thì dùng đường dẫn này; tới lúc đó nó vẫn chỉ là một dòng cấu hình.
     checkpoint_db: Path = BACKEND_DIR / "var" / "checkpoints.sqlite"
 
 

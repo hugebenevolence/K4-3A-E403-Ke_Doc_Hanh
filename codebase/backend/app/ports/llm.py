@@ -17,6 +17,20 @@ from pydantic import BaseModel
 T = TypeVar("T", bound=BaseModel)
 
 
+class LLMUnavailable(RuntimeError):
+    """Provider không dùng được: hết hạn mức, sai key, quá tải, mất mạng.
+
+    Định nghĩa ở PORT chứ không ở adapter, để `api/` bắt được nó mà không phải
+    import SDK của nhà cung cấp — đúng luật của kiến trúc này.
+
+    Vì sao cần một loại lỗi riêng: mọi lỗi đang rơi chung vào một chỗ và học
+    viên nhận câu "Mình nghe chưa rõ, bạn nói lại giúp mình nhé". Hôm nay gặp
+    thật — API trả 429 `credit_balance_exhausted` — và lời nhắn đó bảo người ta
+    nói lại một câu hoàn toàn không có lỗi gì. Họ sẽ nói lại, rồi lại nhận đúng
+    câu ấy, và nghĩ là máy không nghe được giọng mình.
+    """
+
+
 class ModelTier(Enum):
     FAST = "fast"  # talker: paraphrase lấp chờ, cần TTFT thấp, không cần thông minh
     STANDARD = "standard"  # reasoner: chấm lời giải thích — quyết định AI trung tâm

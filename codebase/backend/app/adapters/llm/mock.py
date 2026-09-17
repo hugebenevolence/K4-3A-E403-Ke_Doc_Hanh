@@ -18,6 +18,22 @@ from app.prompts.schemas import FollowupOutput, GradeOutput
 
 _ENOUGH_WORDS = 40
 _SPAN_IN_PROMPT = re.compile(r"^\[([^\]]+)\]", re.MULTILINE)
+_SAID_LINE = re.compile(r"^> (.*)$", re.MULTILINE)
+
+
+def _student_words(user: str) -> int:
+    """Chỉ đếm chữ HỌC VIÊN nói, không đếm chữ của khung prompt.
+
+    Prompt chấm giờ liệt kê mọi lượt trong buổi, mỗi lượt một dòng "> ..." (xem
+    graph/nodes.py). Đếm cả khung thì mock cho "đủ" chỉ vì buổi có nhiều lượt,
+    và đường chạy mock không còn giống đường chạy thật nữa.
+
+    Lượt trùng y nguyên chỉ tính một lần: nói lại đúng câu cũ không phải là nói
+    thêm. MockSTT phát đi phát lại cùng một câu, nên không lọc thì phiên nào
+    qua ba lượt cũng tự "đủ ý".
+    """
+    seen = dict.fromkeys(_SAID_LINE.findall(user))
+    return sum(len(line.split()) for line in seen)
 
 
 def _spans_from(system: str) -> list[str]:
@@ -30,7 +46,7 @@ class MockLLM(LLMClient):
         self, *, system: str, user: str, schema: type[T], tier: ModelTier
     ) -> T:
         if schema is GradeOutput:
-            covered = len(user.split()) >= _ENOUGH_WORDS
+            covered = _student_words(user) >= _ENOUGH_WORDS
             spans = _spans_from(system) or ["[KHONG-DOC-DUOC-SPAN]"]
             return schema(
                 evidence=[

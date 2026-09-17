@@ -25,6 +25,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
 from pydantic import BaseModel
 
 from app.adapters.knowledge.local import load_lesson
@@ -51,9 +52,14 @@ from app.domain.sanitize import sanitize_spoken, tame_shouting
 from app.domain.session import TurnState
 from app.domain.verdict import Evidence, GradeResult, Verdict
 from app.graph.build import build_graph
-from app.graph.nodes import GRADER_VERSION, PERSONA_VERSION, open_session
+from app.graph.nodes import (
+    GRADER_CODE_VERSION,
+    GRADER_VERSION,
+    PERSONA_VERSION,
+    open_session,
+)
 from app.ports.knowledge import SpanStore
-from app.ports.llm import LLMClient
+from app.ports.llm import LLMClient, LLMUnavailable
 from app.ports.store import ProfileStore, SessionLog
 from app.ports.stt import SpeechToText
 from app.ports.tts import TextToSpeech
@@ -179,6 +185,23 @@ _BACKGROUND: set[asyncio.Task] = set()
 PRONUNCIATION_TERMS = 60
 """Chỉ sinh cách đọc cho đầu danh sách — tức thuật ngữ của vùng đang giảng, vì
 từ điển phiên đã xếp chúng lên trước."""
+
+
+@lru_cache(maxsize=1)
+def _graph_store() -> InMemoryStore:
+    """Store xuyên phiên của LangGraph — MỘT bản cho cả tiến trình.
+
+    Checkpointer giữ mạch trong một buổi; store là thứ sống qua nhiều buổi, nên
+    nó KHÔNG được tạo theo từng kết nối — tạo theo phiên thì nó chỉ là một
+    checkpointer thứ hai, rỗng lại từ đầu mỗi lần ai đó bấm "Bắt đầu giảng".
+
+    Nói thẳng hiện trạng: hôm nay chưa node nào đọc từ store. Trí nhớ xuyên buổi
+    đang đi qua `JsonProfileStore` (ghi ra file, đọc lại lúc mở phiên, bơm vào
+    state ở lượt đầu). Store được lắp sẵn vì `compile()` chỉ nhận nó ở đây —
+    node nào cần nhớ xuyên buổi về sau là có sẵn đường, không phải sửa lại
+    composition root và mọi chỗ gọi.
+    """
+    return InMemoryStore()
 
 
 @lru_cache(maxsize=1)
@@ -341,13 +364,22 @@ async def teach_back_session(ws: WebSocket):
         lesson, spans, llm, stt, tts, session_log, profiles = _build_deps(
             selection, ws.query_params.get("deck")
         )
-    except ValueError:
+    except ValueError as exc:
+        # Nói đúng chuyện gì đã xảy ra: "chọn lại đi" mà không nói vì sao thì
+        # học viên chọn lại y chỗ cũ. Hai lý do hiện có — vùng không còn khớp
+        # slide, và vùng chỉ có tiêu đề — cần hai hành động khác nhau.
         await ws.send_json(
-            {"type": "error", "message": "Vùng đã chọn không còn khớp với slide — bạn chọn lại nhé."}
+            {
+                "type": "error",
+                "message": str(exc) or "Vùng đã chọn không còn khớp với slide — bạn chọn lại nhé.",
+            }
         )
         await ws.close()
         return
-    graph = build_graph(llm, spans, checkpointer=InMemorySaver())
+    # Checkpointer theo từng kết nối (mạch của đúng buổi này), store dùng chung
+    # cả tiến trình (thứ sống qua nhiều buổi). Truyền thiếu một trong hai là lỗi
+    # kiến trúc hay gặp nhất với LangGraph — xem graph/build.py.
+    graph = build_graph(llm, spans, checkpointer=InMemorySaver(), store=_graph_store())
 
     # Sinh cách đọc kiểu Việt cho thuật ngữ của vùng đang giảng, chạy NỀN song
     # song với câu mở bài: học viên còn phải nghe câu hỏi xong mới nói, đủ thời
@@ -371,6 +403,7 @@ async def teach_back_session(ws: WebSocket):
     profile = await profiles.load(student_id)
 
     live: LiveTurn | None = None
+    last_grade: GradeResult | None = None
     live_code = lesson.code
     first_turn = True
     turn_index = 0
@@ -407,6 +440,7 @@ async def teach_back_session(ws: WebSocket):
     # Mở bài bằng một câu hỏi cụ thể thay vì để học viên nhìn ô trống tự nghĩ
     # xem nên nói gì. Hỏng thì vẫn vào phiên được — mất câu mở bài còn hơn mất
     # cả phiên vì một lượt gọi LLM trục trặc.
+    opening = ""
     try:
         opening = await open_session(
             llm, spans, list(lesson.source_span_ids), profile.recurring_gaps,
@@ -420,6 +454,20 @@ async def teach_back_session(ws: WebSocket):
         )
         for chunk in [c async for c in tts.synthesize(opening)]:
             await ws.send_bytes(chunk)
+    except LLMUnavailable:
+        # Provider chết ngay từ câu mở bài: không có câu hỏi mở, và nếu im lặng
+        # thì học viên ngồi trước một ô trống đúng cái cảnh mà câu mở bài sinh
+        # ra để tránh. Nói thật ngay, đừng để họ nói xong một lượt rồi mới biết.
+        log.exception("Provider không dùng được lúc mở bài ở phiên %s", session_id)
+        await ws.send_json(
+            {
+                "type": "error",
+                "message": (
+                    "Mình chưa gọi được dịch vụ AI nên chưa mở bài được — lỗi phía "
+                    "hệ thống. Bạn chờ một chút rồi tải lại trang nhé."
+                ),
+            }
+        )
     except Exception:
         log.exception("Mở bài hỏng ở phiên %s", session_id)
 
@@ -514,6 +562,11 @@ async def teach_back_session(ws: WebSocket):
                     "followups_asked": 0,
                     "recurring_gaps": dict(profile.recurring_gaps),
                     "code": live_code,
+                    # Câu mở bài sinh ngoài graph nên graph không tự biết nó.
+                    # Không đưa vào thì lượt đầu bị chấm như một lời giảng tự
+                    # phát, trong khi nó là câu TRẢ LỜI cho một câu hỏi hẹp —
+                    # và câu hỏi ngược đầu tiên có thể hỏi lại y hệt câu mở bài.
+                    "asked_questions": [opening] if opening else [],
                 }
                 first_turn = False
 
@@ -534,17 +587,44 @@ async def teach_back_session(ws: WebSocket):
                     elif event.kind == "activity":
                         await ws.send_json({"type": "activity", **event.payload})
                     elif event.kind == "turn_done":
-                        grade = await _log_turn(
+                        # Hồ sơ ghi MỘT LẦN mỗi buổi, ở lượt kết — không phải
+                        # mỗi lượt. `recurring_gaps` đếm "bao nhiêu BUỔI đã vấp
+                        # chỗ này"; cộng theo lượt thì một buổi bốn lượt thành
+                        # bốn lần vấp, và học trò nói "buổi trước bạn cũng chưa
+                        # thông chỗ này" ngay trong buổi ĐẦU TIÊN của người ta.
+                        # Đo được trên hồ sơ thật: [d1-slide-hackathon-p1-01]
+                        # đếm 3 sau đúng một buổi.
+                        last_grade = await _log_turn(
                             session_log, session_id, turn_index, student_text, event
                         )
-                        profile.absorb(lesson.concept, grade)
-                        await profiles.save(profile)
                         review_spans = event.payload["result"].get("review_span_ids", [])
                         turn_index += 1
                     else:
                         await ws.send_json({"type": "transcript", **event.payload})
             except WebSocketDisconnect:
                 raise
+            except LLMUnavailable:
+                # Hết hạn mức / sai key / provider quá tải. KHÔNG được nói "mình
+                # nghe chưa rõ" — lời giảng của họ không có lỗi gì, và họ sẽ nói
+                # lại mãi trong khi vấn đề nằm ở phía mình. Gặp thật 17/9: API
+                # trả 429 credit_balance_exhausted giữa lúc đang đo golden set.
+                log.exception("Provider không dùng được ở phiên %s", session_id)
+                await ws.send_json(
+                    {
+                        "type": "error",
+                        "message": (
+                            "Mình chưa gọi được dịch vụ AI — lỗi phía hệ thống, "
+                            "không phải do bạn nói. Bạn chờ một chút rồi thử lại nhé."
+                        ),
+                    }
+                )
+                # KHÔNG dùng `first_turn`: nó đã bị lật thành False ngay lúc
+                # dựng turn_input, trước khối try này. Lượt đầu mà hỏng thì học
+                # viên vẫn đang giảng dở, không phải đang trả lời câu hỏi ngược —
+                # hai trạng thái đó có ngưỡng chờ im lặng khác nhau (6s so với
+                # 2s), và CLAUDE.md gọi đây là chỗ chịu lực.
+                turn_state = turn_state_for_retry(turn_index == 0)
+                await send_state(turn_state)
             except Exception:
                 # Provider thật sẽ hỏng theo đủ kiểu: hết quota, timeout, 401,
                 # JSON méo. Để lỗi thoát ra đây là rớt kết nối giữa buổi học mà
@@ -558,6 +638,12 @@ async def teach_back_session(ws: WebSocket):
                 await send_state(turn_state)
 
             if TurnState[turn_state].is_terminal:
+                # Buổi đã đóng: giờ mới cộng vào hồ sơ, theo kết quả lượt cuối.
+                # Bỏ dở giữa chừng thì không ghi gì — chưa học xong thì chưa có
+                # gì để nhớ, và đó cũng là cách duy nhất để "số buổi" đúng nghĩa.
+                if last_grade is not None:
+                    profile.absorb(lesson.concept, last_grade)
+                    await profiles.save(profile)
                 await ws.send_json(
                     {
                         "type": "session_end",
@@ -606,7 +692,10 @@ async def _log_turn(
             student_text=student_text,
             source_span_id=result["source_span_ids"][0],
             prompt_versions={
-                "grader": GRADER_VERSION,
+                # Bài code chạy bộ chấm khác; ghi cứng GRADER_VERSION là log trỏ
+                # về một prompt chưa từng chạy, và lượt đó replay lại sẽ ra kết
+                # quả không so được với thứ đã thật sự xảy ra.
+                "grader": GRADER_CODE_VERSION if result.get("code") else GRADER_VERSION,
                 "student_persona": PERSONA_VERSION,
                 "talker": TALKER_VERSION,
             },

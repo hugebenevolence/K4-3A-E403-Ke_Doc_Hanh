@@ -21,8 +21,9 @@ from app.domain.leak import (
 )
 from app.domain.session import TeachBackSession, TurnState
 from app.domain.span import normalize_span_id
+from app.domain.substance import is_thin_teachback
 from app.domain.verbatim import echoes_student, is_verbatim_paste, quotes_source
-from app.domain.verdict import Evidence, GradeResult, decide
+from app.domain.verdict import Evidence, GradeResult, Verdict, decide
 from app.graph.state import TeachBackState
 from app.ports.knowledge import SpanStore
 from app.ports.llm import LLMClient, ModelTier
@@ -31,8 +32,8 @@ from app.prompts.schemas import FollowupOutput, GradeOutput
 
 log = logging.getLogger(__name__)
 
-GRADER_VERSION = "v3"
-GRADER_CODE_VERSION = "v1"
+GRADER_VERSION = "v4"
+GRADER_CODE_VERSION = "v2"
 PERSONA_VERSION = "v2"
 OPENER_VERSION = "v2"
 
@@ -116,6 +117,35 @@ async def open_session(
     return f"Bạn giảng cho mình nghe về {concept} đi, mình chưa nắm được chỗ này."
 
 
+_SAID_PREFIX = "> "
+"""Mỗi lượt học viên đã nói là MỘT dòng mở đầu bằng dấu này.
+
+Một dòng một lượt để model đọc được ranh giới giữa các lượt, và để mock đếm
+được đúng số chữ học viên nói mà không lẫn chữ của khung prompt.
+"""
+
+
+def _grade_user(said: list[str], asked: list[str]) -> str:
+    """Phần biến thiên của prompt chấm: mọi lượt học viên đã nói trong buổi.
+
+    Đưa cả buổi chứ không chỉ lượt cuối. Bản trước chỉ gửi đúng lượt vừa nói,
+    nên một mảnh trả lời cho câu hỏi hẹp bị đem đối chiếu với TOÀN BỘ đoạn
+    nguồn — hoặc trượt oan, hoặc (phiên thật 2e6d52f3) cho qua cả bài chỉ vì
+    một mảnh.
+
+    Câu hỏi ngược gần nhất đi kèm ở cuối: không có nó thì dòng cuối đọc lên như
+    một lời giảng cụt lủn thay vì một câu trả lời.
+    """
+    lines = "\n".join(_SAID_PREFIX + " ".join(text.split()) for text in said)
+    block = f"Lời học viên trong buổi này, theo thứ tự từng lượt:\n\n{lines}"
+    if asked:
+        block += (
+            f"\n\nDòng cuối là câu trả lời cho câu mình vừa hỏi: "
+            f"«{' '.join(asked[-1].split())}»"
+        )
+    return block
+
+
 def make_grade_node(llm: LLMClient, spans: SpanStore):
     async def grade(state: TeachBackState) -> TeachBackState:
         span_ids = state.get("source_span_ids") or []
@@ -126,10 +156,17 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
 
         source = await spans.get_many(span_ids)
         student_text = state["student_text"]
+        said = [*(state.get("said_before") or []), student_text]
 
         # Tiền kiểm tất định trước khi tốn một lượt gọi LLM: đọc lại nguyên văn
         # nguồn không phải là dạy lại, dù model có thấy "đúng hết" đi nữa.
+        # Xét trên LƯỢT NÀY, không cộng dồn: "đang đọc lại tài liệu" là chuyện
+        # của lượt vừa nói, và một lượt chép sẽ kéo tỉ lệ của cả buổi đi theo.
         verbatim = is_verbatim_paste(student_text, "\n".join(s.text for s in source))
+
+        # Ngược lại, sàn "nói quá ít" phải tính CỘNG DỒN: giảng một nửa rồi nói
+        # nốt nửa sau khi bị hỏi lại vẫn là đã giảng đủ. Xem domain/substance.py.
+        thin = is_thin_teachback(said)
 
         # Bài code dùng prompt chấm riêng: nguồn không phải là chữ trên slide mà
         # là hành vi thật của đoạn code, và chỗ cấm quan trọng nhất đổi từ
@@ -140,7 +177,7 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
 
         out = await llm.structured(
             system=registry.compose_system(grader, version, source, code=code),
-            user=f"Lời học viên vừa giải thích:\n\n{student_text}",
+            user=_grade_user(said, state.get("asked_questions") or []),
             schema=GradeOutput,
             tier=ModelTier.STANDARD,
         )
@@ -153,16 +190,49 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
         # xuống log/hồ sơ đều cùng một dạng dù model viết kiểu gì.
         known = {normalize_span_id(s.span_id): s.span_id for s in source}
         cited = tuple(
-            Evidence(known[key], e.quote, e.covered_by_student, e.key)
+            Evidence(
+                known[key],
+                e.quote,
+                e.covered_by_student,
+                e.key,
+                e.contradicted_by_student,
+            )
             for e in out.evidence
             if (key := normalize_span_id(e.span_id)) in known
         )
         if bogus := [
             e.span_id for e in out.evidence if normalize_span_id(e.span_id) not in known
         ]:
-            log.warning("Bỏ %d mã đoạn không có thật do model bịa: %s", len(bogus), bogus)
+            # Bỏ SẠCH evidence là chuyện khác hẳn bỏ một mã lẻ: lượt đó không
+            # còn căn cứ nào, nên `decide()` trả INCOMPLETE dù học viên giảng
+            # thế nào đi nữa — học viên bị đánh trượt vì bộ chấm hỏng, không
+            # phải vì lời giảng. Đo được thật: F01 và F02 trượt 0/3 lượt vì
+            # model tự đặt mã "s1..s4" thay cho mã có sẵn.
+            if not cited:
+                log.error(
+                    "Bộ chấm không trả về mã đoạn nào có thật (%s) — lượt này mất "
+                    "sạch căn cứ và sẽ bị chấm là chưa đủ",
+                    bogus,
+                )
+            else:
+                log.warning("Bỏ %d mã đoạn không có thật do model bịa: %s", len(bogus), bogus)
 
-        verdict = decide(cited, out.contradiction, verbatim=verbatim)
+        verdict = decide(cited, out.contradiction, verbatim=verbatim, thin=thin)
+
+        # Bộ dò bất đồng: bộ chấm vừa nói "đủ" nhưng chính nó cũng vừa viết ra
+        # một chỗ hổng. Prompt dặn rõ "nói đủ mọi ý thì gap_summary phải RỖNG",
+        # nên đây là lúc nó tự mâu thuẫn — và đúng dấu hiệu đã dẫn tới phiên
+        # 2e6d52f3 (đóng TAUGHT trong khi gap ghi "chưa nói cơ chế").
+        #
+        # KHÔNG dùng để đổi verdict: đo trên 4 lượt golden set, phần lớn lượt
+        # SUFFICIENT đúng cũng kèm gap mô tả chi tiết phụ, nên hạ nhãn theo tín
+        # hiệu này sẽ đánh trượt oan nhiều hơn là bắt đúng. Nó là đèn báo để lọc
+        # log thật, không phải luật chấm.
+        if verdict is Verdict.SUFFICIENT and out.gap_summary.strip():
+            log.warning(
+                "Bất đồng: chấm ĐỦ nhưng bộ chấm vẫn ghi chỗ hổng — %s",
+                out.gap_summary.strip()[:200],
+            )
 
         # KHÔNG dùng `contradiction` làm gap_summary. Nó mô tả chỗ học viên nói
         # sai bằng cách nêu ra cái đúng ("quy cho nhiệt độ, trong khi nguồn nói
@@ -174,6 +244,11 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
             gap = "học viên đang đọc lại gần nguyên văn tài liệu, chưa diễn đạt bằng lời mình"
         elif out.gap_summary.strip():
             gap = out.gap_summary
+        elif thin:
+            # Model bảo không thiếu gì, nhưng cả buổi mới được vài chữ. Chỗ hổng
+            # thật là chưa có gì để mà chấm — nói thế để câu hỏi ngược mời họ
+            # triển khai tiếp, chứ không đi bới một ý cụ thể không tồn tại.
+            gap = "học viên mới nói được một câu rất ngắn, chưa triển khai ý nào"
         elif any(not e.covered_by_student for e in cited):
             # Cố ý KHÔNG nhét trích dẫn nguồn vào đây: quote chính là ý học viên
             # đang thiếu, đưa xuống persona là đọc luôn đáp án vào câu hỏi.
@@ -198,6 +273,8 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
             "followups_asked": session.followups_asked,
             "review_span_ids": list(session.review_span_ids),
             "turn_state": next_state.name,
+            # Cộng dồn để lượt sau chấm được cả buổi, không chỉ câu cuối.
+            "said_before": [student_text],
         }
 
     return grade
@@ -289,6 +366,16 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
                 "turn_state": TurnState.STUDENT_RESPONDING.name,
             }
 
+        # CỐ Ý xét trên LƯỢT NÀY, không cộng dồn cả buổi — ngược với bộ chấm.
+        #
+        # Bộ lọc lộ đáp án trừ đi những gì học viên đã tự nói: nhắc lại lời họ
+        # thì không phải là lộ. Nới "đã nói" ra cả buổi nghe hợp lý, nhưng nó
+        # làm guard yếu dần theo từng lượt: học viên buột ra một từ khoá ở lượt
+        # 1 trong lúc mô tả SAI cơ chế — bộ chấm vẫn để ý đó là chưa chạm tới —
+        # thế là từ đó trở đi agent được phép nói thẳng từ khoá ấy vào câu hỏi,
+        # và học viên chỉ cần gật. "Không lộ đáp án" là điều kiện cứng của
+        # rubric và lượt chạy 5 đang sạch 26/26; không đánh đổi nó lấy một câu
+        # hỏi mượt hơn khi chưa đo được.
         asked = state.get("asked_questions") or []
         history = (
             "\n\nMình đã hỏi những câu này rồi, đừng hỏi lại theo cùng một kiểu:\n"
@@ -483,7 +570,11 @@ async def close_taught(state: TeachBackState) -> TeachBackState:
     # lại thấy công mình vừa bỏ ra ứng với đúng chỗ nào trên slide.
     covered = [e["span_id"] for e in (state.get("evidence") or []) if e.get("covered_by_student")]
     return {
-        "agent_says": "À, giờ thì mình hiểu rồi. Cảm ơn bạn đã giảng kỹ cho mình.",
+        # KHÔNG khen "giảng kỹ": câu này là chuỗi cứng, nói y hệt nhau dù học
+        # viên giảng 9 chữ hay 90 chữ. Phiên thật 2e6d52f3 đóng bằng đúng câu
+        # "cảm ơn bạn đã giảng kỹ cho mình" sau một câu 9 chữ — lời khen sai chỗ
+        # làm hỏng niềm tin vào mọi lời khen còn lại.
+        "agent_says": "À, tới đây thì mình hiểu rồi. Cảm ơn bạn đã giảng cho mình.",
         "agent_understood": [],
         "cites_span_id": covered[0] if covered else None,
         "turn_state": TurnState.TAUGHT.name,

@@ -57,10 +57,17 @@ ACTIVITY = {
 async def _drive_graph(graph, state, thread_id: str, steps: asyncio.Queue) -> dict:
     """Chạy graph và báo từng node vừa xong ra ngoài."""
     config = {"configurable": {"thread_id": thread_id}}
-    async for update in graph.astream(state, config=config, stream_mode="updates"):
-        for node in update:
-            await steps.put(node)
-    await steps.put(None)
+    try:
+        async for update in graph.astream(state, config=config, stream_mode="updates"):
+            for node in update:
+                await steps.put(node)
+    finally:
+        # Báo "hết bước" KỂ CẢ KHI HỎNG. Không có finally thì graph hỏng giữa
+        # chừng sẽ không ai đẩy None vào hàng đợi, vòng đọc bước ở run_turn đứng
+        # chờ cho tới hết `reasoner_timeout_s` (20 giây!) rồi mới ném TimeoutError
+        # — nên học viên vừa phải chờ 20 giây, vừa nhận lời nhắn sai nguyên nhân,
+        # vì lỗi thật (hết hạn mức, provider 429) đã bị TimeoutError che mất.
+        await steps.put(None)
 
     # stream_mode="updates" chỉ trả phần TỪNG NODE vừa ghi, không phải cả state
     # như ainvoke — nên những trường do lượt trước để lại (source_span_ids,

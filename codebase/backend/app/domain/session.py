@@ -71,7 +71,29 @@ class TeachBackSession:
 
     @property
     def review_span_ids(self) -> tuple[str, ...]:
-        """Span nên gợi ý xem lại: những ý học viên chưa chạm tới ở lần chấm cuối."""
+        """Span nên gợi ý xem lại: Ý CHÍNH học viên chưa chạm tới ở lần chấm cuối.
+
+        Phiên đạt thì rỗng, và chỉ lấy ý chính. Bản trước lấy MỌI ý chưa chạm
+        tới nên màn kết tự mâu thuẫn: phiên thật 2e6d52f3 đóng bằng "Học trò đã
+        hiểu phần này" mà ngay dưới vẫn hiện thẻ "Cần xem lại · 1" — trỏ vào một
+        dòng tiêu đề mà học viên chẳng có gì để nói về nó.
+
+        Không còn ý chính nào thiếu thì rơi về mọi ý chưa chạm tới, để lượt kết
+        bằng gợi ý xem lại luôn có chỗ để trỏ tới.
+        """
         if not self.grades:
             return ()
-        return tuple(e.span_id for e in self.grades[-1].uncovered)
+        last = self.grades[-1]
+        if last.verdict is Verdict.SUFFICIENT:
+            # Đã đủ ý chính thì không còn gì BẮT BUỘC phải xem lại. Chi tiết phụ
+            # chưa nhắc tới không phải là chỗ hổng — chính `decide()` vừa quyết
+            # định như vậy khi đóng phiên.
+            return ()
+        # Chỗ nói TRÁI cũng phải nằm trong danh sách xem lại, không chỉ chỗ chưa
+        # nói tới. Lọc theo mỗi `uncovered` thì đúng ý học viên hiểu sai lại bị
+        # bỏ sót — họ có nhắc tới nó, chỉ là nhắc sai — và đó mới là chỗ cần
+        # quay lại nhất.
+        wrong = tuple(
+            e for e in last.evidence if e.contradicted_by_student or not e.covered_by_student
+        )
+        return tuple(e.span_id for e in wrong if e.key) or tuple(e.span_id for e in wrong)

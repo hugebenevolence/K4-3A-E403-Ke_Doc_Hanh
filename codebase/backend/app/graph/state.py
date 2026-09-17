@@ -23,6 +23,18 @@ class TeachBackState(TypedDict, total=False):
     student_text: str  # lời học viên vừa nói (đã STT final)
     followups_asked: int
 
+    # Mọi lượt học viên đã nói trong buổi, theo thứ tự.
+    #
+    # Node `grade` đọc nó TRƯỚC khi ghi lượt hiện tại vào, nên ở đó nó là
+    # "các lượt trước". Sau khi grade ghi xong, reducer đã cộng lượt này vào —
+    # node chạy sau trong cùng lượt (ask_followup) sẽ thấy cả lượt hiện tại.
+    # Đừng cộng thêm student_text vào nó ở những node đó.
+    #
+    # Không có cái này thì mỗi lượt chấm lại từ đầu trên đúng một câu: mảnh trả
+    # lời cho một câu hỏi hẹp bị đem so với TOÀN BỘ đoạn nguồn, và người giảng
+    # đủ ý qua hai lượt không bao giờ đạt được vì lượt sau không nhớ lượt trước.
+    said_before: Annotated[list[str], operator.add]
+
     # Bài code: mã nguồn học viên đang giải thích. Rỗng với bài slide.
     code: str
 

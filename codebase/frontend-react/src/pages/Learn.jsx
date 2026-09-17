@@ -16,12 +16,23 @@ import { useSession } from "../useSession";
 const NONE = new Set();
 const EMPTY = [];
 
-/** Vùng chọn ít chữ hơn ngần này (một dòng tiêu đề) thì không đủ để giảng.
+/** Vùng ít chữ hơn ngần này (đã TRỪ tiêu đề trang) thì không đủ để giảng.
  *
  *  Đo được thật: chọn mỗi tiêu đề slide 12 thì nguồn chấm chỉ còn một dòng, và
  *  câu mở bài quay sang hỏi về một slide khác hẳn. Tiêu đề là tên của phần
- *  giảng, không phải nội dung để giảng — nên mở rộng ra cả trang. */
-const MIN_TEACH_WORDS = 12;
+ *  giảng, không phải nội dung để giảng — nên mở rộng ra cả trang.
+ *
+ *  Con số phải khớp `MIN_SOURCE_WORDS` ở backend (app/domain/substance.py), nơi
+ *  ghi phép đo dựng ra nó: 58 trang của hai bộ slide, hai trang bìa ra 16 và 18
+ *  từ, trang nội dung mỏng nhất kế tiếp ra 29 từ. Lệch nhau thì học viên bấm
+ *  được nút rồi mới bị server từ chối. */
+const MIN_TEACH_WORDS = 24;
+
+const wordsIn = (text) => text?.match(/[\p{L}\p{N}]+/gu)?.length ?? 0;
+/** Gộp khoảng trắng trước khi so — backend so cũng bằng cách này
+ *  (`teachable_words`). Chỉ `.trim()` thì tiêu đề bị PDF ngắt làm hai dòng sẽ
+ *  không khớp ở client mà vẫn khớp ở server: nút bấm được, server từ chối. */
+const sameText = (a, b) => a.replace(/\s+/gu, " ").trim() === b.replace(/\s+/gu, " ").trim();
 
 export default function Learn() {
   const { slug } = useParams();
@@ -87,9 +98,28 @@ export default function Learn() {
 
   const select = useCallback((ids) => setSelection({ page, ids }), [page]);
 
-  const selectedWords = useMemo(
-    () => selectedHere.reduce((n, id) => n + (byId.get(id)?.text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0), 0),
-    [selectedHere, byId],
+  // Bỏ ô trùng tiêu đề trang khi đếm: tiêu đề là TÊN của phần cần giảng, không
+  // phải nội dung để giảng. Đếm cả nó thì trang bìa vượt ngưỡng nhờ đúng dòng
+  // chữ mà học viên không có gì để nói về nó — đó là phiên hỏng 2e6d52f3.
+  const bodyWords = useCallback(
+    (ids) => {
+      const head = titleOf(page);
+      return ids.reduce((n, id) => {
+        const text = byId.get(id)?.text ?? "";
+        return sameText(text, head) ? n : n + wordsIn(text);
+      }, 0);
+    },
+    [byId, page, titleOf],
+  );
+
+  const selectedWords = useMemo(() => bodyWords(selectedHere), [bodyWords, selectedHere]);
+  // Cả trang cũng không đủ chữ (trang bìa, trang phân mục): nới ra cũng chẳng
+  // còn gì để nới, và server sẽ từ chối thật — nên chặn ngay ở nút bấm.
+  const pageTeachable = useMemo(
+    () =>
+      blocksOnPage.some((b) => b.kind === "figure") ||
+      bodyWords(blocksOnPage.map((b) => b.span_id)) >= MIN_TEACH_WORDS,
+    [blocksOnPage, bodyWords],
   );
   // Ngưỡng chữ chỉ áp cho ô CHỮ. Một sơ đồ gần như không có chữ trong PDF
   // nhưng lại là nguyên một ý để giảng — đếm chữ thì slide nào cũng bị coi là
@@ -103,13 +133,15 @@ export default function Learn() {
   /** Bắt đầu giảng: vùng đã chọn, hoặc cả trang đang mở nếu chưa chọn gì hay
    *  vùng chọn quá mỏng. */
   const teach = useCallback(() => {
+    // Chặn ở đây chứ không chỉ ở nút: phím Enter cũng vào đúng hàm này.
+    if (!pageTeachable) return;
     const ids = selectedHere.length && !thin ? selectedHere : blocksOnPage.map((b) => b.span_id);
     setActive(ids);
     setSelection({ page, ids });
     setRevealedIds(NONE);
     setFocus((f) => ({ id: null, n: f.n }));
     session.start(ids);
-  }, [selectedHere, thin, blocksOnPage, page, session]);
+  }, [selectedHere, thin, pageTeachable, blocksOnPage, page, session]);
 
   /** Kết thúc phiên đang dở (nếu có) và quay về chọn vùng. Giữ nguyên trang
    *  đang xem, để học viên chọn ngay trên trang họ vừa lật tới. */
@@ -217,6 +249,7 @@ export default function Learn() {
     title: titleOf(page),
     count: selectedHere.length,
     thin,
+    teachable: pageTeachable,
     hasSlides: blocks.length > 0,
   };
   // Giảng xong một trang thì đi tiếp được ngay, không phải tìm lại trong dàn ý.

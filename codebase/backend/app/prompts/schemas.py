@@ -1,8 +1,13 @@
 """Schema output của LLM.
 
 MODEL KHÔNG TỰ CHỐT VERDICT. Nó chỉ trả lời từng câu hỏi cụ thể, kiểm chứng
-được: mỗi ý cốt lõi học viên đã nói tới chưa, và có chỗ nào nói trái nguồn
-không. Verdict do code suy ra từ đó (xem domain/verdict.py).
+được: mỗi ý cốt lõi học viên đã nói tới chưa, và có nói trái ý đó không.
+Verdict do code suy ra từ đó (xem domain/verdict.py).
+
+Hai câu hỏi đó đều hỏi theo TỪNG Ý. Bản trước hỏi chung "có chỗ nào nói trái
+nguồn không" bằng một ô văn xuôi, và nó bắn hụt đều đặn: model mô tả chỗ sai
+trong `gap_summary` rồi để ô mâu thuẫn rỗng, nên một lời giảng SAI bị hạ xuống
+thành "còn thiếu" — hoặc tệ hơn, thành "đã đủ" (phiên thật 5eaa59a3).
 
 Vì sao: bản đầu để model tự chốt verdict sau khi viết gap_summary, và nó không
 bao giờ cho `sufficient` — viết ra chỗ hổng xong là đã tự cam kết "còn thiếu",
@@ -18,7 +23,14 @@ from pydantic import BaseModel, Field
 
 
 class EvidenceOut(BaseModel):
-    span_id: str
+    span_id: str = Field(
+        description=(
+            "CHÉP ĐÚNG mã đoạn đứng đầu ô nguồn, cả dấu ngoặc vuông, ví dụ "
+            "[d1-slide-hackathon-p15-02]. Không tự đặt mã mới, không đánh số lại "
+            "kiểu s1/s2/ý1, không viết tắt. Mã không có trong ĐOẠN NGUỒN sẽ bị "
+            "loại và ý đó coi như không được nêu."
+        )
+    )
     quote: str = Field(description="Trích ngắn nguyên văn từ đoạn nguồn")
     key: bool = Field(
         description=(
@@ -33,6 +45,14 @@ class EvidenceOut(BaseModel):
             "thì TÍNH LÀ RỒI — đây là dạy lại, không phải học thuộc lòng."
         )
     )
+    contradicted_by_student: bool = Field(
+        default=False,
+        description=(
+            "Học viên nói điều TRÁI với đúng ý này (không phải chỉ thiếu). "
+            "Thiếu → false. Nói sang cơ chế khác mà không phủ nhận ý này → false. "
+            "Chỉ true khi lời họ và ý này không thể cùng đúng."
+        ),
+    )
 
 
 class GradeOutput(BaseModel):
@@ -40,7 +60,8 @@ class GradeOutput(BaseModel):
     contradiction: str = Field(
         default="",
         description=(
-            "Chỗ học viên nói TRÁI với đoạn nguồn, nếu có. Để RỖNG nếu học viên "
+            "Một câu mô tả chỗ học viên nói TRÁI với nguồn — chỉ điền khi đã có "
+            "ý nào được đánh `contradicted_by_student`. Để RỖNG nếu học viên "
             "chỉ thiếu ý chứ không nói sai. Thiếu không phải là sai."
         ),
     )

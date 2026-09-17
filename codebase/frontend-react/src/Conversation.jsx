@@ -90,11 +90,20 @@ function AgentTurn({ turn, span, onOpen }) {
  *  chỗ mình không định giảng. */
 function Ready({ target, onTeach, onClearSelection }) {
   const chosen = target.count > 0 && !target.thin;
-  const detail = chosen
-    ? `${target.count} phần đã chọn`
-    : target.thin
-      ? "Vùng chọn quá ngắn, sẽ giảng cả trang"
-      : "Cả trang. Kéo trên slide để chọn một phần.";
+  // Thứ tự quan trọng: lúc slide còn ĐANG TẢI thì chưa có ô nào, nên "trang này
+  // không có gì để giảng" đúng về số học mà sai hoàn toàn về sự thật. Hỏi "đã
+  // có slide chưa" trước, rồi mới hỏi "trang này có nội dung không".
+  const detail = !target.hasSlides
+    ? "Đang mở bộ slide…"
+    : !target.teachable
+      // Trang bìa và trang phân mục chỉ có tiêu đề: server sẽ từ chối mở phiên,
+      // nên nói trước ở đây thay vì để họ bấm rồi mới biết.
+      ? "Trang này chỉ có tiêu đề — lật sang một trang có nội dung nhé."
+      : chosen
+        ? `${target.count} phần đã chọn`
+        : target.thin
+          ? "Vùng chọn quá ngắn, sẽ giảng cả trang"
+          : "Cả trang. Kéo trên slide để chọn một phần.";
 
   return (
     <div className="flex h-full flex-col justify-center">
@@ -113,7 +122,12 @@ function Ready({ target, onTeach, onClearSelection }) {
       </AnimatePresence>
 
       <div className="mt-6 flex items-center gap-2">
-        <Button variant="primary" size="lg" onClick={onTeach} disabled={!target.hasSlides}>
+        <Button
+          variant="primary"
+          size="lg"
+          onClick={onTeach}
+          disabled={!target.hasSlides || !target.teachable}
+        >
           Bắt đầu giảng
           <Kbd tone="dark">Enter</Kbd>
         </Button>
