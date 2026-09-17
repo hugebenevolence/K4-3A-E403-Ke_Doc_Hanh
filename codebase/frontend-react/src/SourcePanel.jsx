@@ -31,8 +31,6 @@ export default function SourcePanel({
   setPage,
   zoomIndex,
   setZoomIndex,
-  spotlight,
-  setSpotlight,
   blocks,
   selectable,
   selectedIds,
@@ -161,8 +159,8 @@ export default function SourcePanel({
         </div>
       </header>
 
-      {/* Công cụ chỉ có nghĩa khi đang giảng: xem phần bị che, làm mờ phần còn
-          lại, hoặc bỏ phiên để chọn chỗ khác. */}
+      {/* Công cụ chỉ có nghĩa khi đang giảng: xem phần bị che, hoặc bỏ phiên để
+          chọn chỗ khác. */}
       <AnimatePresence initial={false}>
         {inSession && (
           <motion.div
@@ -179,9 +177,6 @@ export default function SourcePanel({
                 onClick={() => setRevealedIds(allRevealed ? new Set() : new Set(coveredIds))}
               >
                 {allRevealed ? "Che lại tất cả" : "Xem tất cả"}
-              </Button>
-              <Button size="sm" pressed={spotlight} onClick={() => setSpotlight((s) => !s)} title="Phím F">
-                Làm mờ phần khác
               </Button>
               <Button size="sm" variant="quiet" className="ml-auto" onClick={onAbandon}>
                 Chọn phần khác
@@ -201,7 +196,6 @@ export default function SourcePanel({
             selectable={selectable}
             selectedIds={selectedIds}
             coveredIds={coveredIds}
-            spotlight={spotlight}
             revealedIds={revealedIds}
             focusedSpan={focusedSpan}
             focusKey={focusKey}

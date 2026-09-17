@@ -49,7 +49,6 @@ export function useSession(deck) {
   const [micOpen, setMicOpen] = useState(false);
   const [turns, setTurns] = useState([]);
   const [partial, setPartial] = useState("");
-  const [activity, setActivity] = useState(null);
   const [speaking, setSpeaking] = useState(false);
   const [level, setLevel] = useState(0);
   const [ended, setEnded] = useState(null);
@@ -127,9 +126,9 @@ export function useSession(deck) {
       // Ngưỡng im lặng là luật sư phạm, do domain quyết — xem send_state()
       // trong app/main.py. Frontend chỉ thi hành, không tự đặt con số.
       silenceMsRef.current = msg.silence_ms ?? DEFAULT_SILENCE_MS;
-      setActivity(null);
     } else if (msg.type === "activity") {
-      setActivity(msg.label);
+      // Chỉ nuôi `thinking` — nó giữ cả danh sách bước và mốc thời gian, nên
+      // một state thứ hai chỉ chép lại nhãn mới nhất là thừa và sớm muộn lệch.
       const cur = thinkingRef.current;
       if (cur && cur.steps.at(-1)?.step !== msg.step) {
         const next = { ...cur, steps: [...cur.steps, { step: msg.step, label: msg.label }] };
@@ -328,7 +327,6 @@ export function useSession(deck) {
   return {
     turns,
     partial,
-    activity,
     thinking,
     ended,
     error,

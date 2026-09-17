@@ -44,7 +44,6 @@ export default function Learn() {
   const [pages, setPages] = useState(0);
   const [zoomIndex, setZoomIndex] = useState(1);
   const [focus, setFocus] = useState({ id: null, n: 0 });
-  const [spotlight, setSpotlight] = useState(false);
   // Vùng đang chọn (chưa giảng) và vùng của phiên đang chạy — hai thứ khác
   // nhau: đang giảng dở mà lật sang trang khác xem thì không được mất vùng cũ.
   const [selection, setSelection] = useState({ page: null, ids: [] });
@@ -148,7 +147,6 @@ export default function Learn() {
   const restart = useCallback(() => {
     session.reset();
     setRevealedIds(NONE);
-    setSpotlight(false);
     setSelection({ page: null, ids: [] });
   }, [session]);
 
@@ -209,8 +207,7 @@ export default function Learn() {
       if (e.code === "ArrowLeft") setPage((p) => Math.max(1, p - 1));
       if (e.code === "ArrowRight") setPage((p) => Math.min(pages || 1, p + 1));
       if (e.code === "KeyG" && inSession) setPage(sessionPage);
-      if (e.code === "KeyF" && inSession) setSpotlight((s) => !s);
-    }
+      }
 
     function onUp(e) {
       if (e.code !== "Space" || !spaceHeld.current) return;
@@ -291,8 +288,6 @@ export default function Learn() {
         setPage={setPage}
         zoomIndex={zoomIndex}
         setZoomIndex={setZoomIndex}
-        spotlight={spotlight}
-        setSpotlight={setSpotlight}
         blocks={blocksOnPage}
         selectable={!inSession}
         selectedIds={shownIds}
