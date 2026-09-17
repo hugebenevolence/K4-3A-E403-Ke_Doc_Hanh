@@ -5,12 +5,15 @@
 // — tách rời ra nhiều chỗ thì sớm muộn mic sẽ thu lúc agent đang nói.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AUTH_EXPIRED, socketUrl } from "./api";
 import { createVad, feedVad, levelOf, resetVad } from "./vad";
 
-export const API = `http://${location.hostname}:8000`;
+/** Server đóng WebSocket bằng mã này khi token hết hạn. */
+const CLOSE_UNAUTHORIZED = 4401;
 const SAMPLE_RATE = 16000;
 
-/** Mã học viên riêng của trình duyệt này.
+/** Mã học viên riêng của trình duyệt này — dùng khi server không bật đăng
+ *  nhập; bật rồi thì server lấy tên thành viên làm mã.
  *
  *  Không có nó thì server dùng chung một hồ sơ "demo" cho MỌI người, và agent
  *  nói với người lần đầu vào rằng "buổi trước bạn có nhắc chỗ này" — một sản
@@ -41,7 +44,7 @@ export const AGENT_OF_STEP = {
   close_review: "Học trò AI",
 };
 
-export function useSession() {
+export function useSession(deck) {
   const [turnState, setTurnState] = useState(null);
   const [micOpen, setMicOpen] = useState(false);
   const [turns, setTurns] = useState([]);
@@ -219,9 +222,9 @@ export function useSession() {
     setStarted(true);
     beginThinking("open", "Soạn câu mở đầu");
 
-    const query = new URLSearchParams({ student_id: studentId() });
-    if (spanIds.length) query.set("spans", spanIds.join(","));
-    const socket = new WebSocket(`${API.replace("http", "ws")}/ws/session?${query}`);
+    const query = { student_id: studentId(), deck };
+    if (spanIds.length) query.spans = spanIds.join(",");
+    const socket = new WebSocket(socketUrl("/ws/session", query));
     socket.binaryType = "blob";
     socket.onmessage = (e) => {
       if (e.data instanceof Blob) {
@@ -231,13 +234,14 @@ export function useSession() {
       }
       handle(JSON.parse(e.data));
     };
-    socket.onclose = () => {
+    socket.onclose = (e) => {
+      if (e.code === CLOSE_UNAUTHORIZED) dispatchEvent(new Event(AUTH_EXPIRED));
       setTurnState(null);
       setMicOpen(false);
       setTalking(false);
     };
     ws.current = socket;
-  }, [handle, playNext, beginThinking]);
+  }, [deck, handle, playNext, beginThinking]);
 
   /** Quay về chọn phần khác để giảng. */
   const reset = useCallback(() => {

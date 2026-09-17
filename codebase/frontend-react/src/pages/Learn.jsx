@@ -1,15 +1,17 @@
-// Khung ứng dụng: thanh bên · hội thoại · tài liệu nguồn — bố cục ba cột theo
-// ảnh tham chiếu, nền trắng.
+// Không gian học của một bộ slide: thanh bên · hội thoại · tài liệu nguồn — bố
+// cục ba cột theo ảnh tham chiếu, nền trắng.
 //
-// Bài học không còn cố định: học viên chọn phần nào trên slide thì phiên giảng
-// dựng từ đúng phần đó. Chưa chọn gì thì giảng cả trang đang mở.
+// Học viên chọn phần nào trên slide thì phiên giảng dựng từ đúng phần đó. Chưa
+// chọn gì thì giảng cả trang đang mở.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Conversation from "./Conversation";
-import Sidebar from "./Sidebar";
-import SourcePanel from "./SourcePanel";
-import { API, useSession } from "./useSession";
-import "./styles.css";
+import { Link, useParams, useSearchParams } from "react-router";
+import { api } from "../api";
+import Conversation from "../Conversation";
+import { rememberPage } from "../decks";
+import Sidebar from "../Sidebar";
+import SourcePanel from "../SourcePanel";
+import { useSession } from "../useSession";
 
 const NONE = new Set();
 const EMPTY = [];
@@ -21,11 +23,13 @@ const EMPTY = [];
  *  giảng, không phải nội dung để giảng — nên mở rộng ra cả trang. */
 const MIN_TEACH_WORDS = 12;
 
-export default function App() {
-  const [info, setInfo] = useState(null);
+export default function Learn() {
+  const { slug } = useParams();
+  const [params, setParams] = useSearchParams();
+  const [deck, setDeck] = useState(null);
   const [outline, setOutline] = useState([]);
   const [blocks, setBlocks] = useState([]);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => Math.max(1, Number(params.get("page")) || 1));
   const [pages, setPages] = useState(0);
   const [zoomIndex, setZoomIndex] = useState(1);
   const [focus, setFocus] = useState({ id: null, n: 0 });
@@ -37,25 +41,31 @@ export default function App() {
   const [revealed, setRevealed] = useState(false);
   const spaceHeld = useRef(false);
 
-  const session = useSession();
+  const session = useSession(slug);
   const inSession = session.started && !session.ended;
 
   useEffect(() => {
-    fetch(`${API}/lesson`)
-      .then((r) => r.json())
-      .then(setInfo)
-      .catch(() => setInfo({ concept: "(không kết nối được backend)", spans: [], has_slides: false }));
-    // Dàn ý và các ô chỉ có khi đã cấu hình slide; thiếu thì vẫn học được bằng
-    // bài học mặc định, chỉ mất phần chọn vùng.
-    fetch(`${API}/slides/outline`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setOutline)
-      .catch(() => {});
-    fetch(`${API}/slides/blocks`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setBlocks)
-      .catch(() => {});
-  }, []);
+    let cancelled = false;
+    const path = `/decks/${encodeURIComponent(slug)}`;
+    Promise.all([api("/decks"), api(`${path}/outline`), api(`${path}/blocks`)])
+      .then(([decks, rows, spans]) => {
+        if (cancelled) return;
+        setOutline(rows);
+        setBlocks(spans);
+        setDeck(decks.find((d) => d.slug === slug) ?? { slug, title: slug, subtitle: "" });
+      })
+      .catch((err) => !cancelled && setDeck({ error: err.status === 404 ? "missing" : err.message }));
+    return () => {
+      cancelled = true;
+    };
+  }, [slug]);
+
+  // Trang đang xem nằm trên thanh địa chỉ: gửi link cho bạn cùng nhóm là mở
+  // đúng slide, tải lại trang không bị đưa về slide 1.
+  useEffect(() => {
+    if (params.get("page") !== String(page)) setParams({ page: String(page) }, { replace: true });
+    rememberPage(slug, page);
+  }, [page, params, setParams, slug]);
 
   const byId = useMemo(() => new Map(blocks.map((b) => [b.span_id, b])), [blocks]);
   const blocksOnPage = useMemo(() => blocks.filter((b) => b.page === page), [blocks, page]);
@@ -133,7 +143,7 @@ export default function App() {
       // Enter trên một nút đang được focus đã tự bấm nút đó rồi — bắt đầu phiên
       // thêm lần nữa ở đây là một phím làm hai việc.
       const onButton = document.activeElement?.tagName === "BUTTON";
-      if (!inSession && e.code === "Enter" && !onButton && info?.has_slides) return teach();
+      if (!inSession && e.code === "Enter" && !onButton && blocks.length) return teach();
       if (!inSession && e.code === "Escape") return setSelection({ page: null, ids: [] });
       if (e.code === "ArrowLeft") setPage((p) => Math.max(1, p - 1));
       if (e.code === "ArrowRight") setPage((p) => Math.min(pages || 1, p + 1));
@@ -153,9 +163,23 @@ export default function App() {
       removeEventListener("keydown", onDown);
       removeEventListener("keyup", onUp);
     };
-  }, [session, inSession, pages, sessionPage, teach, info]);
+  }, [session, inSession, pages, sessionPage, teach, blocks.length]);
 
-  if (!info) {
+  if (deck?.error) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-white px-4 font-sans">
+        <div className="text-center">
+          <p className="m-0 text-[15px] font-medium text-neutral-900">
+            {deck.error === "missing" ? "Không tìm thấy bộ slide này" : deck.error}
+          </p>
+          <Link to="/library" className="mt-3 inline-block text-[13px] text-neutral-500 underline hover:text-neutral-900">
+            Về thư viện
+          </Link>
+        </div>
+      </div>
+    );
+  }
+  if (!deck) {
     return <p className="p-6 font-sans text-[13px] text-neutral-400">Đang tải…</p>;
   }
 
@@ -164,25 +188,32 @@ export default function App() {
     title: titleOf(page),
     count: selectedHere.length,
     thin,
-    hasSlides: Boolean(info.has_slides && blocks.length),
+    hasSlides: blocks.length > 0,
   };
-  const concept = info.has_slides && active.length ? titleOf(sessionPage) : info.concept;
+  const concept = titleOf(active.length ? sessionPage : page);
 
   return (
     <div className="grid h-screen grid-cols-[240px_minmax(380px,460px)_minmax(0,1fr)] bg-white font-sans text-neutral-900 antialiased">
-      <Sidebar outline={outline} pages={pages} page={page} teachingPages={teachingPages} onPage={setPage} />
+      <Sidebar
+        deck={deck}
+        outline={outline}
+        pages={pages}
+        page={page}
+        teachingPages={teachingPages}
+        onPage={setPage}
+      />
       <Conversation
         session={session}
         concept={concept}
         target={target}
         spanById={byId}
-        onTeach={info.has_slides ? teach : () => session.start()}
+        onTeach={teach}
         onClearSelection={() => setSelection({ page: null, ids: [] })}
         onRestart={restart}
         onOpen={open}
       />
       <SourcePanel
-        hasSlides={info.has_slides}
+        deck={deck}
         outline={outline}
         page={page}
         pages={pages}

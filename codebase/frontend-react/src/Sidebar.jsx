@@ -5,6 +5,7 @@
 
 import { LayoutGroup, motion } from "motion/react";
 import { useState } from "react";
+import { Link } from "react-router";
 import { EASE } from "./motion";
 import { Eyebrow, Kbd } from "./ui";
 
@@ -13,7 +14,7 @@ const FILTERS = [
   { id: "teaching", label: "Đang dạy" },
 ];
 
-export default function Sidebar({ outline, pages, page, teachingPages, onPage }) {
+export default function Sidebar({ deck, outline, pages, page, teachingPages, onPage }) {
   const [filter, setFilter] = useState("all");
 
   const rows = (outline.length ? outline : Array.from({ length: pages }, (_, i) => ({ page: i + 1, title: "" })))
@@ -23,20 +24,30 @@ export default function Sidebar({ outline, pages, page, teachingPages, onPage })
     <aside className="flex min-h-0 flex-col border-r border-neutral-200 bg-neutral-50/70">
       <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
         {/* Chữ lồng thay cho logo: đơn sắc, không phải một icon trang trí. */}
-        <span className="grid size-7 place-items-center rounded-lg bg-neutral-900 text-[13px] font-semibold text-white">
-          G
-        </span>
-        <div className="min-w-0 leading-tight">
-          <p className="m-0 text-[13px] font-semibold text-neutral-900">Giảng lại</p>
-          <p className="m-0 truncate text-[11px] text-neutral-500">cho học trò AI</p>
-        </div>
+        <Link to="/" className="flex min-w-0 flex-1 items-center gap-2.5">
+          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-neutral-900 text-[13px] font-semibold text-white">
+            G
+          </span>
+          <span className="min-w-0 leading-tight">
+            <span className="block text-[13px] font-semibold text-neutral-900">Giảng lại</span>
+            <span className="block truncate text-[11px] text-neutral-500">cho học trò AI</span>
+          </span>
+        </Link>
       </div>
 
-      <div className="mx-3 rounded-xl border border-neutral-200 bg-white px-3 py-2.5">
-        <Eyebrow>Bài đang học</Eyebrow>
-        <p className="m-0 mt-0.5 text-[13px] font-medium text-neutral-900">AI &amp; LLM Foundation</p>
-        <p className="m-0 text-[11px] text-neutral-500">Day 1 · {pages || "…"} slide</p>
-      </div>
+      <Link
+        to="/library"
+        className="group mx-3 block rounded-xl border border-neutral-200 bg-white px-3 py-2.5 transition-colors hover:border-neutral-300"
+      >
+        <span className="flex items-center justify-between">
+          <Eyebrow>Bài đang học</Eyebrow>
+          <span className="text-[11px] text-neutral-400 transition-colors group-hover:text-neutral-900">
+            Đổi bài
+          </span>
+        </span>
+        <span className="mt-0.5 block truncate text-[13px] font-medium text-neutral-900">{deck.title}</span>
+        <span className="block text-[11px] text-neutral-500">{pages || "…"} slide</span>
+      </Link>
 
       <LayoutGroup id="filter">
         <div className="mx-3 mt-3 grid grid-cols-2 rounded-lg bg-neutral-200/60 p-0.5">

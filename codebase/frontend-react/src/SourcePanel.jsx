@@ -6,16 +6,16 @@
 //   vùng gập thì mở ra đúng chỗ — đó là bước quay lại nguồn.
 
 import { AnimatePresence, motion, useAnimate } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { deckPdf } from "./api";
 import { blurIn, EASE } from "./motion";
 import SlideView from "./SlideView";
-import { API } from "./useSession";
 import { Badge, Button, Separator } from "./ui";
 
 const ZOOM_STEPS = [0.75, 1, 1.25, 1.5, 2];
 
 export default function SourcePanel({
-  hasSlides,
+  deck,
   outline,
   page,
   pages,
@@ -39,6 +39,7 @@ export default function SourcePanel({
   onPages,
 }) {
   const [scope, animate] = useAnimate();
+  const source = useMemo(() => deckPdf(deck.slug), [deck.slug]);
   const title = outline.find((row) => row.page === page)?.title;
   const inSession = !selectable;
   const [emptyHint, setEmptyHint] = useState(false);
@@ -87,7 +88,7 @@ export default function SourcePanel({
           {teachingPages.has(page) && <Badge>{inSession ? "Đang giảng" : "Đã chọn"}</Badge>}
         </div>
         <p className="m-0 mt-0.5 text-[12px] text-neutral-500">
-          AI &amp; LLM Foundation · Day 1 · trang {page}
+          {deck.title} · trang {page}
         </p>
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
@@ -155,26 +156,22 @@ export default function SourcePanel({
 
       <div className="min-h-0 flex-1 overflow-auto px-6 pb-6">
         <div ref={scope}>
-          {hasSlides ? (
-            <SlideView
-              url={`${API}/slides.pdf`}
-              page={page}
-              zoom={ZOOM_STEPS[zoomIndex]}
-              blocks={blocks}
-              selectable={selectable}
-              selectedIds={selectedIds}
-              coveredIds={coveredIds}
-              revealed={revealed}
-              focusedSpan={focusedSpan}
-              focusKey={focusKey}
-              onSelect={onSelect}
-              onEmptyDrag={showEmptyHint}
-              onReveal={() => setRevealed(true)}
-              onPages={onPages}
-            />
-          ) : (
-            <p className="text-[13px] text-neutral-400">Chưa cấu hình slide (SLIDES_PDF trong .env)</p>
-          )}
+          <SlideView
+            source={source}
+            page={page}
+            zoom={ZOOM_STEPS[zoomIndex]}
+            blocks={blocks}
+            selectable={selectable}
+            selectedIds={selectedIds}
+            coveredIds={coveredIds}
+            revealed={revealed}
+            focusedSpan={focusedSpan}
+            focusKey={focusKey}
+            onSelect={onSelect}
+            onEmptyDrag={showEmptyHint}
+            onReveal={() => setRevealed(true)}
+            onPages={onPages}
+          />
         </div>
       </div>
     </section>

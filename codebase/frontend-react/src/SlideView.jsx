@@ -2,12 +2,9 @@
 // giảng, và khoanh đúng chỗ agent trỏ tới.
 
 import { AnimatePresence, motion } from "motion/react";
-import * as pdfjs from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { EASE } from "./motion";
-
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+import { pdfjs } from "./pdf";
 
 /** Kéo ngắn hơn ngần này điểm ảnh thì coi là bấm, không phải kéo khung. */
 const CLICK_SLOP = 5;
@@ -25,7 +22,7 @@ function contains([x0, y0, x1, y1], [px, py]) {
 }
 
 export default function SlideView({
-  url,
+  source,
   page,
   zoom,
   blocks,
@@ -50,17 +47,22 @@ export default function SlideView({
   const [hovered, setHovered] = useState(null);
   const [box, setBox] = useState(null);
 
+  // source = { url, httpHeaders }: file slide nằm sau đăng nhập nên phải gửi
+  // kèm token. Nơi gọi giữ nguyên object giữa các lần render, không thì mỗi
+  // lần lật trang là tải lại cả file PDF.
   useEffect(() => {
     let cancelled = false;
-    pdfjs.getDocument(url).promise.then((d) => {
+    const loading = pdfjs.getDocument(source);
+    loading.promise.then((d) => {
       if (cancelled) return;
       setDoc(d);
       onPages(d.numPages);
-    });
+    }, () => {});
     return () => {
       cancelled = true;
+      loading.destroy();
     };
-  }, [url, onPages]);
+  }, [source, onPages]);
 
   // Vẽ lại theo bề ngang thật của khung. Bố cục ba cột co giãn theo cửa sổ, nên
   // vẽ một lần lúc mở là slide nhoè khi phóng to cửa sổ và tràn khi thu nhỏ.
