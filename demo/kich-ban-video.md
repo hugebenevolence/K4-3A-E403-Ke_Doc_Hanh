@@ -1,197 +1,200 @@
-# Kịch bản quay video demo — từng bước (khoảng 3 phút 30)
+# Kịch bản quay video demo (khoảng 3 phút 30)
 
-Video dự phòng cho phần demo live ở slide 3: một case chuẩn và một case chỗ khó
-(`brief/02-guide.md` §5.1). Mọi câu giảng dưới đây đã chạy thật với bộ chấm thật
-và ra đúng kết quả ghi ở dòng **THẤY**.
+Video dự phòng cho phần demo ở slide 3, gồm một trường hợp chuẩn và một trường hợp
+khó (`brief/02-guide.md` §5.1).
 
-**Cách đọc kịch bản.** Mỗi bước có ba dòng:
-- **NÓI** — lời thuyết minh cho người xem. Nói khi **KHÔNG** giữ phím Space.
-- **LÀM** — thao tác trên màn hình.
-- **THẤY** — kết quả phải hiện ra. Không thấy thì xem bảng sự cố ở cuối.
+**Quy ước.** Mỗi bước gồm ba phần:
 
-Câu **GIẢNG CHO HỌC TRÒ** (in đậm, trong khung trích) là câu nói vào mic: **giữ
-Space → nói → thả Space**. Trong lúc giữ Space, mic đang thu, nên chỉ nói đúng câu
-đó, không chen thuyết minh vào.
+- **NÓI**: lời thuyết minh cho người xem, nói khi **không** giữ phím Space.
+- **LÀM**: thao tác trên màn hình.
+- **THẤY**: kết quả cần xuất hiện. Nếu không thấy, tra bảng sự cố ở cuối.
 
----
-
-## Chuẩn bị (trước khi bấm quay)
-
-- [ ] Chrome, cửa sổ khoảng 1440×900, zoom 100%. Tắt thông báo. **Chỉ quay cửa
-      sổ trình duyệt.**
-- [ ] Đeo tai nghe (để mic không thu lại giọng học trò AI).
-- [ ] Mở link deploy, đăng nhập **member5** (mật khẩu hỏi Nhân — không ghi ở đây).
-      Cho phép micro khi được hỏi.
-- [ ] Đứng ở trang **Thư viện**. Khung "Hành trình học của bạn" phải hiện
-      **3 Đã hiểu · 1 Cần sửa**. Không đúng → báo Nhân dựng lại dữ liệu.
+**Câu giảng cho học trò** (trong khung trích) là câu nói vào micro: giữ Space,
+nói, rồi thả Space. Khi đang giữ Space, micro đang thu, vì vậy chỉ nói đúng câu đó.
+Các câu này đã được kiểm với bộ chấm thật; hãy giữ nguyên từng chữ.
 
 ---
 
-## Bước 1 — Giới thiệu hệ thống (0:00–0:35)
+## Chuẩn bị
 
-**LÀM:** đứng yên ở trang Thư viện.
+- Trình duyệt Chrome, cửa sổ khoảng 1440×900, thu phóng 100%, tắt thông báo. Chỉ
+  quay cửa sổ trình duyệt.
+- Đeo tai nghe để micro không thu lại giọng của học trò AI.
+- Đăng nhập tài khoản **member5** (mật khẩu hỏi Nhân) và cho phép dùng micro.
+- Mở trang **Thư viện**. Khung "Hành trình học của bạn" phải hiển thị
+  **3 Đã hiểu · 1 Cần sửa**; nếu không, báo Nhân dựng lại dữ liệu.
+
+---
+
+## Bước 1. Giới thiệu hệ thống (0:00–0:35)
+
+**LÀM:** giữ màn hình ở trang Thư viện.
 
 **NÓI:**
-> Trong khoá AI20k, học viên hỏi tutor xin giảng hơn 5.600 lần, và cả khoá tutor
-> chỉ hỏi ngược học viên 0,2% số lượt. Kể cả khi học viên tự nói ra cách mình hiểu,
-> tutor vẫn giảng lại cho họ gần 87% số lần. Học viên đọc xong không biết mình hiểu
-> tới đâu.
+> Trên VLearn, học viên khoá AI20k đã hơn 5.600 lần nhờ tutor giảng bài, nhưng
+> tutor chỉ đặt câu hỏi ngược ở 0,2% số lượt. Ngay cả khi học viên tự trình bày cách
+> hiểu, gần 87% trường hợp tutor vẫn giảng lại thay họ. Người học vì thế khó biết
+> mình thực sự hiểu đến đâu.
 >
-> Giảng lại đảo vai: **bạn** là người giảng, AI là một học trò chưa biết gì. Bạn
-> chọn một phần slide, phần đó bị che đi, và bạn giảng bằng lời của mình. Học trò
-> chỉ hỏi đúng một câu vào chỗ bạn còn hổng — nó không bao giờ đưa đáp án. Mọi thứ
-> được đối chiếu với đúng slide của khoá, không phải kiến thức chung của AI.
+> Giảng lại đảo ngược vai trò này, dựa trên hiệu ứng học qua giảng dạy. Người học
+> chọn một phần slide; phần đó được che đi, và họ trình bày lại bằng lời của mình
+> cho một học trò AI. Học trò đối chiếu lời giảng với đúng nội dung slide, rồi đặt
+> một câu hỏi vào chỗ còn thiếu, không bao giờ đưa ra đáp án.
 
 ---
 
-## Bước 2 — Hành trình học (0:35–0:50)
+## Bước 2. Hành trình học (0:35–0:50)
 
 **LÀM:** rê chuột qua khung "Hành trình học của bạn", dừng ở dòng *"Có 1 trang bạn
 từng giảng sai"*.
 
 **NÓI:**
-> Tài khoản này đã giảng trước vài trang. Hệ thống nhớ trang nào tôi đã hiểu, và
-> trang nào lần trước tôi giảng sai — mức hiểu chỉ đi lên khi tôi giảng được, không
-> phải khi tôi mở slide ra đọc.
+> Hệ thống lưu mức hiểu của từng trang theo tài khoản. Mức hiểu chỉ tăng khi người
+> học giảng được, không tăng khi chỉ mở slide ra đọc. Tài khoản này đã giảng trước
+> một số trang, trong đó có một trang từng giảng sai.
 
 ---
 
-## Bước 3 — Chọn slide để giảng (0:50–1:05)
+## Bước 3. Chọn phần cần giảng (0:50–1:05)
 
 **LÀM:**
-1. Cột trái, bấm bộ **Day 1 · AI & LLM Foundation** (bộ đầu tiên).
-2. Trong lưới slide, bấm **Slide 12 — Sinh văn bản = đoán → nối vào câu → đoán tiếp**.
-3. Trên slide, **kéo một khung** quanh phần nội dung chính.
+1. Ở cột trái, chọn bộ **Day 1 · AI & LLM Foundation**.
+2. Chọn **Slide 12: Sinh văn bản = đoán → nối vào câu → đoán tiếp**.
+3. Kéo một khung quanh phần nội dung chính của slide.
 4. Bấm **Bắt đầu giảng**.
 
-**THẤY:** vùng vừa chọn **bị che lại**; học trò đọc câu mở bài.
+**THẤY:** vùng vừa chọn bị che; học trò đọc câu mở đầu.
 
 **NÓI** (sau khi học trò nói xong):
-> Phần tôi chọn đã bị che. Giờ tôi phải giảng bằng lời mình, không đọc lại được.
+> Phần vừa chọn đã được che. Từ đây, tôi phải trình bày bằng hiểu biết của mình,
+> không thể đọc lại.
 
 ---
 
-## Bước 4 — Case chuẩn: giảng một trang (1:05–1:35)
+## Bước 4. Trường hợp chuẩn (1:05–1:35)
 
-**LÀM:** giữ **Space**, nói câu dưới, thả **Space**.
+**LÀM:** giữ Space, nói câu dưới đây, rồi thả Space.
 
-> **GIẢNG CHO HỌC TRÒ:** "Model sinh văn bản bằng cách đoán một token tiếp theo dựa
+> **Giảng cho học trò:** "Model sinh văn bản bằng cách đoán một token tiếp theo dựa
 > trên xác suất. Sau đó nó nối token vừa đoán vào ngữ cảnh rồi chạy lại từ đầu để
 > đoán token kế tiếp. Vì vậy câu trả lời được tạo ra từng mảnh một chứ không phải
 > nghĩ ra cả câu một lúc."
 
-**THẤY:** thẻ **"Học trò đã hiểu phần này"**; ở dàn ý bên trái, slide 12 có
-**chấm đặc**.
+**THẤY:** thẻ **"Học trò đã hiểu phần này"**; ở dàn ý bên trái, slide 12 chuyển
+sang chấm đặc.
 
 **NÓI:**
-> Học trò chấm lời tôi với đúng slide này. Tôi giảng đủ cơ chế nên nó hiểu, và
-> slide 12 được đánh dấu đã hiểu.
+> Lời giảng được đối chiếu với đúng slide này. Vì đã nêu đủ cơ chế, học trò xác nhận
+> đã hiểu và trang được ghi nhận.
 
-*Nếu học trò hỏi thêm một câu thay vì đóng phiên — giữ Space, trả lời:*
-> **"Nó cứ lặp lại như vậy cho tới khi đủ câu, mỗi vòng chỉ thêm đúng một mẩu."**
+*Dự phòng — nếu học trò hỏi thêm, giữ Space và trả lời:*
+> "Nó cứ lặp lại như vậy cho tới khi đủ câu, mỗi vòng chỉ thêm đúng một mẩu."
 
 ---
 
-## Bước 5 — Case chỗ khó: nói sai (1:35–2:05)
+## Bước 5. Trường hợp khó: một hiểu lầm (1:35–2:05)
 
 **LÀM:**
-1. Ở dàn ý bên trái, bấm **13 · Token** (chấm **vòng rỗng** = cần sửa).
-2. Bấm **Bắt đầu giảng**, đợi học trò mở bài xong.
-3. Giữ **Space**, nói câu **sai** dưới, thả **Space**.
+1. Ở dàn ý bên trái, chọn **13 · Token** (vòng rỗng, nghĩa là cần sửa).
+2. Bấm **Bắt đầu giảng** và đợi học trò mở đầu xong.
+3. Giữ Space, nói câu dưới đây, rồi thả Space.
 
-> **GIẢNG CHO HỌC TRÒ:** "Mỗi token là một từ, và tiếng Việt tốn ít token hơn tiếng
+> **Giảng cho học trò:** "Mỗi token là một từ, và tiếng Việt tốn ít token hơn tiếng
 > Anh vì từ tiếng Việt ngắn."
 
-**THẤY:** học trò **không gật đầu, không sửa hộ** — nó hỏi ngược đúng một câu,
-kiểu *"token thực tế là mảnh chữ hay ký tự như bạn nói, hay đúng là mỗi token một
-từ vậy?"*
+**THẤY:** học trò không xác nhận và không sửa hộ; nó đặt một câu hỏi ngược, chẳng
+hạn *"token thực tế là mảnh chữ hay ký tự như bạn nói, hay đúng là mỗi token một từ
+vậy?"*
 
 **NÓI:**
-> Tôi vừa nói sai — đây là một hiểu lầm có thật trong chatlog của khoá. Học trò
-> không bảo tôi sai, cũng không đưa đáp án. Nó hỏi đúng vào chỗ tôi hổng, để tôi tự
-> nhận ra.
+> Đây là một hiểu lầm có thật, trích từ chatlog của khoá. Học trò không xác nhận ý
+> sai và cũng không sửa hộ; nó đặt đúng một câu hỏi vào chỗ sai để người học tự nhận
+> ra.
 
 ---
 
-## Bước 6 — Tự sửa (2:05–2:35)
+## Bước 6. Tự điều chỉnh (2:05–2:35)
 
-**LÀM:** giữ **Space**, nói câu dưới, thả **Space**.
+**LÀM:** giữ Space, nói câu dưới đây, rồi thả Space.
 
-> **GIẢNG CHO HỌC TRÒ:** "À mình nói sai. Model không đọc theo từng từ mà theo từng
+> **Giảng cho học trò:** "À mình nói sai. Model không đọc theo từng từ mà theo từng
 > mẩu chữ nhỏ, một chữ dài hay có dấu có thể bị chặt ra thành ba bốn mẩu. Vì thế cùng
 > một câu mà viết tiếng Việt có dấu thì ra nhiều mẩu hơn tiếng Anh, tức là tốn tiền
 > hơn và dùng hết chỗ nhanh hơn."
 
-**THẤY:** **"Học trò đã hiểu phần này"**; slide 13 ở dàn ý đổi từ vòng rỗng sang
-**chấm đặc**.
+**THẤY:** thẻ **"Học trò đã hiểu phần này"**; slide 13 chuyển từ vòng rỗng sang
+chấm đặc.
 
 **NÓI:**
-> Tôi tự sửa được, và trang từng giảng sai giờ thành đã hiểu.
+> Sau khi người học tự điều chỉnh, trang từng bị ghi là cần sửa chuyển sang đã hiểu.
 
-*Nếu còn bị hỏi thêm — giữ Space, trả lời:*
-> **"Ví dụ 'Xin chào' có thể thành ba bốn mẩu, còn 'Hello' chỉ một mẩu."**
+*Dự phòng — nếu học trò hỏi thêm, giữ Space và trả lời:*
+> "Ví dụ 'Xin chào' có thể thành ba bốn mẩu, còn 'Hello' chỉ một mẩu."
 
 ---
 
-## Bước 7 — Bản đồ hiểu biết (2:35–2:50)
+## Bước 7. Bản đồ hiểu biết (2:35–2:50)
 
-**LÀM:** bấm tab **Bản đồ** ở góc trên bên trái (cạnh tab Slide).
+**LÀM:** bấm tab **Bản đồ** ở góc trên bên trái.
 
-**THẤY:** các trang đã hiểu là chấm đen; trang Token có dấu **"Bạn đang ở đây"**.
+**THẤY:** các trang đã hiểu hiển thị bằng chấm đen; trang Token được đánh dấu
+**"Bạn đang ở đây"**.
 
 **NÓI:**
-> Mỗi chấm đen là một trang tôi đã giảng được. Bấm vào là thấy nguyên văn câu tôi
-> đã nói — không phải câu AI viết lại.
+> Bản đồ hiểu biết tập hợp các trang đã giảng được qua mọi buổi học. Mỗi điểm lưu
+> nguyên văn lời người học, không phải lời AI diễn đạt lại.
 
-**LÀM:** bấm đỉnh **Context** (D1 · tr. 14) — khung phải hiện câu đã giảng.
+**LÀM:** bấm vào đỉnh **Context** (D1 · tr. 14); khung bên phải hiển thị câu đã giảng.
 
 ---
 
-## Bước 8 — Nối hai buổi học (2:50–3:20)
+## Bước 8. Nối hai buổi học (2:50–3:20)
 
 **LÀM:**
-1. Ở khung phải, bấm **Nối với trang khác**.
-2. Rê chuột sang **Hệ thống AI** (D2 · tr. 16) — có đường nét đứt đi theo — bấm.
+1. Ở khung bên phải, bấm **Nối với trang khác**.
+2. Rê chuột đến **Hệ thống AI** (D2 · tr. 16) theo đường nét đứt, rồi bấm.
 
-**THẤY:** học trò hỏi *"Bạn đã dạy mình «Context» và «Hệ thống AI» rồi. Hai trang
-đó liên quan gì với nhau vậy bạn?"*
+**THẤY:** học trò hỏi *"Bạn đã dạy mình «Context» và «Hệ thống AI» rồi. Hai trang đó
+liên quan gì với nhau vậy bạn?"*
 
-**LÀM:** giữ **Space**, nói câu dưới, thả **Space**.
+**LÀM:** giữ Space, nói câu dưới đây, rồi thả Space.
 
-> **GIẢNG CHO HỌC TRÒ:** "Ở Day 1, context là lượng chữ model nhìn được trong mỗi
+> **Giảng cho học trò:** "Ở Day 1, context là lượng chữ model nhìn được trong mỗi
 > lần trả lời. Sang Day 2 thì context là một thành phần của hệ thống AI: mình đưa tài
 > liệu nghiệp vụ vào context để model trả lời đúng với doanh nghiệp. Nhưng vì context
 > có giới hạn và càng dài càng tốn tiền, nên không thể nhồi hết tài liệu mà phải chọn
 > đúng phần liên quan."
 
-**THẤY:** **"Học trò đã thấy chỗ nối"** → bấm **Xong** → một đường nối được **vẽ
-dần ra** giữa trang Day 1 và trang Day 2, khung phải hiện đúng câu vừa nói.
+**THẤY:** thông báo **"Học trò đã thấy chỗ nối"**. Bấm **Xong**; một đường nối được
+vẽ giữa trang Day 1 và trang Day 2, khung bên phải hiển thị đúng câu vừa nói.
 
 **NÓI:**
-> Hai buổi học khác nhau vừa được nối lại — bằng chính lời tôi giảng. Hệ thống không
-> tự nối hộ, và nối sai thì không có đường nào hiện ra.
+> Hai trang thuộc hai buổi học khác nhau vừa được nối lại bằng chính lời giải thích
+> của người học. Hệ thống không tự suy ra liên kết; một liên kết sai sẽ không được
+> ghi nhận.
 
 ---
 
-## Bước 9 — Kết (3:20–3:35)
+## Bước 9. Kết (3:20–3:35)
 
 **LÀM:** bấm **Thư viện** ở góc trên bên phải.
 
-**THẤY:** "Hành trình học" giờ là **5 Đã hiểu · 0 Cần sửa**.
+**THẤY:** khung "Hành trình học" hiển thị **5 Đã hiểu · 0 Cần sửa**.
 
 **NÓI:**
-> Hai trang mới hiểu, một hiểu lầm đã sửa, một mối nối qua hai buổi học. Tất cả do
-> chính tôi giảng ra — AI chỉ hỏi, không làm hộ.
+> Chỉ trong vài phút, hai trang mới được hiểu, một hiểu lầm được sửa và một liên kết
+> giữa hai buổi học được thiết lập. Tất cả đều do người học tự trình bày; AI chỉ đặt
+> câu hỏi.
 
 ---
 
-## Khi có sự cố
+## Xử lý sự cố
 
-| Sự cố | Làm gì |
+| Tình huống | Cách xử lý |
 |---|---|
-| Mic không nhận, hoặc nhận sai chữ | Gõ đúng câu giảng vào ô chữ phía dưới → bấm **Gửi** (vẫn là luồng thật) |
-| Học trò hỏi thêm ngoài dự kiến | Dùng câu dự phòng ghi ở từng bước |
-| Bước 8 bị chấm "chưa thấy chỗ nối" | Bấm **Thử nối lại**, giảng: *"Vì context có hạn nên không nhồi hết tài liệu nghiệp vụ vào được, phải chọn đúng phần liên quan — đó là chỗ hai trang gặp nhau."* |
-| Học trò đang nói mà muốn đi tiếp | Bấm **Bỏ qua** hoặc nhấn Space để cắt |
-| Link không mở được | Báo Nhân — link Cloudflare tạm sẽ đổi khi dựng lại |
-| Muốn quay lại từ đầu | Báo Nhân dựng lại dữ liệu member5 (mỗi lần quay đã làm đổi dữ liệu) |
+| Micro không nhận hoặc nhận sai | Gõ đúng câu giảng vào ô nhập phía dưới rồi bấm **Gửi**; luồng xử lý vẫn là thật |
+| Học trò hỏi thêm ngoài dự kiến | Dùng câu dự phòng ghi ở bước tương ứng |
+| Bước 8 bị chấm "chưa thấy chỗ nối" | Bấm **Thử nối lại** và giảng: *"Vì context có hạn nên không nhồi hết tài liệu nghiệp vụ vào được, phải chọn đúng phần liên quan — đó là chỗ hai trang gặp nhau."* |
+| Muốn bỏ qua lời học trò đang đọc | Bấm **Bỏ qua** hoặc nhấn Space |
+| Không mở được đường dẫn | Báo Nhân; đường dẫn tạm của Cloudflare sẽ thay đổi khi dựng lại |
+| Cần quay lại từ đầu | Báo Nhân dựng lại dữ liệu member5, vì mỗi lần quay đều làm thay đổi dữ liệu |
