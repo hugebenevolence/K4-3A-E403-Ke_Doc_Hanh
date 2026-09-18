@@ -21,6 +21,8 @@ Các câu này đã được kiểm với bộ chấm thật; hãy giữ nguyên
   quay cửa sổ trình duyệt.
 - Đeo tai nghe để micro không thu lại giọng của học trò AI.
 - Đăng nhập tài khoản **member5** (mật khẩu hỏi Nhân) và cho phép dùng micro.
+- Mở tab **Bản đồ** một lần, bấm **Đã rõ** để tắt khung "Cách dùng bản đồ" (khung
+  này chỉ hiện ở lần mở đầu), rồi quay lại.
 - Mở trang **Thư viện**. Khung "Hành trình học của bạn" phải hiển thị
   **3 Đã hiểu · 1 Cần sửa**; nếu không, báo Nhân dựng lại dữ liệu.
 
@@ -137,22 +139,24 @@ chấm đặc.
 
 **LÀM:** bấm tab **Bản đồ** ở góc trên bên trái.
 
-**THẤY:** các trang đã hiểu hiển thị bằng chấm đen; trang Token được đánh dấu
-**"Bạn đang ở đây"**.
+**THẤY:** bản đồ toàn màn hình, Day 1 bên trái, Day 2 bên phải; các trang đã hiểu
+là chấm đen; trang Token có nhãn đen **"Bạn đang ở đây"**.
 
 **NÓI:**
-> Bản đồ hiểu biết tập hợp các trang đã giảng được qua mọi buổi học. Mỗi điểm lưu
-> nguyên văn lời người học, không phải lời AI diễn đạt lại.
+> Bản đồ hiểu biết tập hợp các trang đã giảng được qua mọi buổi học, xếp theo từng
+> buổi. Mỗi điểm lưu nguyên văn lời người học, không phải lời AI diễn đạt lại.
 
 **LÀM:** bấm vào đỉnh **Context** (D1 · tr. 14); khung bên phải hiển thị câu đã giảng.
+Bấm **Đóng** trên khung đó.
 
 ---
 
 ## Bước 8. Nối hai buổi học (2:50–3:20)
 
 **LÀM:**
-1. Ở khung bên phải, bấm **Nối với trang khác**.
-2. Rê chuột đến **Hệ thống AI** (D2 · tr. 16) theo đường nét đứt, rồi bấm.
+1. Kéo đỉnh **Context** (D1 · tr. 14), thả lên đỉnh **Hệ thống AI** (D2 · tr. 16).
+   Khi thả trúng, vòng nét đứt quanh Hệ thống AI đậm lên.
+2. Trên thanh đen phía trên, bấm **Giảng mối nối**.
 
 **THẤY:** học trò hỏi *"Bạn đã dạy mình «Context» và «Hệ thống AI» rồi. Hai trang đó
 liên quan gì với nhau vậy bạn?"*
@@ -194,6 +198,7 @@ vẽ giữa trang Day 1 và trang Day 2, khung bên phải hiển thị đúng c
 |---|---|
 | Micro không nhận hoặc nhận sai | Gõ đúng câu giảng vào ô nhập phía dưới rồi bấm **Gửi**; luồng xử lý vẫn là thật |
 | Học trò hỏi thêm ngoài dự kiến | Dùng câu dự phòng ghi ở bước tương ứng |
+| Bước 8 kéo thả không trúng | Bấm đỉnh **Context** → **Nối với trang khác** → bấm đỉnh **Hệ thống AI** |
 | Bước 8 bị chấm "chưa thấy chỗ nối" | Bấm **Thử nối lại** và giảng: *"Vì context có hạn nên không nhồi hết tài liệu nghiệp vụ vào được, phải chọn đúng phần liên quan — đó là chỗ hai trang gặp nhau."* |
 | Muốn bỏ qua lời học trò đang đọc | Bấm **Bỏ qua** hoặc nhấn Space |
 | Không mở được đường dẫn | Báo Nhân; đường dẫn tạm của Cloudflare sẽ thay đổi khi dựng lại |
