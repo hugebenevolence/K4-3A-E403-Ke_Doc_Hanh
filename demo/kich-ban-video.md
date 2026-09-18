@@ -38,7 +38,7 @@ Các câu này đã được kiểm với bộ chấm thật; hãy giữ nguyên
 > hiểu, gần 87% trường hợp tutor vẫn giảng lại thay họ. Người học vì thế khó biết
 > mình thực sự hiểu đến đâu.
 >
-> Giảng lại đảo ngược vai trò này, dựa trên hiệu ứng học qua giảng dạy. Người học
+> V_KDH đảo ngược vai trò này, dựa trên hiệu ứng học qua giảng dạy. Người học
 > chọn một phần slide; phần đó được che đi, và họ trình bày lại bằng lời của mình
 > cho một học trò AI. Học trò đối chiếu lời giảng với đúng nội dung slide, rồi đặt
 > một câu hỏi vào chỗ còn thiếu, không bao giờ đưa ra đáp án.
