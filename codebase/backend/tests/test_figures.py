@@ -47,3 +47,20 @@ def test_o_chu_nam_trong_vung_so_do_khong_bi_nuot_vao_hinh():
 def test_mui_ten_le_loi_khong_thanh_hinh():
     arrow = Shape((178, 354, 210, 378), "path")
     assert find_figures([BACKGROUND, arrow], [], PAGE) == []
+
+
+def test_mo_ta_hinh_moi_sinh_ra_thi_bo_slide_doc_lai(tmp_path, monkeypatch):
+    """Khoá cache bộ slide phải gồm cả file mô tả hình.
+
+    Mô tả sinh dần ở tiến trình khác và một lượt chạy cả thư viện mất hàng giờ;
+    khoá chỉ theo mtime của PDF thì mô tả mới nằm im tới lần khởi động lại sau.
+    """
+    from app.config import settings
+    from app.main import _figures_mtime
+
+    thieu = tmp_path / "chua-co.json"
+    monkeypatch.setattr(settings, "figures_file", thieu)
+    assert _figures_mtime() == 0.0
+
+    thieu.write_text("{}", encoding="utf-8")
+    assert _figures_mtime() == thieu.stat().st_mtime
