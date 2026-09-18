@@ -95,11 +95,13 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
     - OpenAI gpt-4o-mini-tts đọc thành tiếng;
     - Speechmatics realtime STT, với từ điển thuật ngữ theo vùng đang giảng;
     - tách slide PDF thành ô có toạ độ, nhận ra hình và sơ đồ kèm mô tả hình;
+    - thư viện **28 bộ slide** của khoá (Day 1–7, nhiều giảng viên): 2 bộ của data pack, 25 bộ tải từ thư mục khoá học, 1 bộ chỉ có ảnh được dựng lại lớp chữ bằng model thị giác (`scripts/ocr_pdf.py`, 0 → 225 ô chữ). Slide nằm trong `brief/` đã gitignore, không commit;
+    - **tiến độ theo tài khoản, lưu trên server**: mức hiểu từng trang (chưa học · đang học · cần sửa · đã hiểu · vững) suy ra từ kết quả chấm, hiện ở thư viện (hành trình học), dàn ý và bản đồ;
     - các guard tất định: đọc nguyên văn, lộ đáp án, xác nhận ý sai, câu mở bài lạc slide.
   - **Mock / đơn giản hoá:**
     - toàn bộ provider có adapter mock (`USE_MOCKS=true`) cho test;
     - hồ sơ học viên lưu file JSON, tài khoản thành viên cố định;
-    - tiến độ "đã giảng" lưu trên trình duyệt;
+    - "Học tiếp slide N" vẫn nhớ trên trình duyệt (chỉ là tiện ích, mất không ảnh hưởng tiến độ);
     - transcript bài giảng **chưa** dùng làm nguồn chấm (hiện chỉ slide);
     - nhãn "ngoài tài liệu" (§6) chưa có trong bản build.
 - **Automation: Conditional.** AI tự quyết hỏi tiếp hay đóng phiên khi vùng slide có căn cứ. Khi không đủ căn cứ thì không chấm: vùng chọn quá mỏng thì mở rộng ra cả trang, cả trang chỉ có tiêu đề thì từ chối mở phiên, phần giảng ngoài slide thì không tính. Hết 3 câu hỏi ngược thì trả việc lại cho học viên bằng cách chỉ vị trí cần đọc.
@@ -157,7 +159,7 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
 
   **Chưa làm, tự khai:**
   - Câu hỏi bắc cầu **chưa được golden set đo**: golden set chạy trên tài khoản không có đồ thị, nên 88% không nói gì về nó.
-  - Chưa có lớp phủ trạng thái trên dàn ý; vùng tối mới hiện ở trang `/graph`.
+  - ~~Chưa có lớp phủ trạng thái trên dàn ý~~ — đã có (18/9): dàn ý mỗi trang có chấm mức hiểu, cùng ngôn ngữ với thư viện và bản đồ; tab **Slide | Bản đồ** chuyển qua lại và đánh dấu "bạn đang ở đây".
   - Buổi đầu đồ thị rỗng; demo phải dùng tài khoản đã giảng sẵn vài trang và **nói rõ điều đó**.
 
 ## §5. Kiểu lỗi — 4 lớp chỗ khó + kịch bản
@@ -329,3 +331,4 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
 | 18/9 02:10 | Bắt bộ chấm chép đúng mã đoạn của nguồn (mô tả ngay trong schema), và báo lỗi to khi một lượt mất sạch căn cứ | Lượt đo 3× bắt được: model tự đặt mã `s1..s4` thay cho mã có sẵn, bộ lọc mã bịa ném sạch evidence, F01 và F02 trượt 0/3 vì bộ chấm hỏng chứ không phải vì lời giảng. Sau khi sửa: cả hai đạt 3/3 |
 | 18/9 10:10 | Đỉnh của bản đồ đổi từ khái niệm đoán từ câu nói sang **trang slide đã giảng được**; giữ mọi câu thay vì ghi đè; vành tối là trang thật còn giảng được; slug bộ slide sai thì báo lỗi thay vì lặng lẽ chấm theo bài khác | 7 phiên thật qua WebSocket: bản đồ báo Context còn tối dù đã giảng đủ hai lần; 4/7 khoá là nửa chữ hoặc từ trục; câu sau xoá câu trước (§4c) |
 | 18/9 11:00 | Cạnh của bản đồ: học viên chọn hai trang đã sáng và **giảng mối nối** ngay trên bản đồ; chấm bằng `grader_link` (v2); bản đồ tương tác được bằng chuột và bàn phím | Nghiên cứu bản đồ khái niệm: tự dựng g = 0,72, chỉ xem g = 0,43 (Schroeder 2018) — cạnh phải do học viên nối. `grader_link` v1 cho qua một mối nối dựng trên hiểu lầm M04; v2 chặn 3/3 (§4c) |
+| 18/9 12:30 | Tiến độ theo tài khoản trên server với 5 mức hiểu từng trang; thư viện có "hành trình học" và gom 28 bộ slide theo ngày; tab Slide \| Bản đồ; ảnh phủ kín trang được coi là nền, không phải hình | Tiến độ trên trình duyệt mất khi đổi máy (§4 tự khai); dàn ý chưa có lớp phủ trạng thái (§4c tự khai). Đo trên 28 bộ: 91 ảnh phủ ≥ 97% trang từng nuốt hết chữ trên trang thành "nhãn của hình"; ảnh lớn nhất của d1 chỉ 0,66 nên mã ô d1/d2 không đổi một ô nào |
