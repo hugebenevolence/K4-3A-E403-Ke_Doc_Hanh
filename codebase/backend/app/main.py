@@ -902,7 +902,7 @@ async def teach_back_session(ws: WebSocket):
                         # Đo được trên hồ sơ thật: [d1-slide-hackathon-p1-01]
                         # đếm 3 sau đúng một buổi.
                         last_grade = await _log_turn(
-                            session_log, session_id, turn_index, student_text, event
+                            session_log, session_id, turn_index, student_text, event, student_id
                         )
                         review_spans = event.payload["result"].get("review_span_ids", [])
                         # Đồ thị lưu NGAY sau mỗi lượt, không đợi kết phiên như
@@ -1012,7 +1012,7 @@ def turn_state_for_retry(first_turn: bool) -> str:
 
 
 async def _log_turn(
-    session_log, session_id: str, index: int, student_text: str, event
+    session_log, session_id: str, index: int, student_text: str, event, student_id: str = ""
 ) -> GradeResult:
     """Ghi lượt ở dạng replay được.
 
@@ -1048,6 +1048,8 @@ async def _log_turn(
             },
             grade=grade,
             agent_said=event.payload["said"],
+            student_id=student_id,
+            kind="code" if result.get("code") else "link" if result.get("link") else "page",
             latency_ms=event.payload["latency_ms"],
         )
     )

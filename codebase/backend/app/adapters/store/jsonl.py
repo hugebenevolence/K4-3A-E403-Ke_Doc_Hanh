@@ -51,6 +51,8 @@ class JsonlSessionLog(SessionLog):
                 agent_said=r["agent_said"],
                 latency_ms=r.get("latency_ms", {}),
                 at=r["at"],
+                student_id=r.get("student_id", ""),
+                kind=r.get("kind", ""),
             )
             for r in rows
             if r["session_id"] == session_id

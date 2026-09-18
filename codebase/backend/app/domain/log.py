@@ -28,6 +28,10 @@ class TurnLog:
     agent_said: str
     latency_ms: dict[str, int] = field(default_factory=dict)  # {"talker": 380, "grader": 1420}
     at: str = field(default_factory=_now)
+    # Ai giảng lượt này. Rỗng ở log cũ; cần để tách lượt của từng người thử khi
+    # làm validation (scripts/validation_report.py).
+    student_id: str = ""
+    kind: str = ""  # "page" | "link" | "code" — phiên giảng một trang, phiên nối hai trang, bài code
 
 
 @dataclass
