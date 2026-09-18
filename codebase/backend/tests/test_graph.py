@@ -12,7 +12,7 @@ import asyncio
 import pytest
 
 from app.adapters.store.jsonl import JsonGraphStore
-from app.api.graph_sync import absorb_turn, known_claims
+from app.api.graph_sync import absorb_link, absorb_turn, known_claims
 from app.domain.graph import (
     LABEL_CHARS,
     MAX_SENTENCES,
@@ -242,3 +242,61 @@ def test_bac_cau_dua_ten_trang_va_cau_cua_hoc_vien():
     _absorb(g, CONTEXT, [GIANG_CONTEXT], "sufficient")
     da_day = known_claims(g, ["[d1-slide-hackathon-p99-01]"])
     assert da_day == [{"concept": CONTEXT.title, "said": g.claims[CONTEXT.key].said}]
+
+
+# --- Phiên nối hai trang -------------------------------------------------------
+
+NOI = (
+    "Context dài thì model phải đọc nhiều token hơn, mà token là đơn vị tính tiền, "
+    "nên dán cả tài liệu vào vừa chậm vừa tốn. Ngoài ra hôm nay trời đẹp quá bạn ạ."
+)
+
+
+def _hai_trang_sang():
+    g = KnowledgeGraph(student_id="nhan")
+    _absorb(g, CONTEXT, [GIANG_CONTEXT], "sufficient")
+    _absorb(g, TOKEN, ["Model cắt chữ thành các mảnh nhỏ gọi là token để đọc"], "sufficient")
+    return g
+
+
+def _noi(g, texts, verdict):
+    return absorb_link(g, a=CONTEXT, b=TOKEN, student_texts=texts, verdict=verdict, session_id="noi-1")
+
+
+def test_noi_duoc_thi_sinh_canh_mang_cau_cham_ca_hai_trang():
+    """Bằng chứng của cạnh là câu nói tới CẢ HAI trang — câu thật sự nối."""
+    g = _hai_trang_sang()
+    _noi(g, [NOI], "sufficient")
+    (canh,) = g.links.values()
+    assert {canh.source, canh.target} == {CONTEXT.key, TOKEN.key}
+    assert "token" in canh.evidence and "Context" in canh.evidence
+    assert "trời đẹp" not in canh.evidence
+
+
+def test_noi_chua_toi_thi_khong_co_canh():
+    g = _hai_trang_sang()
+    _noi(g, ["Hai trang này liên quan tới nhau vì đều nói về AI"], "incomplete")
+    assert g.links == {}
+
+
+def test_noi_sai_khong_tat_hai_trang():
+    """Hiểu sai cách hai trang liên quan không có nghĩa là hiểu sai từng trang."""
+    g = _hai_trang_sang()
+    _noi(g, ["Context càng dài thì càng ít token nên càng rẻ"], "incorrect")
+    assert g.links == {}
+    assert {CONTEXT.key, TOKEN.key} <= set(g.claims)
+
+
+def test_khong_noi_duoc_trang_chua_giang():
+    g = KnowledgeGraph(student_id="nhan")
+    _absorb(g, CONTEXT, [GIANG_CONTEXT], "sufficient")
+    _noi(g, [NOI], "sufficient")
+    assert g.links == {}
+
+
+def test_prompt_cham_moi_noi_nap_duoc_kem_san_an_toan():
+    from app.graph.nodes import GRADER_LINK_VERSION
+    from app.prompts import registry
+
+    system = registry.compose_system("grader_link", GRADER_LINK_VERSION, [])
+    assert "MỐI NỐI" in system and "SÀN AN TOÀN" in system
