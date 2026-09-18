@@ -158,8 +158,10 @@ Bấm **Đóng** trên khung đó.
    Khi thả trúng, vòng nét đứt quanh Hệ thống AI đậm lên.
 2. Trên thanh đen phía trên, bấm **Giảng mối nối**.
 
-**THẤY:** học trò hỏi *"Bạn đã dạy mình «Context» và «Hệ thống AI» rồi. Hai trang đó
-liên quan gì với nhau vậy bạn?"*
+**THẤY:** học trò hỏi một câu dựng từ chính lời bạn đã giảng ở hai trang — câu chữ
+mỗi lần một khác, đại ý như *"Bạn nói Context là lượng chữ model thấy trong một lần,
+còn trang Hệ thống AI gọi Context là tri thức riêng của doanh nghiệp — hai Context đó
+khác nhau ở chỗ nào vậy bạn?"*
 
 **LÀM:** giữ Space, nói câu dưới đây, rồi thả Space.
 
