@@ -125,7 +125,7 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
   | **G5** Hợp chuẩn mực xã hội | Học trò xưng "mình – bạn", nói tiếng Việt, tiếng Anh chỉ cho thuật ngữ; chữ HOA do model sinh ra bị hạ về thường (`tame_shouting`). Mic chỉ thu khi học viên giữ nút nói, không tự thu giọng người khác trong lớp. |
   | **PAIR — Explainability + Trust** | Thẻ nguồn chỉ vị trí, **cố ý không trích nguyên văn**. Đo trên LLM thật: trích dẫn hiện ngay dưới câu hỏi ngược chính là đáp án. |
 
-- **§4c. Trí nhớ của học trò — bản đồ hiểu biết** *(đỉnh **đã có trong bản build** 18/9; cạnh **chưa**)*
+- **§4c. Trí nhớ của học trò — bản đồ hiểu biết** *(đỉnh và cạnh **đã có trong bản build**, 18/9)*
 
   **Chỗ hổng.** Học trò mất trí nhớ sau mỗi phiên: sinh ra ngây thơ, được dạy, rồi quên sạch. Học viên không thật sự *dạy* nó, chỉ bị nó kiểm tra — mất protégé effect, cơ chế chính của D3 (§3).
 
@@ -148,8 +148,14 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
   - *Bản đầu* đoán khái niệm từ câu nói: 7 đỉnh, chỉ 3 khoá có nghĩa (`sinh`, `luyện`, `nghiệp` là nửa chữ; `model` hút mọi câu). Câu sau ghi đè câu trước: câu RLHF xoá câu cơ chế của slide 12, câu Day 2 xoá toàn bộ phần Context của Day 1. Học viên giảng Context hai lần, cả hai được chấm đủ, mà bản đồ vẫn báo **Context còn tối**. Vành tối lấy từ danh sách thuật ngữ nhận dạng giọng nói nên có cả `arxiv`, `kimi`.
   - *Bản theo trang*, chạy lại đúng 7 phiên đó: **4 đỉnh = đúng 4 trang được chấm đủ**, mỗi đỉnh giữ mọi câu của học viên về trang đó; trang token (một lần chép slide, một lần giảng sai) không sáng. Vành tối là các trang thật còn giảng được, lọc bằng đúng luật mở phiên (`teachable_words`).
 
+  **Phiên nối hai trang (đã build).** Trên bản đồ: chọn một trang sáng → "Nối với trang khác" → chọn trang đích (đường nét đứt đi theo con trỏ, trang không nối được mờ đi, Esc để huỷ) → phiên nối mở ngay trong khung bên phải. Câu mở bài viết sẵn, không gọi model — model mở bài hay hỏi về một trang và có khi gợi luôn chỗ hai trang chạm nhau. Chấm bằng prompt riêng `grader_link`: chỉ đòi MỘT mối nối có căn cứ và nói được *vì sao / như thế nào*, không đòi giảng lại từng trang; dùng lại nguyên `decide()`, câu hỏi ngược và mọi guard. Nối được thì cạnh được vẽ dần ra trên bản đồ, kèm đúng câu nối của học viên; nối sai hay chưa tới thì không có cạnh, và **hai trang vẫn sáng** — hiểu sai cách hai trang liên quan không có nghĩa là hiểu sai từng trang.
+
+  **Đo phiên nối trên LLM thật (18/9)**, 4 phiên: nối tốt Context (D1) — Hệ thống AI (D2); nói mơ hồ rồi trả lời lại; nối SAI bằng đúng hiểu lầm M04 ("context càng dài model càng nhớ tốt, cứ dán hết vào"); nối với trang chưa sáng.
+  - `grader_link` v1: 3/4 đúng, nhưng **nối sai được chấm đủ và một hiểu lầm được vẽ lên bản đồ** thành "mối nối bạn đã giảng được". Prompt chỉ bảo tìm một mối nối có căn cứ, không bắt kiểm từng khẳng định của học viên về mỗi trang.
+  - `grader_link` v2 (bắt kiểm từng khẳng định trước khi công nhận mối nối): nối tốt → đủ; mơ hồ → một câu hỏi → đủ; **nối sai → INCORRECT 3/3 lần**, không cạnh nào; trang chưa sáng → bị từ chối.
+  - Vùng xám tự khai: sau khi nối sai, học trò hỏi lại bằng chính câu học viên đã dạy ở buổi trước ("bạn dạy mình là model hay quên phần ở giữa…") để họ tự thấy mâu thuẫn. Đúng luật "bắc cầu bằng lời của họ", nhưng câu hỏi khi đó gần sát đáp án hơn câu hỏi ngược thường.
+
   **Chưa làm, tự khai:**
-  - **Cạnh "nối hai trang bằng lời"** chưa có trong bản build — bản đồ hiện chỉ có đỉnh.
   - Câu hỏi bắc cầu **chưa được golden set đo**: golden set chạy trên tài khoản không có đồ thị, nên 88% không nói gì về nó.
   - Chưa có lớp phủ trạng thái trên dàn ý; vùng tối mới hiện ở trang `/graph`.
   - Buổi đầu đồ thị rỗng; demo phải dùng tài khoản đã giảng sẵn vài trang và **nói rõ điều đó**.
@@ -322,3 +328,4 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
 | 18/9 04:15 | Trí nhớ xuyên buổi dạng knowledge graph (§4c): đỉnh là mệnh đề học viên tự nói, cạnh chỉ sinh từ liên từ của chính họ, gộp xuyên tài liệu, gỡ khi hoá ra hiểu sai; trang `/graph` vẽ bản đồ, câu hỏi ngược bắc cầu sang buổi trước | Học trò quên sạch sau mỗi phiên nên học viên không thật sự *dạy* nó, chỉ bị nó kiểm tra — mất protégé effect, là cơ chế chính của D3 (§3) |
 | 18/9 02:10 | Bắt bộ chấm chép đúng mã đoạn của nguồn (mô tả ngay trong schema), và báo lỗi to khi một lượt mất sạch căn cứ | Lượt đo 3× bắt được: model tự đặt mã `s1..s4` thay cho mã có sẵn, bộ lọc mã bịa ném sạch evidence, F01 và F02 trượt 0/3 vì bộ chấm hỏng chứ không phải vì lời giảng. Sau khi sửa: cả hai đạt 3/3 |
 | 18/9 10:10 | Đỉnh của bản đồ đổi từ khái niệm đoán từ câu nói sang **trang slide đã giảng được**; giữ mọi câu thay vì ghi đè; vành tối là trang thật còn giảng được; slug bộ slide sai thì báo lỗi thay vì lặng lẽ chấm theo bài khác | 7 phiên thật qua WebSocket: bản đồ báo Context còn tối dù đã giảng đủ hai lần; 4/7 khoá là nửa chữ hoặc từ trục; câu sau xoá câu trước (§4c) |
+| 18/9 11:00 | Cạnh của bản đồ: học viên chọn hai trang đã sáng và **giảng mối nối** ngay trên bản đồ; chấm bằng `grader_link` (v2); bản đồ tương tác được bằng chuột và bàn phím | Nghiên cứu bản đồ khái niệm: tự dựng g = 0,72, chỉ xem g = 0,43 (Schroeder 2018) — cạnh phải do học viên nối. `grader_link` v1 cho qua một mối nối dựng trên hiểu lầm M04; v2 chặn 3/3 (§4c) |
