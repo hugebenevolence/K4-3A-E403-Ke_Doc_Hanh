@@ -25,9 +25,7 @@ def client(tmp_path, monkeypatch):
     # Ép mock bất kể .env của máy đang để gì — test không được phụ thuộc vào
     # cấu hình cá nhân, và tuyệt đối không được tự gọi API mất tiền.
     monkeypatch.setattr(settings, "use_mocks", True)
-    monkeypatch.setattr(settings, "session_log_file", tmp_path / "s.jsonl")
-    monkeypatch.setattr(settings, "profile_file", tmp_path / "p.json")
-    monkeypatch.setattr(settings, "graph_file", tmp_path / "g.json")
+    # Đường dẫn var/ đã được đổi sang thư mục tạm ở conftest.py.
     # Tắt đăng nhập bất kể .env máy đang đặt MEMBERS gì — test đăng nhập nằm riêng.
     monkeypatch.setattr(settings, "members", "")
     return TestClient(app)
@@ -168,6 +166,9 @@ def test_moi_luot_deu_duoc_ghi_log_replay_duoc(client, tmp_path):
     assert rows[0]["prompt_versions"]["grader"] == GRADER_VERSION
     assert rows[0]["grade"]["verdict"] == "incomplete"
     assert "first_audio" in rows[0]["latency_ms"]
+    # Mỗi lượt biết ai giảng — validation tách lượt của từng người thử bằng trường này.
+    assert {r["student_id"] for r in rows} == {"demo"}
+    assert {r["kind"] for r in rows} == {"page"}
 
 
 def test_state_mang_theo_luat_mic_cua_chinh_state_do(client):
