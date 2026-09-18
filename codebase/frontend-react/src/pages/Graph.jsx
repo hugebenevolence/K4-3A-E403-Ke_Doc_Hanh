@@ -1,82 +1,73 @@
-// Bản đồ hiểu biết: thứ học viên đã DẠY ĐƯỢC, qua mọi buổi và mọi bộ slide.
+// Bản đồ hiểu biết — một KHÔNG GIAN toàn màn hình, kiểu Obsidian.
 //
-// Hai luật, cùng một động từ — "giảng được": đỉnh sáng là một TRANG slide họ
-// đã giảng được (bộ chấm xác nhận đủ), mang nguyên văn những câu họ nói; cạnh
-// là một mối nối họ đã giảng được. Đỉnh tối là trang còn giảng được mà họ chưa
-// giảng. Không đỉnh, không cạnh nào do hệ thống suy ra.
+// Hai luật, cùng một động từ — "giảng được" (spec §4c): đỉnh sáng là một TRANG
+// slide học viên đã giảng được, mang nguyên văn những câu họ nói; cạnh là một
+// mối nối họ đã giảng được. Không đỉnh, không cạnh nào do hệ thống suy ra.
 //
-// Bản đồ là CHỖ LÀM VIỆC, không chỉ để nhìn (spec §4c): bấm một đỉnh tối là đi
-// giảng trang đó; chọn hai đỉnh sáng là giảng mối nối giữa chúng ngay tại đây.
-// Đồ thị kiểu Obsidian bị chê "mở một lần rồi thôi" chính vì không làm được gì
-// trên nó — lý do để mở lại bản đồ này là để nối thêm.
+// Bản đồ là CHỖ LÀM VIỆC, không chỉ để nhìn: đồ thị Obsidian bị chê "mở một lần
+// rồi thôi" chính vì không làm được gì trên nó. Ở đây: kéo một trang sáng thả lên
+// trang sáng khác là nối hai trang bằng lời; bấm một trang chưa học là đi giảng
+// nó; tìm (phím /) là bay tới đúng trang.
 
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { layout, ringLayout } from "../graph-layout";
+import GraphCanvas from "../GraphCanvas";
 import LinkSession from "../LinkSession";
 import { blurIn, EASE } from "../motion";
-import { Brand, LinkButton } from "../site";
+import { LEVELS, LevelDot, LevelLegend, useProgress } from "../progress";
+import { Brand } from "../site";
 import { Button, Kbd } from "../ui";
 import { studentId } from "../useSession";
 import WorkspaceTabs from "../WorkspaceTabs";
 
-const W = 900;
-const H = 620;
-
-/** Số trang còn tối hiện trên vành ngoài.
- *
- *  Đo trên bản dựng thật: 33 đỉnh mờ biến vành ngoài thành một dải chữ chen
- *  nhau, và phần sáng — thứ học viên thật sự muốn nhìn — chìm nghỉm giữa đám
- *  đó. Mười sáu thì vành vẫn thưa và vẫn đủ nói "còn nhiều chỗ chưa dạy". */
-const MAX_TOI = 16;
-
-/** Đỉnh trượt tới chỗ mới thay vì nhảy: thêm một cạnh làm lò xo kéo lại cả cụm,
- *  và nhảy tức thì thì người học mất dấu đỉnh mình vừa nối. */
-const TRUOT = { duration: 0.7, ease: EASE };
-
-/** "d1-slide-hackathon" → "D1": đủ để thấy một cạnh nối hai bộ slide khác nhau. */
-function deckTag(slug) {
-  return (slug || "").split("-")[0].toUpperCase();
-}
-
-/** Bán kính theo số buổi đã giảng lại được — "độ đậm" của spec §4c. */
-function banKinh(lan) {
-  return 9 + Math.min(lan, 5) * 2.6;
-}
+const TIPS_KEY = "giang-lai-graph-tips";
 
 /** Một cặp chỉ có một cạnh, bất kể chiều — khớp với luật ở backend. */
 function khoaCanh(l) {
   return [l.source, l.target].sort().join("|");
 }
 
+const isLit = (n) => n?.level === "da_hieu" || n?.level === "vung";
+
 export default function GraphPage() {
   const { member, logout } = useAuth();
   const navigate = useNavigate();
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-  const [chon, setChon] = useState(null); // { kind: "node" | "edge", id }
-  const [ro, setRo] = useState(null); // đỉnh đang được rê chuột hoặc focus
-  const [noiTu, setNoiTu] = useState(null); // chế độ nối: đỉnh gốc
-  const [phien, setPhien] = useState(null); // { a, b } — phiên nối đang mở
-  const [canhMoi, setCanhMoi] = useState(null);
-  const daCo = useRef(null);
-  // Mở từ trang học (tab Bản đồ): trang vừa học được đánh dấu "bạn đang ở đây",
-  // và tab Slide đưa về đúng trang đó.
   const [params] = useSearchParams();
   const hereDeck = params.get("deck") || "";
   const herePage = Number(params.get("page")) || 0;
   const here = hereDeck && herePage ? `${hereDeck}:${herePage}` : null;
+
+  const [data, setData] = useState(null);
+  const [decks, setDecks] = useState([]);
+  const [error, setError] = useState("");
+  const [progress, reloadProgress] = useProgress();
+  const [chon, setChon] = useState(null); // { kind: "node" | "edge", id }
+  const [noiTu, setNoiTu] = useState(null); // nối bằng nút: đỉnh gốc
+  const [xacNhan, setXacNhan] = useState(null); // nối bằng kéo thả: chờ xác nhận
+  const [phien, setPhien] = useState(null); // { a, b } — phiên nối đang mở
+  const [canhMoi, setCanhMoi] = useState(null);
+  const [query, setQuery] = useState("");
+  const [hienMoi, setHienMoi] = useState(true);
+  const [tips, setTips] = useState(() => {
+    try {
+      return localStorage.getItem(TIPS_KEY) !== "1";
+    } catch {
+      return true;
+    }
+  });
+  const canvas = useRef(null);
+  const timKiem = useRef(null);
+  const daCo = useRef(null);
 
   // Tải lại sau mỗi phiên nối, và nhớ những cạnh đã có để biết cạnh nào VỪA
   // sinh ra — cạnh đó được vẽ dần ra thay vì hiện bụp một cái.
   const tai = useCallback(async () => {
     try {
       // Gửi kèm mã học viên của trình duyệt này: khi server KHÔNG bật đăng
-      // nhập, phiên giảng ghi đồ thị dưới mã đó, còn API mặc định lại đọc
-      // "demo" — lệch khoá là bản đồ hiện rỗng dù vừa dạy xong.
+      // nhập, phiên giảng ghi đồ thị dưới mã đó, còn API mặc định lại đọc "demo".
       const d = await api(
         `/graph?student_id=${encodeURIComponent(studentId())}&deck=${encodeURIComponent(hereDeck)}`,
       );
@@ -91,457 +82,566 @@ export default function GraphPage() {
 
   useEffect(() => {
     tai();
+    api("/decks")
+      .then(setDecks)
+      .catch(() => {});
   }, [tai]);
 
-  const { nodes, byId, pos, links } = useMemo(() => {
-    if (!data) return { nodes: [], byId: new Map(), pos: new Map(), links: [] };
-    const sang = data.claims.map((c) => ({ ...c, id: c.concept, sang: true, weight: c.times_taught }));
-    // Vành tối ưu tiên trang của những bộ slide học viên ĐANG học: người mới
-    // giảng vài trang Day 1 cần thấy phần còn lại của Day 1, chưa cần Day 2.
-    const dangHoc = new Set(sang.map((n) => n.deck));
-    const tatCa = [...data.dim]
-      .sort((a, b) => Number(dangHoc.has(b.deck)) - Number(dangHoc.has(a.deck)))
-      .map((d) => ({ ...d, id: d.concept, sang: false, weight: 0 }));
-    const toi = tatCa.slice(0, MAX_TOI);
-    // Trang đang học mà còn tối thì luôn có mặt trên vành, dù không lọt top 16.
-    const dayDo = tatCa.find((n) => n.id === here);
-    if (dayDo && !toi.includes(dayDo)) toi[toi.length - 1] = dayDo;
+  const tieuDe = useMemo(() => new Map(decks.map((d) => [d.slug, d.title])), [decks]);
+  const deckLabel = useCallback(
+    (slug, ngan) => {
+      const t = tieuDe.get(slug) || slug;
+      return ngan ? t.split(" · ")[0] : t;
+    },
+    [tieuDe],
+  );
 
-    // Hai phép xếp khác nhau cho hai loại đỉnh, cố ý: cụm sáng thả lò xo để
-    // những trang bạn đã nối nằm cạnh nhau, còn vùng tối xếp thành vành ngoài
-    // đều đặn. Thả chung thì nhãn vùng tối đè lên nhau thành đám chữ không đọc
-    // được, và chen vào giữa làm loãng phần đáng nhìn nhất.
-    const trong = layout(sang, data.links, { width: W * 0.62, height: H * 0.62 });
-    const pos = new Map();
-    const lech = { x: (W - W * 0.62) / 2, y: (H - H * 0.62) / 2 };
-    for (const [id, p] of trong) pos.set(id, { x: p.x + lech.x, y: p.y + lech.y });
-    for (const [id, p] of ringLayout(toi.map((n) => n.id), { width: W, height: H })) pos.set(id, p);
+  // Đỉnh: trang đã sáng (từ đồ thị) + mọi trang còn giảng được của các bộ đang
+  // học (từ vành tối), tô theo mức hiểu (từ tiến độ) — cùng ngôn ngữ chấm với
+  // thư viện, nên trang "cần sửa" cũng hiện trên bản đồ.
+  const { nodes, links } = useMemo(() => {
+    if (!data) return { nodes: [], links: [] };
+    const levelOf = (deck, page) => progress?.decks?.[deck]?.pages?.[page]?.level;
+    const sang = data.claims.map((c) => ({
+      id: c.concept,
+      deck: c.deck,
+      page: c.page,
+      label: c.label,
+      title: c.title,
+      said: c.said,
+      sentences: c.sentences,
+      times_taught: c.times_taught,
+      level: levelOf(c.deck, c.page) === "vung" || c.times_taught >= 2 ? "vung" : "da_hieu",
+    }));
+    const toi = data.dim
+      .map((d) => ({
+        id: d.concept,
+        deck: d.deck,
+        page: d.page,
+        label: d.label,
+        title: d.title,
+        level: levelOf(d.deck, d.page) || "moi",
+      }))
+      .filter((n) => hienMoi || n.level !== "moi" || n.id === here);
+    return { nodes: [...sang, ...toi], links: data.links };
+  }, [data, progress, hienMoi, here]);
 
-    const all = [...sang, ...toi];
-    return { nodes: all, byId: new Map(all.map((n) => [n.id, n])), pos, links: data.links };
-  }, [data, here]);
-
-  const soSang = nodes.filter((n) => n.sang).length;
+  const byId = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+  const soSang = nodes.filter(isLit).length;
+  const soCanSua = nodes.filter((n) => n.level === "can_sua").length;
   const nodeChon = chon?.kind === "node" ? byId.get(chon.id) : null;
   const canhChon = chon?.kind === "edge" ? links.find((l) => khoaCanh(l) === chon.id) : null;
 
-  // Những đỉnh đang "được nhìn": đỉnh chọn/rê và hàng xóm trực tiếp của nó.
-  // Chỉ làm mờ phần còn lại khi tâm là một trang SÁNG CÓ CẠNH: rê qua một trang
-  // tối (không hàng xóm nào) mà cả cụm sáng mờ đi thì người học tưởng mình vừa
-  // làm mất bản đồ — đo được khi đi Tab qua vành tối.
-  const tam = phien ? null : (noiTu ?? ro ?? nodeChon?.id ?? null);
-  const hangXom = useMemo(() => {
-    if (!tam || !byId.get(tam)?.sang || !links.some((l) => l.source === tam || l.target === tam)) return null;
-    const s = new Set([tam]);
-    for (const l of links) {
-      if (l.source === tam) s.add(l.target);
-      if (l.target === tam) s.add(l.source);
-    }
-    return s;
-  }, [links, tam, byId]);
+  // Mở từ trang học: bay tới "bạn đang ở đây" sau khi bản đồ đã vừa màn hình.
+  const daToi = useRef(false);
+  useEffect(() => {
+    if (daToi.current || !here || !byId.has(here)) return;
+    daToi.current = true;
+    const id = setTimeout(() => canvas.current?.focus(here), 700);
+    return () => clearTimeout(id);
+  }, [here, byId]);
 
-  const batDauNoi = (id) => {
-    setNoiTu(id);
-    setChon(null);
-  };
-  const huyNoi = () => setNoiTu(null);
-
-  const bamDinh = (n) => {
+  const bamDinh = (id) => {
+    const n = byId.get(id);
+    if (!n) return;
     if (noiTu) {
-      if (n.id === noiTu) return huyNoi();
-      if (!n.sang) return; // đích không hợp lệ: đã mờ đi, bấm vào không làm gì
+      if (id === noiTu) return setNoiTu(null);
+      if (!isLit(n)) return;
       setPhien({ a: byId.get(noiTu), b: n });
       setNoiTu(null);
       setChon(null);
       return;
     }
-    setChon((c) => (c?.kind === "node" && c.id === n.id ? null : { kind: "node", id: n.id }));
+    setChon((c) => (c?.kind === "node" && c.id === id ? null : { kind: "node", id }));
   };
 
-  // Esc: thoát chế độ nối trước, rồi mới bỏ chọn. Phiên nối có nút Đóng riêng —
-  // không để một phím lỡ tay xoá mất câu trả lời đang nói dở.
+  const dongPhien = () => {
+    const { a, b } = phien;
+    const k = [a.id, b.id].sort().join("|");
+    setPhien(null);
+    reloadProgress();
+    if (daCo.current?.has(k)) setChon({ kind: "edge", id: k });
+  };
+
+  const tatTips = () => {
+    setTips(false);
+    try {
+      localStorage.setItem(TIPS_KEY, "1");
+    } catch {
+      // Không lưu được thì lần sau hiện lại — không sao.
+    }
+  };
+
+  const ketQuaTim = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q ? nodes.filter((n) => `${n.label} ${n.title}`.toLowerCase().includes(q)).slice(0, 6) : [];
+  }, [nodes, query]);
+
+  const toiTrang = (id) => {
+    setQuery("");
+    setChon({ kind: "node", id });
+    // Đợi khung chi tiết mở ra đã, để trang được đưa vào giữa phần CÒN nhìn thấy.
+    setTimeout(() => canvas.current?.focus(id), 30);
+    timKiem.current?.blur();
+  };
+
+  // Việc nên làm tiếp: sửa trang giảng sai trước, rồi nối những trang còn lẻ.
+  // Chỉ GỢI Ý chỗ để giảng — không gợi ý hai trang "liên quan", vì như thế là
+  // hệ thống tự suy ra mối nối (spec §4c).
+  const viecTiep = useMemo(() => {
+    const coCanh = new Set(links.flatMap((l) => [l.source, l.target]));
+    const sua = nodes
+      .filter((n) => n.level === "can_sua")
+      .map((n) => ({
+        key: n.id,
+        level: n.level,
+        title: n.label || n.title,
+        hint: "Giảng sai lần trước — giảng lại",
+        lam: () => toiTrang(n.id),
+      }));
+    const le =
+      soSang >= 2
+        ? nodes
+            .filter((n) => isLit(n) && !coCanh.has(n.id))
+            .map((n) => ({
+              key: n.id,
+              level: n.level,
+              title: n.label || n.title,
+              hint: "Chưa nối với trang nào — nối thử",
+              lam: () => {
+                setChon(null);
+                setNoiTu(n.id);
+                canvas.current?.fit();
+              },
+            }))
+        : [];
+    return [...sua, ...le].slice(0, 3);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, links, soSang]);
+
+  // Phím tắt: / tìm · Esc thoát · F vừa màn hình · + − phóng.
   useEffect(() => {
     function onKey(e) {
-      if (e.key !== "Escape" || phien) return;
-      if (noiTu) setNoiTu(null);
-      else setChon(null);
+      const typing = ["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName);
+      if (e.key === "Escape") {
+        if (typing) return timKiem.current?.blur();
+        if (phien) return; // phiên nối có nút Đóng riêng — không để lỡ tay mất câu đang nói
+        if (xacNhan) return setXacNhan(null);
+        if (noiTu) return setNoiTu(null);
+        return setChon(null);
+      }
+      if (typing || e.ctrlKey || e.metaKey || e.altKey || phien) return;
+      if (e.key === "/") {
+        e.preventDefault();
+        timKiem.current?.focus();
+      } else if (e.key === "f" || e.key === "F") canvas.current?.fit();
+      else if (e.key === "+" || e.key === "=") canvas.current?.zoomBy(1.3);
+      else if (e.key === "-") canvas.current?.zoomBy(1 / 1.3);
     }
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [noiTu, phien]);
+  }, [phien, xacNhan, noiTu]);
 
-  const dongPhien = (noiDuoc) => {
-    const { a, b } = phien;
-    setPhien(null);
-    if (noiDuoc) setChon({ kind: "edge", id: [a.id, b.id].sort().join("|") });
-  };
-
-  const dichHopLe = noiTu && ro && ro !== noiTu && byId.get(ro)?.sang;
+  const drawer = phien ? "phien" : nodeChon ? "dinh" : canhChon ? "canh" : null;
 
   return (
-    <div className="min-h-screen bg-white font-sans text-neutral-900 antialiased">
-      <header className="sticky top-0 z-40 border-b border-neutral-200 bg-white/85 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6">
-          <Brand />
-          <WorkspaceTabs active="graph" deck={hereDeck || undefined} page={herePage || undefined} className="ml-2" />
-          <div className="ml-auto flex items-center gap-1">
-            <LinkButton to="/library" variant="quiet">
-              Thư viện
-            </LinkButton>
-            {member?.auth && (
-              <button
-                onClick={() => {
-                  logout();
-                  navigate("/");
-                }}
-                className="h-8 rounded-lg px-2.5 text-[13px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
-              >
-                Đăng xuất
-              </button>
-            )}
-          </div>
+    <div className="flex h-screen flex-col bg-white font-sans text-neutral-900 antialiased">
+      <header className="z-30 flex h-12 shrink-0 items-center gap-3 border-b border-neutral-200 bg-white px-4 whitespace-nowrap max-sm:gap-2 max-sm:px-3">
+        <Brand />
+        <WorkspaceTabs active="graph" deck={hereDeck || undefined} page={herePage || undefined} className="ml-1" />
+        <span className="ml-1 hidden text-[13px] text-neutral-400 md:inline">Bản đồ hiểu biết</span>
+        <div className="ml-auto flex items-center gap-3 max-sm:gap-1">
+          <span className="hidden text-[12px] tabular-nums text-neutral-500 sm:inline">
+            {soSang} trang đã hiểu · {links.length} mối nối
+            {soCanSua > 0 && ` · ${soCanSua} cần sửa`}
+          </span>
+          <Link
+            to="/library"
+            className="h-8 rounded-lg px-2.5 text-[13px] leading-8 text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+          >
+            Thư viện
+          </Link>
+          {member?.auth && (
+            <button
+              onClick={() => {
+                logout();
+                navigate("/");
+              }}
+              className="h-8 rounded-lg px-2.5 max-sm:hidden text-[13px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+            >
+              Đăng xuất
+            </button>
+          )}
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
-        <h1 className="m-0 text-[22px] font-semibold tracking-tight">Bạn đã dạy học trò những gì</h1>
-        <p className="m-0 mt-1 max-w-2xl text-[13px] leading-relaxed text-neutral-500">
-          Mỗi đỉnh sáng là một trang slide <strong className="font-medium text-neutral-700">bạn đã giảng được</strong>{" "}
-          — học trò hiểu nó nhờ chính lời bạn. Mỗi đường nối là một mối liên hệ bạn đã giảng được giữa hai trang.
-        </p>
+      <main className="relative min-h-0 flex-1 overflow-hidden bg-neutral-50/50">
+        {error && <p className="p-6 text-[13px] text-neutral-700">{error}</p>}
+        {!data && !error && <p className="p-6 text-[13px] text-neutral-400">Đang dựng bản đồ…</p>}
 
-        {error && <p className="mt-4 text-[13px] text-neutral-700">{error}</p>}
-        {!data && !error && <p className="mt-4 text-[13px] text-neutral-400">Đang dựng bản đồ…</p>}
+        {data && (
+          <GraphCanvas
+            ref={canvas}
+            nodes={nodes}
+            links={links}
+            deckLabel={deckLabel}
+            here={here}
+            selectedId={nodeChon?.id}
+            selectedEdge={chon?.kind === "edge" ? chon.id : null}
+            connectFrom={noiTu}
+            linking={phien ? [phien.a.id, phien.b.id] : null}
+            query={query}
+            newEdge={canhMoi}
+            onSelectNode={bamDinh}
+            onSelectEdge={(k) => !noiTu && setChon({ kind: "edge", id: k })}
+            onBackground={() => (noiTu ? setNoiTu(null) : setChon(null))}
+            onDropConnect={(a, b) => setXacNhan({ a: byId.get(a), b: byId.get(b) })}
+            rightInset={drawer ? 412 : 0}
+          />
+        )}
 
-        {data && soSang === 0 && (
-          <motion.div {...blurIn} className="mt-5 rounded-2xl border border-neutral-200 p-5">
-            <p className="m-0 text-[15px] font-medium">Bản đồ còn trống</p>
+        {/* Góc trên trái: tìm trang, bộ lọc. */}
+        {data && (
+          <div className="absolute top-4 left-4 z-20 w-72 max-w-[calc(100%-2rem)]">
+            <div className="relative">
+              <input
+                ref={timKiem}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && ketQuaTim[0] && toiTrang(ketQuaTim[0].id)}
+                placeholder="Tìm một trang"
+                aria-label="Tìm một trang trên bản đồ"
+                className="h-10 w-full rounded-xl border border-neutral-200 bg-white/95 pr-10 pl-3.5 text-[14px] shadow-sm backdrop-blur outline-none transition-shadow placeholder:text-neutral-400 focus:border-neutral-900 focus:ring-4 focus:ring-neutral-900/5"
+              />
+              <span className="absolute top-1/2 right-2.5 -translate-y-1/2">
+                <Kbd>/</Kbd>
+              </span>
+            </div>
+            <AnimatePresence>
+              {ketQuaTim.length > 0 && (
+                <motion.ul
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  className="m-0 mt-1.5 list-none overflow-hidden rounded-xl border border-neutral-200 bg-white p-1 shadow-lg"
+                >
+                  {ketQuaTim.map((n) => (
+                    <li key={n.id}>
+                      <button
+                        onClick={() => toiTrang(n.id)}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-neutral-100"
+                      >
+                        <span className="flex w-3 shrink-0 justify-center">
+                          <LevelDot level={n.level} />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13px] font-medium">{n.title}</span>
+                          <span className="block truncate text-[11px] text-neutral-500">
+                            {deckLabel(n.deck)} · trang {n.page}
+                          </span>
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </motion.ul>
+              )}
+            </AnimatePresence>
+            <label className="mt-2 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-white/90 px-2.5 py-1.5 text-[12px] text-neutral-600 shadow-sm ring-1 ring-neutral-200 backdrop-blur">
+              <input
+                type="checkbox"
+                checked={hienMoi}
+                onChange={(e) => {
+                  setHienMoi(e.target.checked);
+                  // Bỏ/hiện trang mờ làm cả bản đồ dồn lại — đợi nó lắng rồi mới vừa màn hình.
+                  setTimeout(() => canvas.current?.fit(), 600);
+                }}
+                className="accent-neutral-900"
+              />
+              Hiện cả trang chưa học
+            </label>
+          </div>
+        )}
+
+        {/* Giữa trên: đang nối bằng nút / xác nhận nối bằng kéo thả. */}
+        <AnimatePresence>
+          {(noiTu || xacNhan) && (
+            <motion.div
+              key={noiTu ? "noi" : "xac-nhan"}
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2, ease: EASE }}
+              className="absolute top-4 left-1/2 z-30 flex w-max max-w-[min(560px,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-xl bg-neutral-900 px-4 py-2.5 text-white shadow-lg"
+              role="status"
+            >
+              {noiTu ? (
+                <>
+                  <p className="m-0 min-w-0 flex-1 text-[13px]">
+                    Chọn một trang đã sáng để nối với <strong>«{byId.get(noiTu)?.label}»</strong>
+                  </p>
+                  <Kbd tone="dark">Esc</Kbd>
+                  <button
+                    onClick={() => setNoiTu(null)}
+                    className="h-7 rounded-md px-2 text-[12px] text-white/80 hover:bg-white/10 hover:text-white"
+                  >
+                    Huỷ
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="m-0 min-w-0 flex-1 text-[13px]">
+                    Nối <strong>«{xacNhan.a?.label}»</strong> với <strong>«{xacNhan.b?.label}»</strong>? Bạn sẽ giảng
+                    cho học trò vì sao hai trang liên quan.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setPhien(xacNhan);
+                      setXacNhan(null);
+                      setChon(null);
+                    }}
+                    className="h-8 shrink-0 rounded-lg bg-white px-3 text-[13px] font-medium text-neutral-900 hover:bg-neutral-100"
+                  >
+                    Giảng mối nối
+                  </button>
+                  <button
+                    onClick={() => setXacNhan(null)}
+                    className="h-8 shrink-0 rounded-md px-2 text-[12px] text-white/80 hover:bg-white/10 hover:text-white"
+                  >
+                    Huỷ
+                  </button>
+                </>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Trống: chưa trang nào sáng. */}
+        {data && soSang === 0 && !phien && (
+          <motion.div
+            {...blurIn}
+            className="absolute top-1/2 left-1/2 z-20 w-[min(420px,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-neutral-200 bg-white/95 p-5 text-center shadow-lg backdrop-blur"
+          >
+            <p className="m-0 text-[15px] font-medium">Bản đồ còn tối</p>
             <p className="m-0 mt-1 text-[13px] leading-relaxed text-neutral-500">
-              Học trò chưa biết gì cả — nó chỉ biết đúng những điều bạn đã giảng cho nó. Giảng được một trang slide
-              là đỉnh đầu tiên sáng lên ở đây.
+              Học trò chỉ biết đúng những gì bạn đã giảng cho nó. Giảng được một trang slide là đỉnh đầu tiên sáng lên.
             </p>
-            <LinkButton to="/library" className="mt-4">
-              Chọn bài để giảng
-            </LinkButton>
+            <Link to="/library" className="mt-3 inline-block">
+              <Button variant="primary" size="sm">
+                Chọn bài để giảng
+              </Button>
+            </Link>
           </motion.div>
         )}
 
-        {data && soSang > 0 && (
-          <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        {/* Góc trên phải: việc nên làm tiếp, suy từ chính bản đồ. */}
+        <AnimatePresence>
+          {data && !drawer && !noiTu && viecTiep.length > 0 && (
             <motion.div
-              {...blurIn}
-              className="relative overflow-hidden rounded-2xl border border-neutral-200 bg-white"
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 12 }}
+              transition={{ duration: 0.25, ease: EASE }}
+              className="absolute top-4 right-4 z-20 w-64 rounded-xl bg-white/95 p-1.5 shadow-sm ring-1 ring-neutral-200 backdrop-blur max-md:hidden"
             >
-              <AnimatePresence>
-                {noiTu && (
-                  <motion.div
-                    key="noi"
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.2, ease: EASE }}
-                    className="absolute inset-x-3 top-3 z-10 flex items-center gap-3 rounded-xl bg-neutral-900 px-3.5 py-2.5 text-white"
-                    role="status"
-                  >
-                    <p className="m-0 min-w-0 flex-1 text-[13px]">
-                      Chọn một trang đã sáng để nối với{" "}
-                      <strong className="font-semibold">«{byId.get(noiTu)?.label}»</strong>
-                    </p>
-                    <Kbd tone="dark">Esc</Kbd>
+              <p className="m-0 px-2 pt-1 pb-1.5 text-[11px] tracking-wide text-neutral-400 uppercase">Việc nên làm tiếp</p>
+              <ul className="m-0 list-none p-0">
+                {viecTiep.map((v) => (
+                  <li key={v.key}>
                     <button
-                      onClick={huyNoi}
-                      className="h-7 rounded-md px-2 text-[12px] text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+                      onClick={v.lam}
+                      className="flex w-full items-start gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-neutral-100"
                     >
-                      Huỷ
+                      <span className="mt-1.5 flex w-3 shrink-0 justify-center">
+                        <LevelDot level={v.level} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-medium">{v.title}</span>
+                        <span className="block text-[12px] text-neutral-500">{v.hint}</span>
+                      </span>
                     </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <svg
-                viewBox={`0 0 ${W} ${H}`}
-                className="block h-[min(70vh,620px)] w-full"
-                // Bấm ra chỗ trống: thoát chế độ nối, hoặc bỏ chọn — như bấm Esc.
-                onClick={() => (noiTu ? huyNoi() : setChon(null))}
-                role="group"
-                aria-label="Bản đồ các trang bạn đã giảng"
-              >
-                {/* Cạnh. Một đường trong suốt dày hơn nằm dưới để bấm trúng dễ —
-                    đường 1px thì chuột phải căn chính xác từng điểm ảnh. */}
-                {links.map((l) => {
-                  const a = pos.get(l.source);
-                  const b = pos.get(l.target);
-                  if (!a || !b) return null;
-                  const k = khoaCanh(l);
-                  const noiBat =
-                    chon?.kind === "edge" ? chon.id === k : !!hangXom && (l.source === tam || l.target === tam);
-                  const mo = phien ? true : !noiBat && (hangXom || chon?.kind === "edge");
-                  return (
-                    <g key={k}>
-                      <motion.line
-                        initial={k === canhMoi ? { pathLength: 0 } : false}
-                        animate={{ x1: a.x, y1: a.y, x2: b.x, y2: b.y, pathLength: 1 }}
-                        transition={k === canhMoi ? { ...TRUOT, pathLength: { duration: 0.9, ease: EASE } } : TRUOT}
-                        stroke={noiBat ? "#171717" : "#a3a3a3"}
-                        strokeWidth={noiBat ? 2 : 1.3}
-                        opacity={mo ? 0.25 : 1}
-                      />
-                      <line
-                        x1={a.x}
-                        y1={a.y}
-                        x2={b.x}
-                        y2={b.y}
-                        stroke="transparent"
-                        strokeWidth="14"
-                        className={noiTu ? "" : "cursor-pointer"}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!noiTu) setChon({ kind: "edge", id: k });
-                        }}
-                      >
-                        <title>{`${byId.get(l.source)?.label} — ${byId.get(l.target)?.label}: “${l.evidence}”`}</title>
-                      </line>
-                    </g>
-                  );
-                })}
-
-                {/* Hai trang đang được nối: đường nét đứt, thành nét liền khi nối được. */}
-                {phien && pos.get(phien.a.id) && pos.get(phien.b.id) && (
-                  <motion.line
-                    x1={pos.get(phien.a.id).x}
-                    y1={pos.get(phien.a.id).y}
-                    x2={pos.get(phien.b.id).x}
-                    y2={pos.get(phien.b.id).y}
-                    stroke="#171717"
-                    strokeWidth="1.6"
-                    strokeDasharray="5 5"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: [0.35, 1, 0.35] }}
-                    transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
-                    pointerEvents="none"
-                  />
-                )}
-
-                {/* Đường nối thử trong chế độ nối: đi theo con trỏ tới đích. */}
-                {dichHopLe && (
-                  <line
-                    x1={pos.get(noiTu).x}
-                    y1={pos.get(noiTu).y}
-                    x2={pos.get(ro).x}
-                    y2={pos.get(ro).y}
-                    stroke="#171717"
-                    strokeWidth="1.5"
-                    strokeDasharray="5 5"
-                    pointerEvents="none"
-                  />
-                )}
-
-                {nodes.map((n) => {
-                  const p = pos.get(n.id);
-                  if (!p) return null;
-                  const r = n.sang ? banKinh(n.times_taught) : 5;
-                  const laGoc = noiTu === n.id;
-                  const dichDuoc = noiTu && n.sang && !laGoc;
-                  const mo = phien
-                    ? n.id !== phien.a.id && n.id !== phien.b.id
-                    : noiTu
-                      ? !laGoc && !dichDuoc
-                      : (hangXom && !hangXom.has(n.id)) ||
-                        (canhChon && n.id !== canhChon.source && n.id !== canhChon.target);
-                  const dangRo = ro === n.id;
-                  const dangChon = nodeChon?.id === n.id;
-                  const ten = n.label || n.title;
-                  return (
-                    <motion.g
-                      key={n.id}
-                      initial={false}
-                      animate={{ x: p.x, y: p.y, opacity: mo ? 0.22 : 1 }}
-                      transition={TRUOT}
-                      className={noiTu && !dichDuoc && !laGoc ? "cursor-not-allowed" : "cursor-pointer"}
-                      tabIndex={0}
-                      role="button"
-                      aria-label={`${n.sang ? "Đã giảng" : "Chưa giảng"}: ${n.title}`}
-                      aria-pressed={dangChon}
-                      style={{ outline: "none" }}
-                      onMouseEnter={() => setRo(n.id)}
-                      onMouseLeave={() => setRo((x) => (x === n.id ? null : x))}
-                      onFocus={() => setRo(n.id)}
-                      onBlur={() => setRo((x) => (x === n.id ? null : x))}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        bamDinh(n);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          bamDinh(n);
-                        }
-                      }}
-                    >
-                      <title>{n.title}</title>
-                      {n.id === here && (
-                        <g pointerEvents="none">
-                          <circle r={r + 12} fill="none" stroke="#171717" strokeWidth="1" strokeDasharray="2 3" />
-                          <text
-                            y={-(r + 18)}
-                            textAnchor="middle"
-                            stroke="#fff"
-                            strokeWidth="4"
-                            strokeLinejoin="round"
-                            paintOrder="stroke"
-                            className="fill-neutral-900 text-[11px] font-semibold"
-                          >
-                            Bạn đang ở đây
-                          </text>
-                        </g>
-                      )}
-                      {/* Vòng hít thở ở đỉnh gốc trong lúc chọn đích để nối. */}
-                      {laGoc && (
-                        <motion.circle
-                          r={r + 9}
-                          fill="none"
-                          stroke="#171717"
-                          strokeWidth="1.4"
-                          initial={{ opacity: 0.6, scale: 0.9 }}
-                          animate={{ opacity: [0.6, 0.15, 0.6], scale: [0.9, 1.15, 0.9] }}
-                          transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
-                        />
-                      )}
-                      {(dangChon || dangRo) && !laGoc && (
-                        <circle
-                          r={r + 7}
-                          fill="none"
-                          stroke={dangChon ? "#171717" : "#a3a3a3"}
-                          strokeWidth="1.3"
-                          strokeDasharray={dichDuoc ? "4 3" : undefined}
-                        />
-                      )}
-                      <circle
-                        r={r}
-                        fill={n.sang ? "#171717" : "#fff"}
-                        stroke={n.sang ? "#171717" : "#a3a3a3"}
-                        strokeWidth={n.sang ? 0 : 1.4}
-                        strokeDasharray={n.sang ? undefined : "3 3"}
-                      />
-                      <text
-                        y={r + 15}
-                        textAnchor="middle"
-                        stroke="#fff"
-                        strokeWidth="4"
-                        strokeLinejoin="round"
-                        paintOrder="stroke"
-                        className={`text-[12px] ${n.sang ? "fill-neutral-900 font-medium" : "fill-neutral-400"}`}
-                      >
-                        {ten}
-                      </text>
-                      {n.sang && (
-                        <text
-                          y={r + 28}
-                          textAnchor="middle"
-                          stroke="#fff"
-                          strokeWidth="4"
-                          strokeLinejoin="round"
-                          paintOrder="stroke"
-                          className="fill-neutral-400 text-[10px]"
-                        >
-                          {deckTag(n.deck)} · tr. {n.page}
-                        </text>
-                      )}
-                    </motion.g>
-                  );
-                })}
-              </svg>
+                  </li>
+                ))}
+              </ul>
             </motion.div>
+          )}
+        </AnimatePresence>
 
-            <aside className="lg:sticky lg:top-20 lg:self-start">
-              <AnimatePresence mode="wait">
-                {phien ? (
-                  <LinkSession
-                    key={`${phien.a.id}|${phien.b.id}`}
-                    a={phien.a}
-                    b={phien.b}
-                    deckTag={deckTag}
-                    onEnded={(outcome) => outcome === "TAUGHT" && tai()}
-                    onClose={() => dongPhien(daCo.current?.has([phien.a.id, phien.b.id].sort().join("|")))}
-                  />
-                ) : nodeChon ? (
-                  <ChiTietDinh
-                    key={nodeChon.id}
-                    node={nodeChon}
-                    links={links}
-                    byId={byId}
-                    coTheNoi={soSang >= 2}
-                    onNoi={() => batDauNoi(nodeChon.id)}
-                    onChonCanh={(k) => setChon({ kind: "edge", id: k })}
-                  />
-                ) : canhChon ? (
-                  <ChiTietCanh
-                    key={chon.id}
-                    link={canhChon}
-                    byId={byId}
-                    onChonDinh={(id) => setChon({ kind: "node", id })}
-                    onNoiLai={() => setPhien({ a: byId.get(canhChon.source), b: byId.get(canhChon.target) })}
-                  />
-                ) : (
-                  <HuongDan key="huong-dan" soSang={soSang} soCanh={links.length} />
-                )}
-              </AnimatePresence>
-            </aside>
+        {/* Góc dưới trái: chú thích. */}
+        {data && (
+          <div className="absolute bottom-4 left-4 z-20 max-w-[calc(100%-2rem)] rounded-xl bg-white/90 px-3 py-2.5 shadow-sm ring-1 ring-neutral-200 backdrop-blur max-sm:hidden">
+            <LevelLegend />
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-neutral-500">
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full border border-dashed border-neutral-400" /> Chưa học
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-px w-3 bg-neutral-500" /> mối nối bạn đã giảng
+              </span>
+            </div>
           </div>
         )}
+
+        {/* Góc dưới phải: điều khiển khung nhìn. */}
+        {data && (
+          <div
+            className={`absolute bottom-4 z-20 flex flex-col gap-1 rounded-xl bg-white/90 p-1 shadow-sm ring-1 ring-neutral-200 backdrop-blur transition-[right] duration-300 ${
+              drawer ? "right-4 lg:right-103" : "right-4"
+            }`}
+          >
+            {[
+              ["+", "Phóng to (+)", () => canvas.current?.zoomBy(1.3)],
+              ["−", "Thu nhỏ (−)", () => canvas.current?.zoomBy(1 / 1.3)],
+              ["⤢", "Vừa màn hình (F)", () => canvas.current?.fit()],
+            ].map(([k, label, fn]) => (
+              <button
+                key={label}
+                onClick={fn}
+                title={label}
+                aria-label={label}
+                className="grid size-8 place-items-center rounded-lg text-[15px] text-neutral-700 transition-colors hover:bg-neutral-100"
+              >
+                {k}
+              </button>
+            ))}
+            {here && byId.has(here) && (
+              <button
+                onClick={() => canvas.current?.focus(here)}
+                title="Tới trang đang học"
+                className="rounded-lg px-1.5 py-1 text-[11px] font-medium text-neutral-700 transition-colors hover:bg-neutral-100"
+              >
+                Tới chỗ tôi
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Gợi ý lần đầu. */}
+        <AnimatePresence>
+          {data && tips && soSang > 0 && !drawer && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              transition={{ duration: 0.3, ease: EASE }}
+              className="absolute bottom-4 left-1/2 z-20 w-[min(560px,calc(100%-2rem))] -translate-x-1/2 rounded-2xl border border-neutral-200 bg-white/95 p-4 shadow-lg backdrop-blur max-lg:bottom-28"
+            >
+              <p className="m-0 text-[13px] font-medium">Cách dùng bản đồ</p>
+              <ul className="m-0 mt-1.5 grid list-none gap-1 p-0 text-[12.5px] text-neutral-600 sm:grid-cols-2">
+                <li>Kéo nền để di chuyển, cuộn chuột để phóng to</li>
+                <li>Kéo một trang để sắp xếp lại</li>
+                <li>
+                  <strong className="font-medium text-neutral-900">Thả một trang sáng lên trang sáng khác</strong> để nối
+                  hai trang
+                </li>
+                <li>
+                  Bấm trang mờ để đi giảng nó · <Kbd>/</Kbd> để tìm
+                </li>
+              </ul>
+              <Button size="sm" className="mt-3" onClick={tatTips}>
+                Đã rõ
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Khung chi tiết trượt vào từ bên phải. */}
+        <AnimatePresence>
+          {drawer && (
+            <motion.aside
+              key="drawer"
+              initial={{ opacity: 0, x: 24 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 24 }}
+              transition={{ duration: 0.3, ease: EASE }}
+              className="absolute top-4 right-4 bottom-4 z-30 flex w-[min(380px,calc(100%-2rem))] flex-col"
+            >
+              {drawer === "phien" ? (
+                <LinkSession
+                  key={`${phien.a.id}|${phien.b.id}`}
+                  a={phien.a}
+                  b={phien.b}
+                  deckTag={(slug) => deckLabel(slug, true)}
+                  onEnded={(outcome) => outcome === "TAUGHT" && tai()}
+                  onClose={dongPhien}
+                />
+              ) : drawer === "dinh" ? (
+                <ChiTietDinh
+                  key={nodeChon.id}
+                  node={nodeChon}
+                  links={links}
+                  byId={byId}
+                  deckLabel={deckLabel}
+                  coTheNoi={soSang >= 2}
+                  onNoi={() => {
+                    setNoiTu(nodeChon.id);
+                    setChon(null);
+                  }}
+                  onChonCanh={(k) => setChon({ kind: "edge", id: k })}
+                  onClose={() => setChon(null)}
+                />
+              ) : (
+                <ChiTietCanh
+                  key={chon.id}
+                  link={canhChon}
+                  byId={byId}
+                  deckLabel={deckLabel}
+                  onChonDinh={(id) => {
+                    setChon({ kind: "node", id });
+                    canvas.current?.focus(id);
+                  }}
+                  onNoiLai={() => setPhien({ a: byId.get(canhChon.source), b: byId.get(canhChon.target) })}
+                  onClose={() => setChon(null)}
+                />
+              )}
+            </motion.aside>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );
 }
 
-function HuongDan({ soSang, soCanh }) {
+function KhungNoi({ children, onClose, eyebrow }) {
   return (
-    <motion.div {...blurIn} className="rounded-2xl border border-neutral-200 p-4">
-      <p className="m-0 text-[13px] font-medium">Bấm vào một trang</p>
-      <p className="m-0 mt-1 text-[13px] leading-relaxed text-neutral-500">
-        Trang sáng: đọc lại đúng những câu bạn đã giảng, rồi nối nó với một trang khác. Trang mờ: đi giảng trang đó.
-      </p>
-      <dl className="m-0 mt-4 space-y-2 text-[13px]">
-        <div className="flex items-center gap-2.5">
-          <span className="size-3 shrink-0 rounded-full bg-neutral-900" />
-          <span className="text-neutral-600">đã giảng được — càng to càng nhiều buổi</span>
-        </div>
-        <div className="flex items-center gap-2.5">
-          <span className="size-3 shrink-0 rounded-full border border-dashed border-neutral-400" />
-          <span className="text-neutral-600">học trò còn tối trang này</span>
-        </div>
-        <div className="flex items-center gap-2.5">
-          <span className="h-px w-3 shrink-0 bg-neutral-500" />
-          <span className="text-neutral-600">mối nối bạn đã giảng được</span>
-        </div>
-      </dl>
-      <p className="m-0 mt-4 text-[12px] text-neutral-400">
-        {soSang} trang đã giảng · {soCanh} mối nối
-      </p>
-    </motion.div>
+    <div className="flex max-h-full flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-xl">
+      <div className="flex items-center gap-2 border-b border-neutral-100 px-4 py-2.5">
+        <p className="m-0 min-w-0 flex-1 truncate text-[11px] tracking-wide text-neutral-400 uppercase">{eyebrow}</p>
+        <button
+          onClick={onClose}
+          aria-label="Đóng"
+          className="-mr-1 h-7 rounded-md px-2 text-[12px] text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-900"
+        >
+          Đóng
+        </button>
+      </div>
+      <div className="min-h-0 overflow-y-auto p-4">{children}</div>
+    </div>
   );
 }
 
-function ChiTietDinh({ node, links, byId, coTheNoi, onNoi, onChonCanh }) {
+function ChiTietDinh({ node, links, byId, deckLabel, coTheNoi, onNoi, onChonCanh, onClose }) {
+  const sang = isLit(node);
   const noi = links.filter((l) => l.source === node.id || l.target === node.id);
   const moSlide = `/learn/${encodeURIComponent(node.deck)}?page=${node.page}`;
 
   return (
-    <motion.div {...blurIn} className="rounded-2xl border border-neutral-200 p-4">
-      <p className="m-0 text-[11px] tracking-wide text-neutral-400 uppercase">
-        {node.sang ? "Bạn đã dạy học trò" : "Học trò còn tối trang này"} · {deckTag(node.deck)} · trang {node.page}
+    <KhungNoi onClose={onClose} eyebrow={`${deckLabel(node.deck)} · trang ${node.page}`}>
+      <p className="m-0 flex flex-wrap items-center gap-1.5 text-[12px] text-neutral-500">
+        <LevelDot level={node.level} />
+        <span className="font-medium text-neutral-800">{LEVELS[node.level]?.label}</span>
+        <span className="text-neutral-300">·</span>
+        {LEVELS[node.level]?.hint}
       </p>
-      <h2 className="m-0 mt-1 text-[16px] leading-snug font-semibold tracking-tight">{node.title}</h2>
+      <h2 className="m-0 mt-1.5 text-[16px] leading-snug font-semibold tracking-tight">{node.title}</h2>
 
-      {node.sang ? (
+      {sang ? (
         <>
           <p className="m-0 mt-3 text-[11px] text-neutral-400">Nguyên văn lời bạn</p>
           <ul className="m-0 mt-1 list-none space-y-2 p-0">
             {(node.sentences?.length ? node.sentences : [node.said]).map((cau) => (
-              <li
-                key={cau}
-                className="border-l-2 border-neutral-200 pl-3 text-[14px] leading-relaxed text-neutral-800"
-              >
+              <li key={cau} className="border-l-2 border-neutral-200 pl-3 text-[14px] leading-relaxed text-neutral-800">
                 {cau}
               </li>
             ))}
@@ -550,7 +650,9 @@ function ChiTietDinh({ node, links, byId, coTheNoi, onNoi, onChonCanh }) {
         </>
       ) : (
         <p className="m-0 mt-2 text-[13px] leading-relaxed text-neutral-500">
-          Bạn chưa giảng trang này cho học trò. Mở ra, chọn phần muốn giảng, rồi giảng không nhìn.
+          {node.level === "can_sua"
+            ? "Lần gần nhất bạn giảng trang này có chỗ sai. Giảng lại để sửa hiểu lầm — học trò sẽ hỏi đúng vào chỗ đó."
+            : "Học trò chưa biết gì về trang này. Mở ra, chọn phần muốn giảng, rồi giảng không nhìn."}
         </p>
       )}
 
@@ -577,37 +679,34 @@ function ChiTietDinh({ node, links, byId, coTheNoi, onNoi, onChonCanh }) {
       )}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {node.sang && (
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={!coTheNoi}
-            onClick={onNoi}
-            title={coTheNoi ? "Chọn một trang khác để giảng mối nối" : undefined}
-          >
+        {sang && (
+          <Button variant="primary" size="sm" disabled={!coTheNoi} onClick={onNoi}>
             Nối với trang khác
           </Button>
         )}
         <Link to={moSlide}>
-          <Button size="sm" variant={node.sang ? "normal" : "primary"}>
-            {node.sang ? `Mở slide ${node.page}` : "Giảng trang này"}
+          <Button size="sm" variant={sang ? "normal" : "primary"}>
+            {sang ? `Mở slide ${node.page}` : node.level === "can_sua" ? "Giảng lại trang này" : "Giảng trang này"}
           </Button>
         </Link>
       </div>
-      {node.sang && !coTheNoi && (
-        <p className="m-0 mt-2 text-[12px] text-neutral-400">Giảng được thêm một trang nữa là nối được.</p>
+      {sang && (
+        <p className="m-0 mt-2 text-[12px] text-neutral-400">
+          {coTheNoi
+            ? "Mẹo: kéo trang này thả lên một trang sáng khác cũng nối được."
+            : "Giảng được thêm một trang nữa là nối được."}
+        </p>
       )}
-    </motion.div>
+    </KhungNoi>
   );
 }
 
-function ChiTietCanh({ link, byId, onChonDinh, onNoiLai }) {
+function ChiTietCanh({ link, byId, deckLabel, onChonDinh, onNoiLai, onClose }) {
   const a = byId.get(link.source);
   const b = byId.get(link.target);
   return (
-    <motion.div {...blurIn} className="rounded-2xl border border-neutral-200 p-4">
-      <p className="m-0 text-[11px] tracking-wide text-neutral-400 uppercase">Mối nối bạn đã giảng</p>
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+    <KhungNoi onClose={onClose} eyebrow="Mối nối bạn đã giảng">
+      <div className="flex flex-wrap items-center gap-1.5">
         {[a, b].map((n, i) => (
           <span key={n?.id ?? i} className="contents">
             {i === 1 && <span className="text-neutral-400">—</span>}
@@ -617,7 +716,7 @@ function ChiTietCanh({ link, byId, onChonDinh, onNoiLai }) {
             >
               {n?.label}{" "}
               <span className="font-normal text-neutral-500">
-                {deckTag(n?.deck)} · {n?.page}
+                {deckLabel(n?.deck, true)} · {n?.page}
               </span>
             </button>
           </span>
@@ -632,6 +731,6 @@ function ChiTietCanh({ link, byId, onChonDinh, onNoiLai }) {
           Giảng lại mối nối này
         </Button>
       </div>
-    </motion.div>
+    </KhungNoi>
   );
 }

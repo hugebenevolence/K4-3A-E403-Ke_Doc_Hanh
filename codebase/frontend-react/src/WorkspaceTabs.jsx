@@ -37,7 +37,7 @@ export default function WorkspaceTabs({ active, deck, page, className = "" }) {
               key={t.key}
               to={t.to}
               aria-current={on ? "page" : undefined}
-              className={`relative rounded-md px-3 py-1 text-[12.5px] font-medium transition-colors ${
+              className={`relative rounded-md px-3 py-1 text-[12.5px] font-medium whitespace-nowrap transition-colors ${
                 on ? "text-neutral-900" : "text-neutral-500 hover:text-neutral-900"
               }`}
             >

@@ -77,7 +77,7 @@ export default function LinkSession({ a, b, deckTag, onEnded, onClose }) {
   return (
     <motion.section
       {...blurIn}
-      className="flex max-h-[min(78vh,720px)] min-h-[420px] flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-xl"
       aria-label="Phiên nối hai trang"
     >
       <header className="flex items-start gap-3 border-b border-neutral-200 px-4 py-3">
