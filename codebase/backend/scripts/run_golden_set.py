@@ -262,8 +262,10 @@ def report(rows: list[dict], started: str, build: str | None = None) -> str:
             f"**Case dao động giữa các lượt: {len(wobbly)}/{len(groups)}**"
             + (" — " + ", ".join(sorted(wobbly)) if wobbly else " — không có case nào"),
             "",
-            "Case dao động là chỗ bộ chấm chưa có ranh giới ổn định; sửa ở đó ăn hơn "
-            "sửa ở case hỏng đều, vì case hỏng đều ít nhất còn đoán trước được.",
+            (
+                "Case dao động là chỗ bộ chấm chưa có ranh giới ổn định; sửa ở đó ăn hơn "
+                "sửa ở case hỏng đều, vì case hỏng đều ít nhất còn đoán trước được."
+            ),
             "",
         ]
 

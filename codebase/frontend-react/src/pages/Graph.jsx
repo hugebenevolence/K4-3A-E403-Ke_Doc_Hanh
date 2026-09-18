@@ -1,8 +1,9 @@
 // Bản đồ hiểu biết: thứ học viên đã DẠY ĐƯỢC, qua mọi buổi và mọi bộ slide.
 //
-// Đỉnh sáng là một mệnh đề chính họ nói ra và bộ chấm xác nhận có căn cứ; đỉnh
-// tối là khái niệm của bài họ chưa giảng nổi. Cạnh chỉ có khi chính họ nối hai
-// ý bằng lời — không cạnh nào do hệ thống suy ra.
+// Hai luật, cùng một động từ — "giảng được": đỉnh sáng là một TRANG slide họ
+// đã giảng được (bộ chấm xác nhận đủ), mang nguyên văn những câu họ nói; cạnh
+// là một mối nối họ đã giảng được. Đỉnh tối là trang còn giảng được mà họ chưa
+// giảng. Không đỉnh, không cạnh nào do hệ thống suy ra.
 //
 // Vì sao trang này tồn tại (spec §4c): học trò vốn quên sạch sau mỗi phiên, nên
 // học viên không thật sự *dạy* nó, chỉ bị nó kiểm tra. Bản đồ là chỗ công sức
@@ -28,6 +29,11 @@ const H = 620;
  *  nhau, và phần sáng — thứ học viên thật sự muốn nhìn — chìm nghỉm giữa đám
  *  đó. Mười sáu thì vành vẫn thưa và vẫn đủ nói "còn nhiều chỗ chưa dạy". */
 const MAX_TOI = 16;
+
+/** "d1-slide-hackathon" → "D1": đủ để thấy một cạnh nối hai bộ slide khác nhau. */
+function deckTag(slug) {
+  return (slug || "").split("-")[0].toUpperCase();
+}
 
 /** Bán kính theo số buổi đã giảng lại được — "độ đậm" của spec §4c. */
 function banKinh(lan) {
@@ -57,15 +63,12 @@ export default function GraphPage() {
   const { nodes, pos, links } = useMemo(() => {
     if (!data) return { nodes: [], pos: new Map(), links: [] };
     const sang = data.claims.map((c) => ({ ...c, id: c.concept, sang: true, weight: c.times_taught }));
-    // Vùng tối chỉ lấy những khái niệm chưa có đỉnh sáng, và bỏ trùng giữa hai
-    // bộ slide — cùng một chữ "token" ở d1 và d2 là MỘT khái niệm, đúng tinh
-    // thần xuyên tài liệu của đồ thị.
-    const daSang = new Set(sang.map((n) => n.id));
-    const toi = [];
-    for (const d of data.dim) {
-      if (daSang.has(d.concept) || toi.some((t) => t.id === d.concept)) continue;
-      toi.push({ ...d, id: d.concept, sang: false, weight: 0 });
-    }
+    // Vành tối ưu tiên trang của những bộ slide học viên ĐANG học: người mới
+    // giảng vài trang Day 1 cần thấy phần còn lại của Day 1, chưa cần Day 2.
+    const dangHoc = new Set(sang.map((n) => n.deck));
+    const toi = [...data.dim]
+      .sort((a, b) => Number(dangHoc.has(b.deck)) - Number(dangHoc.has(a.deck)))
+      .map((d) => ({ ...d, id: d.concept, sang: false, weight: 0 }));
     const vanh = toi.slice(0, MAX_TOI);
 
     // Hai phép xếp khác nhau cho hai loại đỉnh, cố ý: cụm sáng thả lò xo để
@@ -115,9 +118,9 @@ export default function GraphPage() {
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
         <h1 className="m-0 text-[22px] font-semibold tracking-tight">Bạn đã dạy học trò những gì</h1>
         <p className="m-0 mt-1 max-w-2xl text-[13px] leading-relaxed text-neutral-500">
-          Mỗi đỉnh sáng là một ý <strong className="font-medium text-neutral-700">chính bạn nói ra</strong> và học
-          trò đã hiểu. Đỉnh càng to là bạn giảng lại được càng nhiều buổi. Đỉnh mờ là phần bài học trò vẫn còn tối —
-          nó chỉ sáng lên khi bạn giảng.
+          Mỗi đỉnh sáng là một trang slide <strong className="font-medium text-neutral-700">bạn đã giảng được</strong>{" "}
+          — học trò hiểu nó nhờ chính lời bạn. Đỉnh càng to là bạn giảng lại được càng nhiều buổi. Đỉnh mờ là trang
+          học trò vẫn còn tối, và chỉ sáng lên khi bạn giảng.
         </p>
 
         {error && <p className="mt-4 text-[13px] text-neutral-700">{error}</p>}
@@ -127,8 +130,8 @@ export default function GraphPage() {
           <motion.div {...blurIn} className="mt-5 rounded-2xl border border-neutral-200 p-5">
             <p className="m-0 text-[15px] font-medium">Bản đồ còn trống</p>
             <p className="m-0 mt-1 text-[13px] leading-relaxed text-neutral-500">
-              Học trò chưa biết gì cả — nó chỉ biết đúng những điều bạn đã giảng cho nó. Giảng xong một phần slide
-              là đỉnh đầu tiên hiện ra ở đây.
+              Học trò chưa biết gì cả — nó chỉ biết đúng những điều bạn đã giảng cho nó. Giảng được một trang slide
+              là đỉnh đầu tiên sáng lên ở đây.
             </p>
             <LinkButton to="/library" className="mt-4">
               Chọn bài để giảng
@@ -206,8 +209,13 @@ export default function GraphPage() {
                         textAnchor="middle"
                         className={`text-[12px] ${n.sang ? "fill-neutral-900 font-medium" : "fill-neutral-400"}`}
                       >
-                        {n.concept}
+                        {n.label || n.title}
                       </text>
+                      {n.sang && (
+                        <text y={r + 28} textAnchor="middle" className="fill-neutral-400 text-[10px]">
+                          {deckTag(n.deck)} · tr. {n.page}
+                        </text>
+                      )}
                     </g>
                   );
                 })}
@@ -216,12 +224,12 @@ export default function GraphPage() {
 
             <motion.aside {...blurIn} className="lg:sticky lg:top-20 lg:self-start">
               {dangChon ? (
-                <ChiTiet node={dangChon} links={links} />
+                <ChiTiet node={dangChon} links={links} nodes={nodes} />
               ) : (
                 <div className="rounded-2xl border border-neutral-200 p-4">
                   <p className="m-0 text-[13px] font-medium">Bấm vào một đỉnh</p>
                   <p className="m-0 mt-1 text-[13px] leading-relaxed text-neutral-500">
-                    Bạn sẽ thấy đúng câu mình đã nói về khái niệm đó, và mở lại được slide tương ứng.
+                    Bạn sẽ thấy đúng những câu mình đã nói về trang đó, và mở lại được slide.
                   </p>
                   <dl className="m-0 mt-4 space-y-2 text-[13px]">
                     <div className="flex items-center gap-2.5">
@@ -230,11 +238,11 @@ export default function GraphPage() {
                     </div>
                     <div className="flex items-center gap-2.5">
                       <span className="size-3 shrink-0 rounded-full border border-dashed border-neutral-300" />
-                      <span className="text-neutral-600">học trò còn tối chỗ này</span>
+                      <span className="text-neutral-600">học trò còn tối trang này</span>
                     </div>
                   </dl>
                   <p className="m-0 mt-4 text-[12px] text-neutral-400">
-                    {data.claims.length} ý đã dạy · {links.length} liên hệ bạn tự nối
+                    {data.claims.length} trang đã giảng · {links.length} mối nối đã giảng
                   </p>
                 </div>
               )}
@@ -246,43 +254,47 @@ export default function GraphPage() {
   );
 }
 
-function ChiTiet({ node, links }) {
+function ChiTiet({ node, links, nodes }) {
+  const ten = new Map(nodes.map((n) => [n.id, n.label || n.title]));
   const noi = links.filter((l) => l.source === node.id || l.target === node.id);
-  const cho = node.sang
-    ? [{ deck: node.deck, page: node.page }, ...(node.also_on ?? [])].filter((c) => c.deck)
-    : [{ deck: node.deck, page: node.page }];
+  const moSlide = `/learn/${encodeURIComponent(node.deck)}?page=${node.page}`;
 
   return (
     <div className="rounded-2xl border border-neutral-200 p-4">
       <p className="m-0 text-[11px] tracking-wide text-neutral-400 uppercase">
-        {node.sang ? "Bạn đã dạy học trò" : "Học trò còn tối chỗ này"}
+        {node.sang ? "Bạn đã dạy học trò" : "Học trò còn tối trang này"} · {deckTag(node.deck)} · trang {node.page}
       </p>
-      <h2 className="m-0 mt-1 text-[17px] font-semibold tracking-tight">{node.concept}</h2>
+      <h2 className="m-0 mt-1 text-[16px] leading-snug font-semibold tracking-tight">{node.title}</h2>
 
       {node.sang ? (
         <>
           <p className="m-0 mt-3 text-[11px] text-neutral-400">Nguyên văn lời bạn</p>
-          <blockquote className="m-0 mt-1 border-l-2 border-neutral-200 pl-3 text-[14px] leading-relaxed text-neutral-800">
-            {node.said}
-          </blockquote>
-          <p className="m-0 mt-3 text-[12px] text-neutral-500">
-            Giảng lại được ở {node.times_taught} buổi
-          </p>
+          <ul className="m-0 mt-1 list-none space-y-2 p-0">
+            {(node.sentences?.length ? node.sentences : [node.said]).map((cau) => (
+              <li
+                key={cau}
+                className="border-l-2 border-neutral-200 pl-3 text-[14px] leading-relaxed text-neutral-800"
+              >
+                {cau}
+              </li>
+            ))}
+          </ul>
+          <p className="m-0 mt-3 text-[12px] text-neutral-500">Giảng được ở {node.times_taught} buổi</p>
         </>
       ) : (
         <p className="m-0 mt-2 text-[13px] leading-relaxed text-neutral-500">
-          Bạn chưa giảng nổi ý này cho học trò. Mở slide rồi thử giảng xem.
+          Bạn chưa giảng trang này cho học trò. Mở ra, chọn phần muốn giảng, rồi giảng không nhìn.
         </p>
       )}
 
       {noi.length > 0 && (
         <>
-          <p className="m-0 mt-4 text-[11px] text-neutral-400">Bạn đã tự nối</p>
+          <p className="m-0 mt-4 text-[11px] text-neutral-400">Mối nối bạn đã giảng</p>
           <ul className="m-0 mt-1 list-none space-y-2 p-0">
             {noi.map((l) => (
               <li key={`${l.source}-${l.target}`} className="text-[13px] text-neutral-700">
                 <span className="font-medium">
-                  {l.source} {l.label} {l.target}
+                  {ten.get(l.source) ?? l.source} — {ten.get(l.target) ?? l.target}
                 </span>
                 <span className="mt-0.5 block text-[12px] text-neutral-500">vì bạn nói: “{l.evidence}”</span>
               </li>
@@ -291,15 +303,11 @@ function ChiTiet({ node, links }) {
         </>
       )}
 
-      {cho.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {cho.map((c) => (
-            <Link key={`${c.deck}-${c.page}`} to={`/learn/${encodeURIComponent(c.deck)}?page=${c.page}`}>
-              <Button size="sm">Mở slide {c.page}</Button>
-            </Link>
-          ))}
-        </div>
-      )}
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link to={moSlide}>
+          <Button size="sm">{node.sang ? `Mở slide ${node.page}` : "Giảng trang này"}</Button>
+        </Link>
+      </div>
     </div>
   );
 }

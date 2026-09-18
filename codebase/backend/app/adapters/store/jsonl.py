@@ -89,7 +89,7 @@ class _JsonMap:
             # Tên có mốc thời gian, KHÔNG dùng một tên cố định: hỏng lần hai sẽ
             # đè mất bản cứu được của lần một, tức là xoá mất đúng thứ vừa hứa
             # là "vẫn còn đó để xem sau".
-            stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+            stamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
             broken = self._path.with_name(f"{self._path.stem}.hong-{stamp}.json")
             self._path.replace(broken)
             log.error("File %s hỏng, đã chuyển sang %s và bắt đầu lại", self._path.name, broken)
@@ -123,9 +123,22 @@ class JsonGraphStore(_JsonMap, GraphStore):
         raw = self._all().get(student_id)
         if raw is None:
             return KnowledgeGraph(student_id=student_id)
-        claims = {c["concept"]: Claim(**{**c, "span_ids": tuple(c["span_ids"]), "sessions": tuple(c["sessions"])})
-                  for c in raw.get("claims", [])}
-        links = {(l["source"], l["target"]): Link(**l) for l in raw.get("links", [])}
+        claims = {
+            c["concept"]: Claim(
+                **{
+                    **c,
+                    "span_ids": tuple(c.get("span_ids", ())),
+                    "sessions": tuple(c.get("sessions", ())),
+                    # File ghi trước khi đỉnh chuyển sang theo trang không có
+                    # trường này; câu duy nhất khi đó chính là `said`.
+                    "sentences": tuple(c.get("sentences") or [c.get("said", "")]),
+                }
+            )
+            for c in raw.get("claims", [])
+        }
+        links = {
+            tuple(sorted((l["source"], l["target"]))): Link(**l) for l in raw.get("links", [])
+        }
         return KnowledgeGraph(student_id=student_id, claims=claims, links=links)
 
     async def save(self, graph: KnowledgeGraph) -> None:

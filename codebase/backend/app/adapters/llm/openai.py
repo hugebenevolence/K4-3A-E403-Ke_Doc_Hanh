@@ -69,7 +69,7 @@ def _log_cache(model: str, response) -> None:
             "?" if cached is None else cached,
             getattr(usage, "output_tokens", "?"),
         )
-    except Exception:  # noqa: BLE001 — log hỏng không được kéo theo lượt học
+    except Exception:  # log hỏng không được kéo theo lượt học
         log.debug("Không đọc được usage để ghi cache", exc_info=True)
 
 

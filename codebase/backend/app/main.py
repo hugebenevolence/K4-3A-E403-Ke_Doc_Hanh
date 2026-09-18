@@ -43,17 +43,17 @@ from app.api.auth import (
     parse_members,
     verify_token,
 )
-from app.api.live_turn import LiveTurn
 from app.api.graph_sync import absorb_turn, known_claims
+from app.api.live_turn import LiveTurn
 from app.api.pronunciations import PronunciationCache
 from app.api.session import TALKER_VERSION, run_turn
 from app.config import settings
-from app.domain.graph import LINK_LABEL
+from app.domain.graph import LINK_LABEL, PageRef, page_key, short_label, split_key
 from app.domain.lesson import Lesson
 from app.domain.log import TurnLog
 from app.domain.sanitize import sanitize_spoken, tame_shouting
 from app.domain.session import TurnState
-from app.domain.terms import extract_terms
+from app.domain.substance import MIN_SOURCE_WORDS, teachable_words
 from app.domain.verdict import Evidence, GradeResult, Verdict
 from app.graph.build import build_graph
 from app.graph.nodes import (
@@ -108,6 +108,31 @@ def _build_deps(selection: list[str] | None = None, deck: str | None = None) -> 
     return lesson, spans, llm, _speech_to_text(lesson), tts, session_log, profiles, graphs
 
 
+def _page_ref(deck: str | None, lesson: Lesson) -> PageRef | None:
+    """Trang slide mà phiên này đang giảng — đỉnh của đồ thị neo vào đây.
+
+    Rỗng khi phiên không dựng từ một trang slide (bài demo, bài code): lúc đó
+    không có trang nào để sáng lên.
+    """
+    found = _find_deck(deck)
+    if found is None or lesson.kind != "slide":
+        return None
+    ids = set(lesson.source_span_ids)
+    page = next((s.page for s in found.spans if s.span_id in ids and s.page), None)
+    if page is None:
+        return None
+    slug = deck if deck in _deck_paths() else next(iter(_deck_paths()), "")
+    on_page = [s for s in found.spans if s.page == page]
+    return PageRef(
+        key=page_key(slug, page),
+        title=found.titles.get(page) or f"Trang {page}",
+        deck=slug,
+        page=page,
+        span_ids=tuple(s.span_id for s in on_page),
+        text="\n".join(s.text for s in on_page),
+    )
+
+
 def _lesson(selection: list[str] | None, deck: str | None = None):
     """Bài học của phiên này.
 
@@ -118,6 +143,12 @@ def _lesson(selection: list[str] | None, deck: str | None = None):
     found = _find_deck(deck)
     if selection and found is not None:
         return lesson_from_selection(found, selection)
+    # Có vùng chọn mà không tìm thấy bộ slide của nó thì phải BÁO, không được
+    # rơi về file bài học: đo được 18/9, link mang mã bộ slide cũ mở phiên
+    # bình thường rồi chấm học viên theo trang 20 của bài mặc định — họ giảng
+    # slide này, bị hỏi về slide khác, và không có dấu hiệu gì là đã lệch.
+    if selection and _deck_paths():
+        raise ValueError("Không tìm thấy bộ slide này nữa — bạn mở lại bài từ thư viện nhé.")
     return load_lesson(_lesson_file())
 
 
@@ -299,31 +330,6 @@ def _deck_or_404(slug: str) -> Deck:
     return deck
 
 
-MAX_DIM_PER_DECK = 18
-"""Số khái niệm CHƯA giảng nổi hiện mỗi bộ slide — "vùng tối" của đồ thị.
-
-Hiện hết thì màn hình thành một đám mây chữ và phần sáng (thứ học viên đã dạy
-được) chìm nghỉm, đúng cái mà đồ thị sinh ra để làm nổi lên.
-"""
-
-
-def _span_index() -> dict[str, tuple[str, int]]:
-    """span_id -> (mã bộ slide, số trang), gom qua MỌI bộ đang cấu hình.
-
-    Đồ thị là XUYÊN TÀI LIỆU nên một đỉnh có thể neo vào cả d1 lẫn d2; tra cứu
-    theo từng bộ riêng lẻ sẽ làm rơi mất đúng những cạnh đáng giá nhất.
-    """
-    index: dict[str, tuple[str, int]] = {}
-    for slug in _deck_paths():
-        deck = _find_deck(slug)
-        if deck is None:
-            continue
-        for span in deck.spans:
-            if span.page:
-                index[span.span_id] = (slug, span.page)
-    return index
-
-
 @api.get("/graph")
 async def knowledge_graph(
     student_id: str = "demo", member: str = Depends(require_member)
@@ -335,39 +341,49 @@ async def knowledge_graph(
     """
     who = member if _members() else student_id
     graph = await JsonGraphStore(settings.graph_file).load(who)
-    index = _span_index()
 
     claims = []
     for claim in graph.claims.values():
-        cho = [index[s] for s in claim.span_ids if s in index]
+        deck, page = split_key(claim.concept)
         claims.append(
             {
                 "concept": claim.concept,
+                "title": claim.title,
+                "label": short_label(claim.title),
                 "said": claim.said,
-                "span_ids": list(claim.span_ids),
+                "sentences": list(claim.sentences),
                 "times_taught": claim.times_taught,
-                # Chỗ đầu tiên để bấm vào là mở đúng slide đó ra xem lại.
-                "deck": cho[0][0] if cho else None,
-                "page": cho[0][1] if cho else None,
-                "also_on": [{"deck": d, "page": p} for d, p in cho[1:]],
+                "deck": deck,
+                "page": page,
             }
         )
 
-    da_co = set(graph.claims)
+    # Vành tối = những TRANG còn giảng được mà học viên chưa giảng nổi. Dùng
+    # đúng luật mở phiên (`teachable_words`) để lọc: trang bìa, trang agenda
+    # không có gì để giảng thì cũng không được hiện ra như một chỗ "còn tối".
+    # Bản đầu lấy vành tối từ danh sách thuật ngữ mớm cho nhận dạng giọng nói,
+    # nên bản đồ bảo học viên còn tối ở "arxiv" và "kimi".
     dim = []
     for slug in _deck_paths():
         deck = _find_deck(slug)
         if deck is None:
             continue
-        trang_dau: dict[str, int] = {}
-        for span in deck.spans:
-            for term in extract_terms(span.text):
-                trang_dau.setdefault(term.lower(), span.page or 1)
-        con_toi = [t for t in deck.terms if t.lower() not in da_co]
-        dim += [
-            {"concept": t.lower(), "deck": slug, "page": trang_dau.get(t.lower(), 1)}
-            for t in con_toi[:MAX_DIM_PER_DECK]
-        ]
+        # Tiêu đề lặp ở nhiều trang ("AI IN ACTION - Day 1" ở cả bìa lẫn trang
+        # sau) là tên của cả bộ slide, không phải của một trang để giảng.
+        lap = {t for t in deck.titles.values() if list(deck.titles.values()).count(t) > 1}
+        for page in sorted({s.page for s in deck.spans if s.page}):
+            key = page_key(slug, page)
+            if key in graph.claims:
+                continue
+            title = deck.titles.get(page) or ""
+            if title in lap:
+                continue
+            on_page = [s for s in deck.spans if s.page == page]
+            if teachable_words(on_page, title) < MIN_SOURCE_WORDS:
+                continue
+            dim.append(
+                {"concept": key, "title": title, "label": short_label(title), "deck": slug, "page": page}
+            )
 
     return {
         "student_id": who,
@@ -505,6 +521,10 @@ async def teach_back_session(ws: WebSocket):
     # KHÔNG đặt tên `graph`: biến đó đã là LangGraph đã compile ở ngay trên,
     # và đè lên nó thì mọi lượt chấm chết với 'KnowledgeGraph has no astream'.
     knowledge = await graphs.load(student_id)
+    page_ref = _page_ref(ws.query_params.get("deck"), lesson)
+    # Mọi lượt nói của buổi này: trang sáng lên với CẢ phần giảng chính lẫn câu
+    # trả lời cho câu hỏi ngược, không chỉ lượt cuối cùng.
+    session_texts: list[str] = []
 
     live: LiveTurn | None = None
     last_grade: GradeResult | None = None
@@ -724,11 +744,12 @@ async def teach_back_session(ws: WebSocket):
                         # hồ sơ: đây là trí nhớ của học trò, mà học viên đóng
                         # tab giữa chừng là chuyện thường — mất thứ họ vừa dạy
                         # được thì đúng cái tính năng này sinh ra để tránh.
-                        await absorb_turn(
+                        session_texts.append(student_text)
+                        absorb_turn(
                             knowledge,
-                            spans,
-                            student_text=student_text,
-                            evidence=event.payload["result"].get("evidence") or [],
+                            page=page_ref,
+                            student_texts=session_texts,
+                            verdict=event.payload["result"].get("verdict"),
                             session_id=session_id,
                         )
                         await graphs.save(knowledge)
