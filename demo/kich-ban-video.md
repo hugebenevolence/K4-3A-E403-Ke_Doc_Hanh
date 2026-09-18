@@ -32,9 +32,10 @@ Space → nói → thả Space**. Trong lúc giữ Space, mic đang thu, nên ch
 **LÀM:** đứng yên ở trang Thư viện.
 
 **NÓI:**
-> Trong khoá AI20k, học viên hỏi tutor xin giảng hơn 5.600 lần. Nhưng khi học viên
-> tự nói ra cách mình hiểu, tutor giảng lại cho họ gần 87% số lần, và chỉ hỏi ngược
-> 0,2%. Học viên đọc xong không biết mình hiểu tới đâu.
+> Trong khoá AI20k, học viên hỏi tutor xin giảng hơn 5.600 lần, và cả khoá tutor
+> chỉ hỏi ngược học viên 0,2% số lượt. Kể cả khi học viên tự nói ra cách mình hiểu,
+> tutor vẫn giảng lại cho họ gần 87% số lần. Học viên đọc xong không biết mình hiểu
+> tới đâu.
 >
 > Giảng lại đảo vai: **bạn** là người giảng, AI là một học trò chưa biết gì. Bạn
 > chọn một phần slide, phần đó bị che đi, và bạn giảng bằng lời của mình. Học trò
