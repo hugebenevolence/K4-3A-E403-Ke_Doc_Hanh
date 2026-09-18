@@ -296,7 +296,7 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
 - **Willing users (≥2 tên)** + kế hoạch validation *(bonus)*:
   - **Chạy thử nội bộ — KHÔNG tính vào R6**: Trần Đại Nhân, Nguyễn Phú Bình (thành viên nhóm). Dùng để bắt lỗi luồng trước khi mời người ngoài.
   - **Người ngoài nhóm — phần tính R6** *(≥2 theo tiêu chí 5, nhóm nhắm 3)*: [điền 3 tên học viên ngoài nhóm, phòng E403].
-  - Kế hoạch: 5 người dùng link deploy, mỗi người một tài khoản riêng trong 5 tài khoản đã cấp.
+  - Kế hoạch: 5 người dùng link deploy, mỗi người một tài khoản riêng còn trống (`member5` dành cho video demo). Phiên 10 phút theo [validation/kich-ban-phien-thu.md](validation/kich-ban-phien-thu.md); hành vi từng người (phiên, lượt, nhãn chấm, thời gian chờ) lấy từ log server bằng `scripts/validation_report.py`, ghi cùng quote vào [validation/nhat-ky.md](validation/nhat-ky.md).
   - Giao task theo outcome: "Hãy dùng cái này để tự kiểm xem bạn hiểu slide *Token* (Day 1, trang 13) tới đâu".
   - Quan sát im lặng. Ghi `người thử | task | quan sát | quote nguyên văn | mức nghiêm trọng` vào `validation/`. ≥1 thay đổi vào §9.
   - Dry run demo trước LAB 6.
