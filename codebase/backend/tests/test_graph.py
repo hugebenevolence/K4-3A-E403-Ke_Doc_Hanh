@@ -1,219 +1,244 @@
-"""Đồ thị tri thức: luật vào/ra của đỉnh và cạnh (spec §4c).
+"""Đồ thị tri thức: đỉnh là trang đã giảng được, cạnh là mối nối đã giảng được (spec §4c).
 
 Luật xương sống được canh ở đây: không có gì vào đồ thị nếu không truy ngược
-được về một câu HỌC VIÊN đã nói. Mọi test dưới đây đều là một cách phá luật đó.
+được về một câu HỌC VIÊN đã nói. Phần lớn test bên dưới còn mang tên một lỗi đo
+được thật trên 7 phiên chạy qua WebSocket ngày 18/9 — để chúng không quay lại.
 """
 
 from __future__ import annotations
 
+import asyncio
+
+import pytest
+
+from app.adapters.store.jsonl import JsonGraphStore
+from app.api.graph_sync import absorb_turn, known_claims
 from app.domain.graph import (
-    Claim,
+    LABEL_CHARS,
+    MAX_SENTENCES,
     KnowledgeGraph,
     Link,
-    claims_from_turn,
-    links_from_turn,
+    PageRef,
+    page_claim,
+    page_key,
+    short_label,
+    split_key,
 )
 
-# Nguyên văn ô nội dung của slide 13 (bộ d1) — cố ý dùng chữ thật thay vì
-# fixture tự bịa: ô thật nhắc "token" nhiều lần nên nó mới là chủ đề của ô, còn
-# fixture bịa một lần thì hoà tần suất với "model" và test đo nhầm thứ khác.
-TOKEN = (
-    "[d1-p13-02]",
-    "Model không nhìn từ nguyên vẹn. Nó cắt văn bản thành các mảnh nhỏ gọi là "
-    "token: có từ là một mảnh, có từ vỡ ba bốn mảnh, cả dấu câu và khoảng trắng "
-    "cũng là token. Tiếng Việt, code và JSON tốn token hơn tiếng Anh.",
+# Chữ thật của trang 14 bộ d1 — dùng chữ thật để luật lọc câu lạc đề và câu
+# chép lại đo đúng thứ nó sẽ gặp khi chạy.
+CONTEXT = PageRef(
+    key="d1-slide-hackathon:14",
+    title="Context: bàn làm việc có hạn của model",
+    deck="d1-slide-hackathon",
+    page=14,
+    span_ids=("[d1-slide-hackathon-p14-01]", "[d1-slide-hackathon-p14-02]"),
+    text=(
+        "Context: bàn làm việc có hạn của model\n"
+        "Mỗi lần trả lời, model chỉ nhìn được một lượng chữ có hạn — gọi là context. "
+        "Hãy hình dung một bàn làm việc: mọi thứ muốn model thấy phải bày lên bàn.\n"
+        "Context càng dài càng tốn tiền và càng chậm — bàn rộng không có nghĩa là dùng tốt"
+    ),
 )
-ATTENTION = (
-    "[d1-p15-01]",
-    "Attention: mỗi token nhìn sang các token trước và chấm điểm mức liên quan.",
+TOKEN = PageRef(
+    key="d1-slide-hackathon:13",
+    title='Token: model không đọc "từ", model đọc mảnh chữ',
+    deck="d1-slide-hackathon",
+    page=13,
+    span_ids=("[d1-slide-hackathon-p13-02]",),
+    text=(
+        "Model không nhìn từ nguyên vẹn. Nó cắt văn bản thành các mảnh nhỏ gọi là "
+        "token: có từ là một mảnh, có từ vỡ ba bốn mảnh. Tiếng Việt tốn token hơn tiếng Anh."
+    ),
+)
+
+GIANG_CONTEXT = (
+    "Context là lượng chữ model nhìn thấy được trong một lần trả lời, giống bộ nhớ tạm có giới hạn. "
+    "Context càng dài thì càng tốn tiền và càng chậm, và model hay quên phần nằm ở giữa."
 )
 
 
-def test_dinh_mang_nguyen_van_cau_cua_hoc_vien():
+def _absorb(g, page, texts, verdict, session="phien-1"):
+    return absorb_turn(g, page=page, student_texts=texts, verdict=verdict, session_id=session)
+
+
+# --- Đỉnh ------------------------------------------------------------------
+
+
+def test_dinh_la_trang_va_mang_nguyen_van_loi_hoc_vien():
     """Đỉnh là ghi chú bằng lời của chính học viên — không phải lời model diễn
     đạt lại, cũng không phải chữ trên slide."""
-    cau = "Model cắt chữ thành các mảnh nhỏ gọi là token chứ không đọc nguyên từ"
-    claims, _ = claims_from_turn(cau, [TOKEN], "phien-1")
-    assert [c.concept for c in claims] == ["token"]
-    assert claims[0].said == cau
-    assert claims[0].span_ids == ("[d1-p13-02]",)
+    claim, _ = page_claim([GIANG_CONTEXT], CONTEXT, "phien-1")
+    assert claim.concept == "d1-slide-hackathon:14"
+    assert claim.title == CONTEXT.title
+    assert all(cau in GIANG_CONTEXT for cau in claim.sentences)
+    assert claim.said in claim.sentences
+
+
+def test_giang_mot_trang_hai_buoi_thi_trang_sang_va_giu_ca_hai_cach_noi():
+    """Lỗi đo được 18/9: giảng context hai buổi, cả hai được chấm đủ, mà bản đồ
+    vẫn báo context còn tối — vì câu bị gán khoá "model" và "nghiệp". Theo trang
+    thì không có gì để đoán, và buổi sau CỘNG thêm cách nói chứ không ghi đè."""
+    g = KnowledgeGraph(student_id="nhan")
+    _absorb(g, CONTEXT, [GIANG_CONTEXT], "sufficient", "buoi-1")
+    lan_hai = "Model chỉ nhìn được một khoảng chữ nhất định mỗi lần, nhồi thêm thì chậm và đắt hơn."
+    _absorb(g, CONTEXT, [lan_hai], "sufficient", "buoi-2")
+
+    assert list(g.claims) == ["d1-slide-hackathon:14"]
+    dinh = g.claims["d1-slide-hackathon:14"]
+    assert dinh.times_taught == 2
+    assert lan_hai.rstrip(".") in dinh.sentences
+    assert any("bộ nhớ tạm" in cau for cau in dinh.sentences), "câu buổi đầu bị ghi đè"
+
+
+def test_trang_khac_khong_ghi_de_len_nhau():
+    """Lỗi đo được 18/9: câu RLHF ("cỗ máy đoán token dần biết nghe lời") đè
+    lên câu giải thích cơ chế của slide 12 vì cả hai chạm chữ "token"."""
+    g = KnowledgeGraph(student_id="nhan")
+    _absorb(g, CONTEXT, [GIANG_CONTEXT], "sufficient")
+    _absorb(g, TOKEN, ["Model cắt câu ra từng mảnh nhỏ, một chữ tiếng Việt có dấu có thể thành mấy mảnh token"],
+            "sufficient")
+    assert set(g.claims) == {CONTEXT.key, TOKEN.key}
+    assert "bộ nhớ tạm" in " ".join(g.claims[CONTEXT.key].sentences)
 
 
 def test_doc_lai_nguyen_van_tai_lieu_khong_thanh_dinh():
     """Chép lại slide không phải là hiểu — đúng luật bộ chấm đang dùng."""
-    claims, bo_qua = claims_from_turn(TOKEN[1], [TOKEN], "phien-1")
-    assert claims == []
+    claim, bo_qua = page_claim([CONTEXT.text], CONTEXT, "phien-1")
+    assert claim is None
     assert any("nguyên văn" in ly_do for _, ly_do in bo_qua)
 
 
-def test_cau_khong_neo_duoc_vao_nguon_thi_khong_thanh_dinh():
-    """Nói đúng chủ đề chung chung mà không chạm ô nguồn nào đã chấm là đã nói
-    tới thì không có gì để neo — đồ thị rỗng còn hơn đồ thị bịa."""
-    claims, bo_qua = claims_from_turn(
-        "Cái này thì em thấy nó cũng hay và khá là dễ hiểu", [TOKEN], "phien-1"
-    )
-    assert claims == []
-    assert bo_qua
+def test_cau_lac_de_va_cau_qua_ngan_bi_loai():
+    cau_lac_de = "Hôm qua mình đi ăn phở ở quán đầu ngõ rất ngon"
+    claim, bo_qua = page_claim([f"{GIANG_CONTEXT} {cau_lac_de}. Đúng rồi."], CONTEXT, "p")
+    assert cau_lac_de not in claim.sentences
+    ly_do = {l for _, l in bo_qua}
+    assert "không nói gì tới nội dung trang này" in ly_do
+    assert "quá ngắn để là một mệnh đề" in ly_do
 
 
-def test_mot_khai_niem_mot_dinh_trong_cung_mot_luot():
-    """Hai câu cùng nói về token thì giữ câu neo chắc hơn, không để câu sau đè
-    câu trước chỉ vì nó đứng sau."""
-    loi = (
-        "Model cắt văn bản thành các mảnh nhỏ gọi là token. "
-        "Tiếng Việt thì tốn token hơn tiếng Anh."
-    )
-    claims, bo_qua = claims_from_turn(loi, [TOKEN], "phien-1")
-    assert len(claims) == 1
-    assert "cắt văn bản" in claims[0].said
-    assert any("neo chắc hơn" in ly_do for _, ly_do in bo_qua)
-
-
-def test_canh_chi_sinh_ra_tu_lien_tu_cua_chinh_hoc_vien():
-    loi = "Model chỉ đoán token tiếp theo thôi. Nhờ vậy attention biết token nào đáng nhìn."
-    claims, _ = claims_from_turn(loi, [TOKEN, ATTENTION], "phien-1")
-    links = links_from_turn(loi, claims, "phien-1")
-    assert [(l.source, l.target, l.kind) for l in links] == [("token", "attention", "cause")]
-    # Bằng chứng phải là câu THẬT của học viên, để sau còn kiểm được.
-    assert links[0].evidence in loi
-
-
-def test_khong_co_lien_tu_thi_khong_co_canh():
-    """Nói hai ý cạnh nhau KHÔNG phải là nối chúng. Tự nối hộ thì đồ thị không
-    còn là bản đồ hiểu biết của học viên nữa."""
-    loi = "Model đoán token tiếp theo. Attention chấm điểm mức liên quan."
-    claims, _ = claims_from_turn(loi, [TOKEN, ATTENTION], "phien-1")
-    assert links_from_turn(loi, claims, "phien-1") == []
-
-
-def test_cung_khai_niem_o_hai_bai_nhap_vao_mot_dinh():
-    """Phạm vi xuyên tài liệu: đây là chỗ học viên thấy Day 1 dính vào Day 2."""
+def test_giu_toi_da_so_cau_moi_nhat():
     g = KnowledgeGraph(student_id="nhan")
-    g.absorb(Claim("token", "Model cắt chữ thành mảnh", ("[d1-p13-02]",), ("phien-1",)))
-    g.absorb(Claim("token", "Prompt dài thì tốn token", ("[d2-p09-01]",), ("phien-2",)))
+    for i in range(MAX_SENTENCES + 3):
+        _absorb(g, CONTEXT, [f"Context lần {i} là lượng chữ model nhìn thấy được mỗi lần trả lời"],
+                "sufficient", f"buoi-{i}")
+    cau = g.claims[CONTEXT.key].sentences
+    assert len(cau) == MAX_SENTENCES
+    assert cau[-1].startswith(f"Context lần {MAX_SENTENCES + 2}")
 
-    assert list(g.claims) == ["token"]
-    assert g.claims["token"].span_ids == ("[d1-p13-02]", "[d2-p09-01]")
-    assert g.claims["token"].times_taught == 2
+
+# --- Khi nào sáng, khi nào tắt ------------------------------------------------
 
 
-def test_day_sai_roi_tu_sua_thi_thay_chu_khong_chong_them():
-    """Case R02. Giữ cả hai là đồ thị tích lại chính hiểu lầm của học viên."""
+def test_chi_sang_khi_duoc_cham_la_du():
     g = KnowledgeGraph(student_id="nhan")
-    g.absorb(Claim("token", "Mỗi token là một từ", ("[d1-p13-02]",), ("phien-1",)))
-    viec = g.absorb(Claim("token", "À không, token là mảnh chữ", ("[d1-p13-02]",), ("phien-1",)))
-
-    assert viec == "sửa lời"
-    assert g.claims["token"].said == "À không, token là mảnh chữ"
-    assert g.claims["token"].times_taught == 1
+    _absorb(g, CONTEXT, [GIANG_CONTEXT], "incomplete")
+    assert g.claims == {}
 
 
-def test_canh_khong_noi_vao_dinh_chua_ton_tai():
+def test_lan_sau_chua_du_khong_xoa_cong_suc_buoi_truoc():
+    """Chưa đủ không có nghĩa là hiểu sai."""
     g = KnowledgeGraph(student_id="nhan")
-    g.absorb(Claim("token", "Model cắt chữ thành mảnh", ("[d1-p13-02]",), ("phien-1",)))
-    assert not g.connect(Link("token", "attention", "cause", "câu nào đó"))
+    _absorb(g, CONTEXT, [GIANG_CONTEXT], "sufficient", "buoi-1")
+    _absorb(g, CONTEXT, ["Context là cái gì đó của model"], "incomplete", "buoi-2")
+    assert CONTEXT.key in g.claims
+
+
+def test_giang_sai_thi_trang_tat_cung_moi_canh_cua_no():
+    """Học viên vừa cho thấy mình hiểu sai chính trang đó. Giữ lại thì buổi sau
+    học trò mang ra hỏi như thể họ đã dạy đúng."""
+    g = KnowledgeGraph(student_id="nhan")
+    _absorb(g, CONTEXT, [GIANG_CONTEXT], "sufficient")
+    _absorb(g, TOKEN, ["Model cắt chữ thành các mảnh nhỏ gọi là token để đọc"], "sufficient")
+    assert g.connect(Link(CONTEXT.key, TOKEN.key, "explained", "context đo bằng token", "p"))
+
+    _absorb(g, CONTEXT, ["Context càng dài thì model càng nhớ tốt, cứ dán hết vào"], "incorrect")
+    assert CONTEXT.key not in g.claims
     assert g.links == {}
 
 
-def test_hieu_sai_thi_dinh_bi_go_cung_moi_canh_cua_no():
-    """Đồ thị được phép rỗng, nhưng không được phép sai: một đỉnh sai nằm lại sẽ
-    được học trò mang ra hỏi ở buổi sau như thể học viên đã dạy đúng."""
+def test_phien_khong_neo_vao_trang_nao_thi_do_thi_dung_yen():
     g = KnowledgeGraph(student_id="nhan")
-    g.absorb(Claim("token", "Model cắt chữ thành mảnh", ("[d1-p13-02]",), ("phien-1",)))
-    g.absorb(Claim("attention", "Mỗi token nhìn lại token trước", ("[d1-p15-01]",), ("phien-1",)))
-    g.connect(Link("token", "attention", "cause", "nhờ vậy attention biết nhìn đâu"))
-
-    assert g.forget("token")
-    assert list(g.claims) == ["attention"]
-    assert g.links == {}
-    assert g.taught_span_ids == {"[d1-p15-01]"}
+    assert _absorb(g, None, [GIANG_CONTEXT], "sufficient") == {}
+    assert g.claims == {}
 
 
-# --- Nối vào một lượt chấm thật -----------------------------------------------
+# --- Cạnh ------------------------------------------------------------------
 
 
-def test_o_bi_danh_dau_noi_trai_thi_khai_niem_o_do_bi_go():
-    """Học viên vừa chứng minh mình hiểu sai chỗ đó. Giữ lại thì buổi sau học
-    trò mang ra hỏi như thể họ đã dạy đúng."""
-    import asyncio
+def test_canh_chi_noi_hai_trang_da_giang_duoc():
+    g = KnowledgeGraph(student_id="nhan")
+    _absorb(g, CONTEXT, [GIANG_CONTEXT], "sufficient")
+    assert not g.connect(Link(CONTEXT.key, TOKEN.key, "explained", "...", "p"))
 
-    from app.adapters.knowledge.local import InMemorySpanStore
-    from app.api.graph_sync import absorb_turn
-    from app.domain.span import Span
 
+def test_noi_a_voi_b_va_b_voi_a_la_mot_canh():
+    g = KnowledgeGraph(student_id="nhan")
+    _absorb(g, CONTEXT, [GIANG_CONTEXT], "sufficient")
+    _absorb(g, TOKEN, ["Model cắt chữ thành các mảnh nhỏ gọi là token để đọc"], "sufficient")
+    g.connect(Link(CONTEXT.key, TOKEN.key, "explained", "lần một", "p1"))
+    g.connect(Link(TOKEN.key, CONTEXT.key, "explained", "lần hai", "p2"))
+    assert len(g.links) == 1
+
+
+# --- Nhãn và khoá --------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("title", "nhan"),
+    [
+        ("Context: bàn làm việc có hạn của model", "Context"),
+        ("Sinh văn bản = đoán → nối vào câu → đoán tiếp", "Sinh văn bản"),
+        ("Hệ thống AI = Model + Context + Planning + Tools", "Hệ thống AI"),
+        ("Lịch sử AI 70 năm", "Lịch sử AI 70 năm"),
+        # Dòng thời gian: năm trơ trọi không nói được trang dạy gì.
+        ("1980: Hệ chuyên gia (expert system)", "1980 Hệ chuyên gia"),
+        ("AI IN ACTION - Day 1", "AI IN ACTION"),
+    ],
+)
+def test_nhan_ngan_lay_ten_trang(title, nhan):
+    assert short_label(title) == nhan
+
+
+def test_nhan_dai_bi_cat_o_ranh_gioi_tu():
+    nhan = short_label("Tìm đúng vấn đề trước khi tìm giải pháp")
+    assert nhan.endswith("…")
+    assert len(nhan) <= LABEL_CHARS + 1
+
+
+def test_khoa_trang_doc_nguoc_duoc_ca_khi_ma_bo_slide_co_gach():
+    assert split_key(page_key("d1-slide-hackathon", 14)) == ("d1-slide-hackathon", 14)
+
+
+# --- Lưu trữ và câu hỏi bắc cầu -----------------------------------------------
+
+
+def test_luu_roi_doc_lai_giu_nguyen_moi_cau(tmp_path):
     async def main():
-        store = InMemorySpanStore([Span(TOKEN[0], TOKEN[1]), Span(*ATTENTION)])
+        store = JsonGraphStore(tmp_path / "g.json")
         g = KnowledgeGraph(student_id="nhan")
-        g.absorb(Claim("token", "Mỗi token là một từ", (TOKEN[0],), ("phien-0",)))
-
-        await absorb_turn(
-            g,
-            store,
-            student_text="Mỗi token là một từ mà, em nghĩ vậy",
-            evidence=[{"span_id": TOKEN[0], "covered_by_student": True,
-                       "contradicted_by_student": True}],
-            session_id="phien-1",
-        )
-        assert "token" not in g.claims
+        _absorb(g, CONTEXT, [GIANG_CONTEXT], "sufficient")
+        await store.save(g)
+        doc = await store.load("nhan")
+        assert doc.claims == g.claims
 
     asyncio.run(main())
 
 
-def test_chi_o_da_duoc_cham_la_da_noi_toi_moi_sinh_dinh():
-    import asyncio
+def test_doc_duoc_file_ghi_truoc_khi_co_truong_sentences(tmp_path):
+    import json
 
-    from app.adapters.knowledge.local import InMemorySpanStore
-    from app.api.graph_sync import absorb_turn
-    from app.domain.span import Span
-
-    async def main():
-        store = InMemorySpanStore([Span(TOKEN[0], TOKEN[1]), Span(*ATTENTION)])
-        g = KnowledgeGraph(student_id="nhan")
-        bao_cao = await absorb_turn(
-            g,
-            store,
-            student_text="Model cắt chữ thành các mảnh nhỏ gọi là token chứ không đọc nguyên từ",
-            # Ô attention CHƯA được nói tới: không được sinh đỉnh nào cho nó.
-            evidence=[
-                {"span_id": TOKEN[0], "covered_by_student": True, "contradicted_by_student": False},
-                {"span_id": ATTENTION[0], "covered_by_student": False, "contradicted_by_student": False},
-            ],
-            session_id="phien-1",
-        )
-        assert list(g.claims) == ["token"]
-        assert bao_cao["đã làm"] == {"thêm mới": ["token"]}
-
-    asyncio.run(main())
+    path = tmp_path / "g.json"
+    path.write_text(json.dumps({"nhan": {"claims": [
+        {"concept": "token", "said": "câu cũ", "span_ids": [], "sessions": ["p"]}
+    ], "links": []}}), encoding="utf-8")
+    g = asyncio.run(JsonGraphStore(path).load("nhan"))
+    assert g.claims["token"].sentences == ("câu cũ",)
 
 
-def test_o_cu_bi_danh_sai_khong_xoa_y_vua_giang_lai_dung():
-    """Một đỉnh gom nhiều ô qua nhiều buổi. Chỉ cần một ô CŨ bị đánh dấu nói
-    trái mà xoá luôn mệnh đề họ vừa giảng lại đúng ở ô khác thì học viên mất
-    thành quả vì một lỗi họ đã sửa xong."""
-    import asyncio
-
-    from app.adapters.knowledge.local import InMemorySpanStore
-    from app.api.graph_sync import absorb_turn
-    from app.domain.span import Span
-
-    async def main():
-        store = InMemorySpanStore([Span(TOKEN[0], TOKEN[1]), Span(*ATTENTION)])
-        g = KnowledgeGraph(student_id="nhan")
-        g.absorb(Claim("token", "Mỗi token là một từ", (ATTENTION[0],), ("phien-0",)))
-
-        bao_cao = await absorb_turn(
-            g,
-            store,
-            student_text="Máy băm câu ra thành từng miếng nhỏ, mỗi miếng đó người ta gọi là token",
-            evidence=[
-                # Vừa giảng lại ĐÚNG ở ô này…
-                {"span_id": TOKEN[0], "covered_by_student": True, "contradicted_by_student": False},
-                # …trong khi ô cũ vẫn bị đánh dấu là nói trái.
-                {"span_id": ATTENTION[0], "covered_by_student": False, "contradicted_by_student": True},
-            ],
-            session_id="phien-1",
-        )
-        assert "token" in g.claims, bao_cao
-        assert "gỡ" not in bao_cao["đã làm"]
-
-    asyncio.run(main())
+def test_bac_cau_dua_ten_trang_va_cau_cua_hoc_vien():
+    g = KnowledgeGraph(student_id="nhan")
+    _absorb(g, CONTEXT, [GIANG_CONTEXT], "sufficient")
+    da_day = known_claims(g, ["[d1-slide-hackathon-p99-01]"])
+    assert da_day == [{"concept": CONTEXT.title, "said": g.claims[CONTEXT.key].said}]

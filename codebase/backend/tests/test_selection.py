@@ -81,3 +81,19 @@ def test_kho_chua_ca_bo_slide_de_trich_dan_sang_o_ben_canh_van_tra_ra():
     _, store = lesson_from_selection(DECK, ["[d-p20-03]"])
     neighbour = asyncio.run(store.get("[d-p20-06]"))
     assert "cỗ máy đoán token" in neighbour.text
+
+
+def test_vung_chon_mang_ma_bo_slide_la_thi_bao_loi_chu_khong_cham_bai_khac(monkeypatch):
+    """Đo được 18/9: link mang mã bộ slide sai vẫn mở phiên bình thường, rồi chấm
+    học viên theo trang 20 của bài mặc định — giảng slide này, bị hỏi về slide
+    khác, không có dấu hiệu gì là đã lệch."""
+    from pathlib import Path
+
+    import pytest
+
+    from app import main
+
+    monkeypatch.setattr(main, "_deck_paths", lambda: {"d1-slide-hackathon": Path("d1.pdf")})
+    monkeypatch.setattr(main, "_find_deck", lambda slug: None)
+    with pytest.raises(ValueError, match="thư viện"):
+        main._lesson(["[d1-slide-hackathon-p12-01]"], "d1")
