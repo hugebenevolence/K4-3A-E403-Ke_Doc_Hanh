@@ -125,42 +125,34 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
   | **G5** Hợp chuẩn mực xã hội | Học trò xưng "mình – bạn", nói tiếng Việt, tiếng Anh chỉ cho thuật ngữ; chữ HOA do model sinh ra bị hạ về thường (`tame_shouting`). Mic chỉ thu khi học viên giữ nút nói, không tự thu giọng người khác trong lớp. |
   | **PAIR — Explainability + Trust** | Thẻ nguồn chỉ vị trí, **cố ý không trích nguyên văn**. Đo trên LLM thật: trích dẫn hiện ngay dưới câu hỏi ngược chính là đáp án. |
 
-- **§4c. Trí nhớ của học trò — knowledge graph** *(**đã có trong bản build**, 18/9)*
+- **§4c. Trí nhớ của học trò — bản đồ hiểu biết** *(đỉnh **đã có trong bản build** 18/9; cạnh **chưa**)*
 
-  **Chỗ hổng đang có.** Học trò mất trí nhớ sau mỗi phiên: nó sinh ra ngây thơ, được dạy, rồi quên sạch. Học viên không thật sự *dạy* nó, chỉ bị nó kiểm tra — mất đúng thứ làm học-bằng-cách-dạy hiệu quả, là việc người ta quan tâm tới học trò của mình hơn tới điểm của mình (protégé effect, §3).
+  **Chỗ hổng.** Học trò mất trí nhớ sau mỗi phiên: sinh ra ngây thơ, được dạy, rồi quên sạch. Học viên không thật sự *dạy* nó, chỉ bị nó kiểm tra — mất protégé effect, cơ chế chính của D3 (§3).
 
-  **Phạm vi: xuyên tài liệu.** Đồ thị là của **một học viên trên toàn bộ tài liệu môn học**, không bó trong một bài. Cùng một khái niệm được giảng ở hai bài khác nhau thì nối vào cùng một đỉnh, kèm cả hai `span_id` nguồn. Đây là chỗ giá trị thật: học viên thấy được thứ mình học ở Day 1 dính vào thứ ở Day 2 chỗ nào — thứ mà đọc từng slide rời không bao giờ thấy.
+  **Hai luật, cùng một động từ — "giảng được":**
+  - **Đỉnh = một trang slide học viên đã giảng được.** Sáng khi bộ chấm xác nhận lời giảng **đủ**; mang **nguyên văn mọi câu** họ đã nói về trang đó qua các buổi (tối đa 6 câu mới nhất). Giảng **sai** trang đó thì đỉnh tắt cùng mọi cạnh của nó; giảng **thiếu** thì không đổi gì — chưa đủ không có nghĩa là hiểu sai.
+  - **Cạnh = một mối nối học viên đã giảng được.** Chọn hai trang đã sáng, giải thích vì sao chúng liên quan; bộ chấm đối chiếu với cả hai trang, đủ thì cạnh hiện ra kèm câu nối của họ. Không cạnh nào do hệ thống suy ra. Đây là chỗ *xuyên tài liệu* có nghĩa: nối Context của Day 1 với Context của Day 2 là việc học viên tự làm và tự giải thích.
 
-  **Hiển thị: đồ thị xem được, kiểu Obsidian.** Ngoài lớp phủ trên dàn ý, có một khung nhìn đồ thị riêng: đỉnh là khái niệm bạn đã giảng được, cạnh là liên hệ bạn đã tự nối, độ đậm theo số lần bạn giảng lại được. Vùng tối trên đồ thị = phần bạn chưa giảng nổi. Bấm vào đỉnh thì mở đúng ô slide và câu bạn đã nói về nó. Mỗi đỉnh cũng chính là một ghi chú bằng lời của chính bạn.
+  Không có gì vào đồ thị nếu không truy ngược được về một câu **học viên** đã nói: câu chép gần nguyên văn slide, câu dưới 4 từ, câu không chạm nội dung trang đều bị loại, bằng luật tất định (`domain/graph.py`, dùng lại `is_verbatim_paste` của bộ chấm).
 
-  **Cấu trúc.** Một đồ thị tri thức cho mỗi học viên, gom theo môn:
-  - **Đỉnh** = một mệnh đề học viên đã nói ra, gắn `span_id` của ô slide, câu nguyên gốc của họ, và phiên nào.
-  - **Cạnh** = quan hệ giữa hai mệnh đề, **chỉ tạo khi chính học viên nối chúng trong lời giảng** ("vì… nên…", "sau đó…", "khác với…").
-  - Trạng thái mỗi ô slide suy ra từ đồ thị: học trò đã hiểu ô này nhờ bạn, hay còn tối.
+  **Căn cứ cho từng phần:**
 
-  **Luật cưỡng chế bằng code, không bằng prompt.** Không đỉnh hay cạnh nào được vào đồ thị nếu không truy ngược được về một câu học viên đã nói — dùng lại đúng `_heard()` và `leaks_answer()` đang chạy. Đây là ranh giới làm nó khác ChatGPT: model *biết* RLHF là gì, nhưng **học trò của bạn thì không, cho tới khi bạn giảng**. [TeachYou (CHI 2024)](https://dl.acm.org/doi/10.1145/3613904.3642349) gọi "confining the knowledge level of LLM agents" là bài toán khó nhất của teachable agent; ta giải bằng luật tất định chứ không bằng lời dặn.
+  | Phần | Căn cứ | Ràng buộc nó đặt lên thiết kế |
+  |---|---|---|
+  | Học trò nhớ và bắc cầu sang điều bạn dạy buổi trước | Betty's Brain (Biswas và cộng sự): nhóm dạy lại học tốt hơn nhóm được dạy, rõ nhất ở học viên yếu. [TeachYou (CHI 2024)](https://dl.acm.org/doi/10.1145/3613904.3642349): agent hỏi "vì sao / thế nào" đẩy từ kể lại sang tích hợp | Học trò chỉ được biết đúng điều học viên đã nói |
+  | Cho người học xem mô hình máy có về họ (Open Learner Model) | [Long & Aleven 2017](https://link.springer.com/article/10.1007/s11257-016-9186-6): thí nghiệm 2×2, 62 học sinh, nhóm được xem mô hình học tốt hơn rõ rệt; cơ chế là tự đánh giá rồi đối chiếu với mô hình | **Mô hình phải đúng** — lý do đỉnh là trang (bộ chấm biết chắc) chứ không phải khái niệm đoán từ câu nói |
+  | Bản đồ khái niệm | Meta-analysis [Schroeder và cộng sự 2018](https://link.springer.com/article/10.1007/s10648-017-9403-9), 142 hiệu ứng: **tự dựng bản đồ g = 0,72**, chỉ xem g = 0,43 | Cạnh phải do học viên **tự nối và tự giải thích**, không để máy vẽ sẵn |
+  | Khung nhìn đồ thị kiểu Obsidian | Không có bằng chứng học tập; bị phê bình "mở một lần rồi thôi" | Bản đồ phải là **chỗ làm việc**: bấm đỉnh tối → giảng trang này; chọn hai đỉnh sáng → nối hai trang |
 
-  **Học trò dùng đồ thị để hỏi.** Câu hỏi ngược được phép bắc cầu sang mệnh đề học viên đã dạy ở phiên trước: *"Bạn dạy mình là model chỉ đoán chữ tiếp theo thôi — vậy cái xếp hạng này làm nó đổi kiểu gì?"*. Câu hỏi này không tutor nào hỏi được vì nó dựng từ chính lời học viên, và nó ép nối các mảnh rời — đúng bước từ *knowledge-telling* sang *knowledge-building* mà TeachYou chỉ ra là chỗ học-bằng-cách-dạy hay bị kẹt.
-
-  **Sửa được.** Học viên dạy sai rồi tự sửa (case R02) thì mệnh đề cũ bị thay, không chồng thêm — nếu không, đồ thị tích lại chính hiểu lầm của họ.
-
-  **Đã build được gì.** `domain/graph.py` giữ toàn bộ luật (đỉnh, cạnh, gộp
-  xuyên tài liệu, sửa lời, gỡ khi hiểu sai) và không import SDK nào; `api/graph_sync.py`
-  nối nó vào từng lượt chấm; `JsonGraphStore` lưu ra `var/graphs.json`; `GET /api/graph`
-  trả đồ thị kèm vùng tối; trang `/graph` vẽ bản đồ. Câu hỏi ngược đã bắc cầu được
-  sang thứ học viên dạy ở buổi trước — và khi đồ thị rỗng thì nó không đổi gì so
-  với trước, nên **lượt đo 23/26 vẫn so sánh được** (harness chạy trên tài khoản
-  không có đồ thị).
+  **Đo trên phiên thật (18/9).** 7 phiên lái qua đúng đường WebSocket người dùng đi (gõ chữ, LLM thật, server và tài khoản riêng): giảng đủ, giảng thiếu, giảng Day 1 rồi Day 2 cùng khái niệm, giảng sai, dán nguyên văn slide.
+  - *Bản đầu* đoán khái niệm từ câu nói: 7 đỉnh, chỉ 3 khoá có nghĩa (`sinh`, `luyện`, `nghiệp` là nửa chữ; `model` hút mọi câu). Câu sau ghi đè câu trước: câu RLHF xoá câu cơ chế của slide 12, câu Day 2 xoá toàn bộ phần Context của Day 1. Học viên giảng Context hai lần, cả hai được chấm đủ, mà bản đồ vẫn báo **Context còn tối**. Vành tối lấy từ danh sách thuật ngữ nhận dạng giọng nói nên có cả `arxiv`, `kimi`.
+  - *Bản theo trang*, chạy lại đúng 7 phiên đó: **4 đỉnh = đúng 4 trang được chấm đủ**, mỗi đỉnh giữ mọi câu của học viên về trang đó; trang token (một lần chép slide, một lần giảng sai) không sáng. Vành tối là các trang thật còn giảng được, lọc bằng đúng luật mở phiên (`teachable_words`).
 
   **Chưa làm, tự khai:**
-  - Cạnh chỉ sinh trong PHẠM VI MỘT LƯỢT. Học viên nối hai ý qua hai lượt khác
-    nhau thì không thành cạnh.
-  - Khoá khái niệm suy bằng luật (nhãn đầu ô → tần suất thuật ngữ → từ nội dung
-    chung). Câu giảng thuần Việt không chạm thuật ngữ nào sẽ ra khoá kém đẹp
-    ("đoán", "trước") — vẫn tất định và vẫn gộp được, chỉ là tên đỉnh xấu.
-  - Chưa có lớp phủ trạng thái trên dàn ý; vùng tối mới hiện ở trang đồ thị.
-
-  **Rủi ro + điều kiện build.** Buổi đầu đồ thị rỗng nên không khác bản hiện tại; demo phải seed sẵn một tài khoản đã dạy vài slide và **nói rõ là seed**. Chỉ build sau khi `validation/` có đủ 5 người ngoài (R6 — 8 điểm đang bỏ trống), vì đây là phần mở rộng còn R6 là điểm chắc.
+  - **Cạnh "nối hai trang bằng lời"** chưa có trong bản build — bản đồ hiện chỉ có đỉnh.
+  - Câu hỏi bắc cầu **chưa được golden set đo**: golden set chạy trên tài khoản không có đồ thị, nên 88% không nói gì về nó.
+  - Chưa có lớp phủ trạng thái trên dàn ý; vùng tối mới hiện ở trang `/graph`.
+  - Buổi đầu đồ thị rỗng; demo phải dùng tài khoản đã giảng sẵn vài trang và **nói rõ điều đó**.
 
 ## §5. Kiểu lỗi — 4 lớp chỗ khó + kịch bản
 
@@ -329,3 +321,4 @@ So trên 6 trục, chi tiết và nguồn ở [`eval/evidence/landscape.md`](eva
 | 18/9 01:30 | Rà soát chéo toàn bộ đợt sửa: trả bộ lọc lộ đáp án về xét theo từng lượt | Nới "đã nói" ra cả buổi làm guard yếu dần: một từ khoá buột ra ở lượt 1 cho phép agent nói thẳng nó ở lượt 3. "Không lộ đáp án" là điều kiện cứng, không đánh đổi khi chưa đo được |
 | 18/9 04:15 | Trí nhớ xuyên buổi dạng knowledge graph (§4c): đỉnh là mệnh đề học viên tự nói, cạnh chỉ sinh từ liên từ của chính họ, gộp xuyên tài liệu, gỡ khi hoá ra hiểu sai; trang `/graph` vẽ bản đồ, câu hỏi ngược bắc cầu sang buổi trước | Học trò quên sạch sau mỗi phiên nên học viên không thật sự *dạy* nó, chỉ bị nó kiểm tra — mất protégé effect, là cơ chế chính của D3 (§3) |
 | 18/9 02:10 | Bắt bộ chấm chép đúng mã đoạn của nguồn (mô tả ngay trong schema), và báo lỗi to khi một lượt mất sạch căn cứ | Lượt đo 3× bắt được: model tự đặt mã `s1..s4` thay cho mã có sẵn, bộ lọc mã bịa ném sạch evidence, F01 và F02 trượt 0/3 vì bộ chấm hỏng chứ không phải vì lời giảng. Sau khi sửa: cả hai đạt 3/3 |
+| 18/9 10:10 | Đỉnh của bản đồ đổi từ khái niệm đoán từ câu nói sang **trang slide đã giảng được**; giữ mọi câu thay vì ghi đè; vành tối là trang thật còn giảng được; slug bộ slide sai thì báo lỗi thay vì lặng lẽ chấm theo bài khác | 7 phiên thật qua WebSocket: bản đồ báo Context còn tối dù đã giảng đủ hai lần; 4/7 khoá là nửa chữ hoặc từ trục; câu sau xoá câu trước (§4c) |
