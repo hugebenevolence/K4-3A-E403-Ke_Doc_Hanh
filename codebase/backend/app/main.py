@@ -237,7 +237,21 @@ def _find_deck(slug: str | None) -> Deck | None:
     if slug is None and len(paths) == 1:
         slug = next(iter(paths))
     path = paths.get(slug or "")
-    return _deck(str(path), path.stat().st_mtime) if path else None
+    return _deck(str(path), path.stat().st_mtime, _figures_mtime()) if path else None
+
+
+def _figures_mtime() -> float:
+    """Thời điểm sửa file mô tả hình, để nó cũng nằm trong khoá cache bộ slide.
+
+    Mô tả hình sinh dần ở tiến trình khác (scripts/describe_figures.py) và một
+    lượt chạy cả thư viện mất hàng giờ. Khoá cache chỉ theo mtime của PDF thì
+    mô tả mới nằm im trong file cho tới lần khởi động lại sau — đúng lúc người
+    ta đang thử thì trang có hình vẫn hỏi vu vơ như cũ.
+    """
+    try:
+        return settings.figures_file.stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 DECK_CACHE = 64
@@ -248,9 +262,9 @@ lần nào mở thư viện cũng chờ chừng đó."""
 
 
 @lru_cache(maxsize=DECK_CACHE)
-def _deck(path: str, mtime: float) -> Deck:
+def _deck(path: str, mtime: float, figures_mtime: float = 0.0) -> Deck:
     # Đọc cả bộ slide mất vài giây; cache theo thời điểm sửa file để thay slide
-    # là tự đọc lại, không phải khởi động lại server.
+    # HOẶC thêm mô tả hình là tự đọc lại, không phải khởi động lại server.
     try:
         descriptions = json.loads(settings.figures_file.read_text(encoding="utf-8"))
     except (OSError, ValueError):
