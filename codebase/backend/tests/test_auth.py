@@ -32,6 +32,11 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "auth_secret", "bi-mat-test")
     monkeypatch.setattr(settings, "session_log_file", tmp_path / "s.jsonl")
     monkeypatch.setattr(settings, "profile_file", tmp_path / "p.json")
+    # Test này chỉ kiểm cổng đăng nhập, không kiểm slide: đọc thư mục slide thật
+    # trong .env của máy đang chạy thì thời gian test đổi theo máy — đo được, từ
+    # 2 bộ lên 28 bộ slide là test này từ 0,1 giây thành 35 giây.
+    monkeypatch.setattr(settings, "slides_dir", tmp_path / "khong-co-slide")
+    monkeypatch.setattr(settings, "slides_pdf", None)
     return TestClient(app)
 
 
