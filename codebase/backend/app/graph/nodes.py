@@ -9,9 +9,11 @@ from __future__ import annotations
 import logging
 import re
 
+from app.domain.graph import denies_relation
 from app.domain.leak import (
     about_source,
     confirms_answer,
+    content_terms,
     leaked_terms,
     leaks_answer,
     looks_english,
@@ -34,7 +36,7 @@ log = logging.getLogger(__name__)
 
 GRADER_VERSION = "v4"
 GRADER_CODE_VERSION = "v2"
-GRADER_LINK_VERSION = "v2"
+GRADER_LINK_VERSION = "v3"
 PERSONA_VERSION = "v2"
 OPENER_VERSION = "v2"
 
@@ -223,7 +225,23 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
             else:
                 log.warning("Bỏ %d mã đoạn không có thật do model bịa: %s", len(bogus), bogus)
 
-        verdict = decide(cited, out.contradiction, verbatim=verbatim, thin=thin)
+        # Phiên NỐI: nhãn SAI chỉ được dựng trên một ý cụ thể bị đánh cờ nói
+        # trái, không dựng trên ô văn xuôi `contradiction`. Ô đó vốn là tín hiệu
+        # yếu (lý do ta đã chuyển sang cờ theo từng ý), và ở phiên nối nó bắn
+        # đúng chỗ tệ nhất: học viên nói "hai trang này chả liên quan", bộ chấm
+        # — vốn đang đi tìm một mối nối — ghi đó là nói trái, và một lập trường
+        # hợp lệ bị chấm là hiểu sai. Đo được thật 18/9, phiên của member5.
+        link = bool(state.get("link"))
+        contradiction = out.contradiction
+        if link and not any(e.contradicted_by_student for e in cited):
+            if contradiction.strip():
+                log.warning(
+                    "Phiên nối: bỏ nhãn SAI không có ý nào bị đánh cờ nói trái — %s",
+                    contradiction.strip()[:160],
+                )
+            contradiction = ""
+
+        verdict = decide(cited, contradiction, verbatim=verbatim, thin=thin)
 
         # Bộ dò bất đồng: bộ chấm vừa nói "đủ" nhưng chính nó cũng vừa viết ra
         # một chỗ hổng. Prompt dặn rõ "nói đủ mọi ý thì gap_summary phải RỖNG",
@@ -248,6 +266,17 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
         # thế nào đến áp suất khí quyển".
         if verbatim:
             gap = "học viên đang đọc lại gần nguyên văn tài liệu, chưa diễn đạt bằng lời mình"
+        elif link and verdict is not Verdict.SUFFICIENT and denies_relation(student_text):
+            # Học viên vừa nêu một LẬP TRƯỜNG: hai trang không dính gì tới nhau.
+            # Câu hỏi ngược phải đi vào đúng lập trường đó — vì sao họ thấy vậy —
+            # chứ không lờ đi rồi hỏi tiếp như thể họ chưa nói gì. Và không được
+            # khẳng định là hai trang CÓ liên quan: đó là nối hộ, và có khi còn
+            # sai, vì không phải cặp trang nào cũng nối với nhau được.
+            gap = (
+                "học viên cho rằng hai trang không liên quan gì tới nhau; hỏi xem vì "
+                "sao họ nghĩ vậy — không gợi ý chỗ hai trang chạm nhau, và cũng không "
+                "khẳng định là chúng có liên quan"
+            )
         elif out.gap_summary.strip():
             gap = out.gap_summary
         elif thin:
@@ -325,6 +354,18 @@ _CONTINUES = (
 )
 
 
+# Phiên NỐI không có "phần này", "ý bạn chắc nhất" hay "phần tiếp theo": thứ
+# đang bàn là quan hệ giữa HAI trang học viên đã giảng được rồi. Dùng câu của
+# phiên giảng một trang ở đây là hỏi lạc đề — đo được thật 18/9: học viên nói
+# "hai trang chả liên quan", học trò đáp "còn chỗ nào trong phần này mà bạn thấy
+# quan trọng nữa không?". Không câu nào dưới đây giả định hai trang CÓ nối được.
+_LINK_REANCHORS = (
+    "Mình chưa hình dung được hai trang đó đứng cạnh nhau thế nào. Theo bạn, cái này có làm gì thay đổi ở cái kia không?",
+    "Bạn thử nghĩ một tình huống mà cả hai cùng xuất hiện xem — có không, hay chúng tách hẳn nhau?",
+    "Nếu phải nói trong một câu thì bạn sẽ đặt hai trang đó cạnh nhau thế nào? Thấy không dính gì thì nói vì sao cũng được.",
+)
+
+
 def _reanchor(state: TeachBackState, heard: bool = False) -> str:
     """Câu hỏi dùng khi viết lại vẫn lộ đáp án.
 
@@ -337,7 +378,10 @@ def _reanchor(state: TeachBackState, heard: bool = False) -> str:
     câu tóm) chứ không phải "bạn giải thích thêm được không" chung chung.
     """
     asked = len(state.get("asked_questions") or [])
-    variants = _CONTINUES if heard else _REANCHORS
+    if state.get("link"):
+        variants = _LINK_REANCHORS
+    else:
+        variants = _CONTINUES if heard else _REANCHORS
     return variants[asked % len(variants)]
 
 
@@ -362,7 +406,12 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
         # để model tự viết lúc này là nó bám theo chuyện lạc đề và biến câu hỏi
         # chen thành chủ đề buổi học — mà gọi thì vẫn mất tiền.
         joined = " ".join(s.text for s in source)
-        if off_topic(state["student_text"], joined):
+        link = bool(state.get("link"))
+        # "Hai trang này chả liên quan" trong phiên nối là một câu trả lời, không
+        # phải chuyện ngoài lề — đáp bằng "cái đó mình chịu" là lờ đi đúng điều
+        # học viên vừa khẳng định.
+        stance = link and denies_relation(state["student_text"])
+        if not stance and off_topic(state["student_text"], joined):
             log.warning("Lượt này lạc đề, không hỏi ngược theo nó")
             return {
                 "agent_says": _OFF_TOPIC,
@@ -444,12 +493,21 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
         # đầu là xong — mất sạch ý nghĩa của việc hỏi ngược.
         uncovered = _uncovered_text(state, source)
         visible = state.get("concept") or ""
+        # Bộ lọc lộ đáp án trừ đi những gì học viên ĐÃ tự nói. Ở phiên nối,
+        # nội dung của hai trang chính là thứ họ đã giảng được ở buổi trước — lời
+        # họ nằm sẵn trong đồ thị. Không tính phần đó thì khi họ chưa nối được gì,
+        # TOÀN BỘ chữ của hai trang thành "phần còn thiếu", câu hỏi nào nhắc tới
+        # RLHF hay context cũng bị coi là lộ, và học trò rơi về câu dự phòng.
+        # Thứ không được nói hộ ở phiên nối là MỐI NỐI, không phải hai trang.
+        da_noi = state["student_text"]
+        if link:
+            da_noi += " " + " ".join(c["said"] for c in state.get("known_claims") or [])
         # Giữ lại phần "mình hiểu là" của lần viết đầu: nếu câu hỏi phải thay bằng
         # câu dự phòng thì học viên vẫn thấy mình được nghe, thay vì nhận một câu
         # chung chung sau khi đã giảng được kha khá.
         first_heard = out.understood
-        if uncovered and leaks_answer(out.question, uncovered, state["student_text"], visible):
-            leaked = leaked_terms(out.question, uncovered, state["student_text"], visible)
+        if uncovered and leaks_answer(out.question, uncovered, da_noi, visible):
+            leaked = leaked_terms(out.question, uncovered, da_noi, visible)
             log.warning("Câu hỏi ngược làm lộ đáp án (%s), hỏi lại", sorted(leaked))
             out = await llm.structured(
                 system=system,
@@ -461,7 +519,7 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
                 schema=FollowupOutput,
                 tier=ModelTier.STANDARD,
             )
-            if leaks_answer(out.question, uncovered, state["student_text"], visible):
+            if leaks_answer(out.question, uncovered, da_noi, visible):
                 log.warning("Viết lại vẫn lộ, dùng câu hỏi neo lại khái niệm")
                 out = FollowupOutput(question=_reanchor(state, heard=bool(first_heard)), understood=first_heard, cites_span_id=None)
 
@@ -480,7 +538,7 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
                 tier=ModelTier.STANDARD,
             )
             if confirms_answer(out.question) or (
-                uncovered and leaks_answer(out.question, uncovered, state["student_text"], visible)
+                uncovered and leaks_answer(out.question, uncovered, da_noi, visible)
             ):
                 log.warning("Viết lại vẫn là câu xác nhận hoặc vẫn lộ, dùng câu hỏi neo lại")
                 out = FollowupOutput(question=_reanchor(state, heard=bool(first_heard)), understood=first_heard, cites_span_id=None)
@@ -529,7 +587,13 @@ def make_followup_node(llm: LLMClient, spans: SpanStore):
         return {
             "agent_says": out.question,
             "agent_understood": _heard(
-                out.understood, uncovered, state["student_text"], visible, state.get("vocabulary")
+                out.understood,
+                uncovered,
+                da_noi,
+                visible,
+                state.get("vocabulary"),
+                said=_said_this_session(state),
+                earlier=[c["said"] for c in state.get("known_claims") or []],
             ),
             "cites_span_id": cites,
             "asked_questions": [out.question],
@@ -549,12 +613,28 @@ def _latin_words(text: str) -> list[str]:
     return _LATIN.findall(text or "")
 
 
+def _said_this_session(state: TeachBackState) -> str:
+    """Mọi lời học viên đã nói TRONG PHIÊN NÀY, kể cả lượt vừa xong.
+
+    Ở node hỏi ngược, `said_before` đã gồm luôn lượt hiện tại (reducer cộng nó
+    vào ngay sau node chấm — xem graph/state.py), nên chỉ thêm `student_text`
+    khi nó chưa nằm ở cuối, để khỏi đếm hai lần.
+    """
+    said = list(state.get("said_before") or [])
+    if not said or said[-1] != state["student_text"]:
+        said.append(state["student_text"])
+    return " ".join(said)
+
+
 def _heard(
     points: list[str],
     uncovered: str,
     student_text: str,
     visible: str = "",
     vocabulary: list[str] | None = None,
+    *,
+    said: str | None = None,
+    earlier: list[str] | None = None,
 ) -> list[str]:
     """Chỉ giữ những ý "mình nghe hiểu" không nói hộ phần học viên còn thiếu.
 
@@ -584,6 +664,28 @@ def _heard(
         if uncovered and leaks_answer(point, uncovered, student_text, visible):
             log.warning("Bỏ ý 'mình hiểu là' vì nói hộ phần còn thiếu: %s", point)
             continue
+        # "Mình hiểu là" nghĩa là "BẠN VỪA NÓI thế này". Một dòng không trùng NỔI
+        # MỘT từ nội dung nào với lời học viên trong phiên này thì không thể là
+        # điều họ vừa nói — nó được lấy từ chỗ khác. Đo được thật 18/9: học viên
+        # nói "hai trang chả liên quan", dòng hiện ra lại là câu RLHF họ dạy từ
+        # buổi TRƯỚC (persona được đưa đồ thị để bắc cầu, và chép nó sang đây).
+        # Ngưỡng một từ là cố ý thấp: đo trên 55 dòng thật của golden set, dòng
+        # bám lời học viên yếu nhất vẫn trùng một từ; dòng lỗi kia trùng không từ.
+        if said is not None and not content_terms(point) & content_terms(said):
+            log.warning("Bỏ ý 'mình hiểu là' vì không bám vào lời nào học viên nói phiên này: %s", point)
+            continue
+        # Luật một-từ ở trên hở đúng chỗ đắt nhất: học viên dùng vài từ chung
+        # của khoá ("model", "trả lời") là câu chép từ buổi trước lọt qua. Gốc
+        # lỗi là persona được đưa những câu học viên đã dạy (để bắc cầu trong
+        # CÂU HỎI) rồi chép sang phần này. Nên so thẳng: dòng nào giống một câu
+        # buổi trước HƠN giống lời vừa nói thì là chép, không phải nghe.
+        if said is not None and earlier:
+            tu = content_terms(point)
+            bay_gio = len(tu & content_terms(said))
+            truoc_do = max(len(tu & content_terms(c)) for c in earlier)
+            if truoc_do > bay_gio:
+                log.warning("Bỏ ý 'mình hiểu là' vì chép từ lời buổi trước chứ không phải vừa nói: %s", point)
+                continue
         kept.append(point)
     return kept[:MAX_UNDERSTOOD]
 

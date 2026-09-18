@@ -244,6 +244,29 @@ def learner_sentences(
     return list(dict.fromkeys(giu)), bo
 
 
+# Cách người Việt nói "hai cái này chẳng dính gì tới nhau". Cố ý ngắn và cụ thể:
+# chữ "liên quan" đứng một mình thì học viên vẫn dùng khi đang NỐI ("nó liên
+# quan ở chỗ…"), nên chỉ bắt khi đi liền với một từ phủ định.
+_KHONG_LIEN_QUAN = re.compile(
+    r"\b(không|chả|chẳng|đâu có|ko|k)\s+(hề\s+)?(liên\s+quan|dính|dính dáng|liên hệ|"
+    r"có gì chung|có gì liên quan|nối|kết nối)",
+    re.IGNORECASE,
+)
+
+
+def denies_relation(text: str) -> bool:
+    """Học viên đang khẳng định hai trang KHÔNG liên quan gì tới nhau.
+
+    Đó là một LẬP TRƯỜNG, không phải một câu trả lời sai. Nguồn của hai trang
+    hiếm khi nói chúng có liên quan hay không, nên không có gì để nó trái với.
+    Đo được thật 18/9: "Tôi thấy nó chả liên quan cái chó gì cả" bị chấm là
+    NÓI SAI, rồi học trò đáp bằng một câu dự phòng về "phần này" và nhắc lại
+    một ý học viên nói từ buổi trước — ba chỗ hỏng liền, không chỗ nào nghe
+    vào điều người ta vừa nói.
+    """
+    return bool(_KHONG_LIEN_QUAN.search(" ".join((text or "").split())))
+
+
 def link_from_session(
     a: PageRef, b: PageRef, student_texts: list[str], session_id: str
 ) -> tuple[Link | None, list[tuple[str, str]]]:
