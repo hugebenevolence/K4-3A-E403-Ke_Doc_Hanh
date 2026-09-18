@@ -34,6 +34,7 @@ log = logging.getLogger(__name__)
 
 GRADER_VERSION = "v4"
 GRADER_CODE_VERSION = "v2"
+GRADER_LINK_VERSION = "v2"
 PERSONA_VERSION = "v2"
 OPENER_VERSION = "v2"
 
@@ -172,8 +173,13 @@ def make_grade_node(llm: LLMClient, spans: SpanStore):
         # là hành vi thật của đoạn code, và chỗ cấm quan trọng nhất đổi từ
         # "đừng nói hộ đáp án" thành "đừng sửa hộ code".
         code = state.get("code") or ""
-        grader = "grader_code" if code else "grader"
-        version = GRADER_CODE_VERSION if code else GRADER_VERSION
+        grader, version = (
+            ("grader_code", GRADER_CODE_VERSION)
+            if code
+            else ("grader_link", GRADER_LINK_VERSION)
+            if state.get("link")
+            else ("grader", GRADER_VERSION)
+        )
 
         out = await llm.structured(
             system=registry.compose_system(grader, version, source, code=code),

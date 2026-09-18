@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 
-from app.domain.graph import KnowledgeGraph, PageRef, page_claim
+from app.domain.graph import KnowledgeGraph, PageRef, link_from_session, page_claim
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +55,33 @@ def absorb_turn(
     for cau, ly_do in bo_qua:
         log.info("Đồ thị %s bỏ qua (%s): %s", graph.student_id, ly_do, cau[:90])
 
+    return {"đã làm": viec, "bỏ qua": bo_qua}
+
+
+def absorb_link(
+    graph: KnowledgeGraph,
+    *,
+    a: PageRef,
+    b: PageRef,
+    student_texts: list[str],
+    verdict: str | None,
+    session_id: str,
+) -> dict:
+    """Cập nhật đồ thị theo một lượt của phiên NỐI HAI TRANG.
+
+    Chỉ **đủ** mới sinh cạnh. Nối sai hay nối chưa tới đều KHÔNG đụng vào hai
+    đỉnh: học viên đã giảng được từng trang ở buổi trước, hiểu sai cách chúng
+    liên quan không có nghĩa là hiểu sai từng trang.
+    """
+    if (verdict or "").lower() != "sufficient":
+        return {}
+    link, bo_qua = link_from_session(a, b, student_texts, session_id)
+    viec: dict[str, list[str]] = {}
+    if link is not None and graph.connect(link):
+        viec["nối"] = [f"{a.key} — {b.key}"]
+        log.info("Đồ thị %s: %s · vì họ nói: %s", graph.student_id, viec, link.evidence[:90])
+    for cau, ly_do in bo_qua:
+        log.info("Đồ thị %s bỏ qua (%s): %s", graph.student_id, ly_do, cau[:90])
     return {"đã làm": viec, "bỏ qua": bo_qua}
 
 

@@ -27,6 +27,7 @@ PROMPTS_DIR = Path(__file__).parent
 BASE_LAYERS: dict[str, tuple[str, ...]] = {
     "grader": ("guardrails_v1",),  # chấm, không nói với ai → không cần lớp persona
     "grader_code": ("guardrails_v1",),
+    "grader_link": ("guardrails_v1",),  # chấm mối nối hai trang, không nói với ai
     "talker": ("guardrails_v1", "persona_v2"),
     "student_persona": ("guardrails_v1", "persona_v2"),
     "opener": ("guardrails_v1", "persona_v2"),

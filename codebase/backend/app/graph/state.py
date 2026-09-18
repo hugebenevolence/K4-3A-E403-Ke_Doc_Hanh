@@ -38,6 +38,11 @@ class TeachBackState(TypedDict, total=False):
     # Bài code: mã nguồn học viên đang giải thích. Rỗng với bài slide.
     code: str
 
+    # Phiên NỐI HAI TRANG (spec §4c): học viên giải thích hai trang đã giảng
+    # được liên quan gì với nhau. Chấm bằng prompt riêng — chấm mối nối, không
+    # đòi giảng lại từng trang.
+    link: bool
+
     # Cộng dồn qua các lượt (reducer của LangGraph). Không có cái này thì lượt
     # sau agent không biết mình đã hỏi gì và hỏi lại y câu cũ.
     asked_questions: Annotated[list[str], operator.add]

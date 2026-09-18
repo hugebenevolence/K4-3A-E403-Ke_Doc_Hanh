@@ -6,6 +6,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 import { blurIn, EASE } from "./motion";
 import { Button, Kbd, LevelMeter, LiveDot, Stepper, WordsIn } from "./ui";
 
@@ -45,7 +46,7 @@ function SourceCard({ span, caption, onOpen }) {
   );
 }
 
-function StudentTurn({ turn }) {
+export function StudentTurn({ turn }) {
   return (
     <motion.div {...blurIn} className="flex justify-end">
       <p className="m-0 max-w-[85%] rounded-2xl rounded-br-md bg-neutral-100 px-3.5 py-2.5 text-[14px] leading-relaxed text-neutral-900">
@@ -55,7 +56,7 @@ function StudentTurn({ turn }) {
   );
 }
 
-function AgentTurn({ turn, span, live = false, onOpen }) {
+export function AgentTurn({ turn, span, live = false, onOpen }) {
   return (
     <motion.div
       {...blurIn}
@@ -156,7 +157,16 @@ function Ending({ ended, spanById, onOpen, onRetry, onRestart, onNext }) {
         {taught ? "Học trò đã hiểu phần này" : "Học trò chưa hiểu hết"}
       </p>
       <p className="m-0 mt-0.5 text-[13px] text-neutral-500">
-        {taught ? "Bạn đã giảng đủ ý." : "Xem lại những chỗ dưới đây rồi giảng lại."}
+        {taught ? (
+          <>
+            Bạn đã giảng đủ ý — học trò vừa nhớ thêm trang này.{" "}
+            <Link to="/graph" className="text-neutral-900 underline underline-offset-2">
+              Xem bản đồ
+            </Link>
+          </>
+        ) : (
+          "Xem lại những chỗ dưới đây rồi giảng lại."
+        )}
       </p>
       {review.length > 0 && (
         <div className="mt-3 space-y-2">
@@ -183,7 +193,7 @@ function Ending({ ended, spanById, onOpen, onRetry, onRestart, onNext }) {
   );
 }
 
-function Composer({ session }) {
+export function Composer({ session }) {
   const [draft, setDraft] = useState("");
   const latest = useRef(session);
   useEffect(() => {

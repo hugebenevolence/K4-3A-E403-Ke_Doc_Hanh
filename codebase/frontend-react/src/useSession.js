@@ -213,16 +213,22 @@ export function useSession(deck) {
     setMicReady(false);
   }, []);
 
-  /** Mở phiên cho đúng các ô học viên đã chọn trên slide. */
-  const start = useCallback((spanIds = []) => {
+  /** Mở phiên cho đúng các ô học viên đã chọn trên slide.
+   *
+   *  `extra` là tham số riêng của từng loại phiên — phiên nối hai trang trên
+   *  bản đồ gửi `{ mode: "link", a, b }` và không có bộ slide nào. */
+  const start = useCallback((spanIds = [], extra = {}) => {
     setTurns([]);
     setEnded(null);
     setError("");
     setStarted(true);
     beginThinking("open", "Soạn câu mở đầu");
 
-    const query = { student_id: studentId(), deck };
+    const query = { student_id: studentId(), deck, ...extra };
     if (spanIds.length) query.spans = spanIds.join(",");
+    // URLSearchParams biến `undefined` thành chữ "undefined": server sẽ đi tìm
+    // một bộ slide tên như vậy và báo lỗi.
+    for (const k of Object.keys(query)) if (query[k] == null) delete query[k];
     const socket = new WebSocket(socketUrl("/ws/session", query));
     socket.binaryType = "blob";
     socket.onmessage = (e) => {

@@ -9,7 +9,10 @@ nghe câu hỏi ngược — với LLM thật. Chạy vào một server RIÊNG �
     python scripts/drive_sessions.py            # ghi kết quả vào var/e2e/
 
 Kỳ vọng với bản đồ theo trang: 4 trang sáng (d1 tr.12, 19, 14 và d2 tr.16),
-trang token không sáng (một lần chép slide, một lần giảng sai).
+trang token không sáng (một lần chép slide, một lần giảng sai). Sau đó 4 phiên
+NỐI HAI TRANG: nối tốt → có cạnh; nói mơ hồ → bị hỏi một câu rồi mới có cạnh;
+nối SAI (hiểu lầm M04) → không có cạnh và hai trang vẫn sáng; nối với trang
+chưa sáng → bị từ chối.
 """
 
 from __future__ import annotations
@@ -134,6 +137,54 @@ async def run_session(token: str, name: str, slug: str, page: int, turns: list[s
     return rec
 
 
+D1, D2 = "d1-slide-hackathon", "d2-slide-hackathon"
+LINKS = [
+    ("L1 Context D1 ↔ Hệ thống AI D2 (nối tốt)", f"{D1}:14", f"{D2}:16", [
+        ("Ở Day 1, context là lượng chữ model nhìn được trong mỗi lần trả lời. Sang Day 2 thì context là một "
+        "thành phần của hệ thống AI: mình đưa tài liệu nghiệp vụ vào context để model trả lời đúng với doanh "
+        "nghiệp. Nhưng vì context có giới hạn và càng dài càng tốn tiền, nên không thể nhồi hết tài liệu mà "
+        "phải chọn đúng phần liên quan."),
+    ]),
+    ("L2 Sinh văn bản ↔ RLHF (mơ hồ rồi trả lời)", f"{D1}:12", f"{D1}:19", [
+        "Hai trang này liên quan tới nhau vì đều nói về model.",
+        ("RLHF không thay đổi cách model sinh chữ, model vẫn đoán từng token rồi nối vào câu. RLHF chỉ làm cho "
+        "những câu được người chấm xếp hạng cao có xác suất lớn hơn, nên lúc đoán token tiếp theo nó nghiêng "
+        "về kiểu trả lời biết nghe lời."),
+    ]),
+    ("L3 Sinh văn bản ↔ Context (nối SAI)", f"{D1}:12", f"{D1}:14", [
+        ("Vì model đoán từng token rồi nối vào nên context càng dài thì model càng nhớ tốt hơn và trả lời chính "
+        "xác hơn, cho nên cứ dán hết tài liệu vào là tốt nhất."),
+    ]),
+    ("L4 nối với trang chưa sáng", f"{D1}:13", f"{D1}:14", ["..."]),
+]
+
+
+async def run_link(token: str, name: str, a: str, b: str, turns: list[str]) -> dict:
+    query = {"token": token, "mode": "link", "a": a, "b": b}
+    rec = {"name": name, "a": a, "b": b, "turns": []}
+    async with websockets.connect(f"{WS}?{urlencode(query)}", max_size=None) as ws:
+        opening: list = []
+        stop = await until_turn_over(ws, opening)
+        rec["opener"] = [m.get("text") or m.get("message") for m in opening if m.get("type") in ("transcript", "error")]
+        if stop != "turn":
+            rec["stop"] = stop
+            return rec
+        for text in turns:
+            log: list = []
+            await ws.send(json.dumps({"type": "explanation_text", "text": text}))
+            stop = await until_turn_over(ws, log)
+            states = [m for m in log if m.get("type") == "state" and m.get("verdict")]
+            rec["turns"].append({
+                "said": text,
+                "verdict": states[-1]["verdict"] if states else None,
+                "agent": [m["text"] for m in log if m.get("type") == "transcript" and m.get("role") == "agent"],
+                "stop": stop,
+            })
+            if stop != "turn":
+                break
+    return rec
+
+
 async def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     token = login()
@@ -145,6 +196,11 @@ async def main() -> None:
         records.append(rec)
         verdicts = " → ".join(str(t["verdict"]) for t in rec["turns"])
         print(f"{name}: {verdicts} ({rec['seconds']}s)", flush=True)
+    for name, a, b, turns in LINKS:
+        rec = await run_link(token, name, a, b, turns)
+        records.append(rec)
+        verdicts = " → ".join(str(t["verdict"]) for t in rec["turns"]) or rec.get("stop", "")
+        print(f"{name}: {verdicts}", flush=True)
     (OUT / "sessions.out.json").write_text(json.dumps(records, ensure_ascii=False, indent=1), encoding="utf-8")
     (OUT / "graph.api.json").write_text(json.dumps(get_graph(token), ensure_ascii=False, indent=1), encoding="utf-8")
     print("xong")

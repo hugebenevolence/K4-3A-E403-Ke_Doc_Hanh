@@ -244,6 +244,23 @@ def learner_sentences(
     return list(dict.fromkeys(giu)), bo
 
 
+def link_from_session(
+    a: PageRef, b: PageRef, student_texts: list[str], session_id: str
+) -> tuple[Link | None, list[tuple[str, str]]]:
+    """Dựng cạnh cho hai trang VỪA ĐƯỢC CHẤM LÀ ĐÃ NỐI ĐƯỢC.
+
+    Bằng chứng là câu của học viên chạm tới nội dung của CẢ HAI trang — đó mới
+    là câu thật sự nối. Không có câu nào như vậy thì lấy câu dài nhất: bộ chấm
+    đã xác nhận là họ nối được, chỉ là mối nối trải ra nhiều câu.
+    """
+    giu, bo = learner_sentences(student_texts, f"{a.text}\n{b.text}")
+    if not giu:
+        return None, bo
+    tu_a, tu_b = content_terms(a.text), content_terms(b.text)
+    hai_dau = [c for c in giu if content_terms(c) & tu_a and content_terms(c) & tu_b]
+    return Link(a.key, b.key, "explained", max(hai_dau or giu, key=len), session_id), bo
+
+
 def page_claim(
     student_texts: list[str], page: PageRef, session_id: str
 ) -> tuple[Claim | None, list[tuple[str, str]]]:

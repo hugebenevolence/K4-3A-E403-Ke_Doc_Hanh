@@ -29,7 +29,7 @@ from langgraph.store.memory import InMemoryStore
 from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 
-from app.adapters.knowledge.local import load_lesson
+from app.adapters.knowledge.local import InMemorySpanStore, load_lesson
 from app.adapters.knowledge.pdf import Deck, attach_descriptions, deck_slug, load_deck
 from app.adapters.knowledge.selection import lesson_from_selection
 from app.adapters.llm.mock import MockLLM
@@ -43,7 +43,7 @@ from app.api.auth import (
     parse_members,
     verify_token,
 )
-from app.api.graph_sync import absorb_turn, known_claims
+from app.api.graph_sync import absorb_link, absorb_turn, known_claims
 from app.api.live_turn import LiveTurn
 from app.api.pronunciations import PronunciationCache
 from app.api.session import TALKER_VERSION, run_turn
@@ -54,10 +54,12 @@ from app.domain.log import TurnLog
 from app.domain.sanitize import sanitize_spoken, tame_shouting
 from app.domain.session import TurnState
 from app.domain.substance import MIN_SOURCE_WORDS, teachable_words
+from app.domain.terms import session_vocabulary
 from app.domain.verdict import Evidence, GradeResult, Verdict
 from app.graph.build import build_graph
 from app.graph.nodes import (
     GRADER_CODE_VERSION,
+    GRADER_LINK_VERSION,
     GRADER_VERSION,
     PERSONA_VERSION,
     open_session,
@@ -90,7 +92,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def _build_deps(selection: list[str] | None = None, deck: str | None = None) -> tuple[
+def _build_deps(
+    selection: list[str] | None = None,
+    deck: str | None = None,
+    link: tuple[str, str] | None = None,
+) -> tuple[
     Lesson, SpanStore, LLMClient, SpeechToText, TextToSpeech, SessionLog, ProfileStore, GraphStore
 ]:
     # Gọi mỗi lần mở kết nối. Với mock thì không sao, nhưng khi viết adapter
@@ -100,7 +106,7 @@ def _build_deps(selection: list[str] | None = None, deck: str | None = None) -> 
     profiles = JsonProfileStore(settings.profile_file)
     graphs = JsonGraphStore(settings.graph_file)
 
-    lesson, spans = _lesson(selection, deck)
+    lesson, spans = _link_lesson(*link) if link else _lesson(selection, deck)
     if settings.use_mocks:
         return lesson, spans, MockLLM(), MockSTT(), MockTTS(), session_log, profiles, graphs
 
@@ -122,7 +128,16 @@ def _page_ref(deck: str | None, lesson: Lesson) -> PageRef | None:
     if page is None:
         return None
     slug = deck if deck in _deck_paths() else next(iter(_deck_paths()), "")
-    on_page = [s for s in found.spans if s.page == page]
+    return _page_by_key(page_key(slug, page))
+
+
+def _page_by_key(key: str) -> PageRef | None:
+    """Trang slide theo khoá của đồ thị ("d1-slide-hackathon:14"), ở BẤT KỲ bộ nào."""
+    slug, page = split_key(key)
+    found = _find_deck(slug) if slug in _deck_paths() else None
+    on_page = [s for s in found.spans if s.page == page] if found else []
+    if not on_page:
+        return None
     return PageRef(
         key=page_key(slug, page),
         title=found.titles.get(page) or f"Trang {page}",
@@ -130,6 +145,41 @@ def _page_ref(deck: str | None, lesson: Lesson) -> PageRef | None:
         page=page,
         span_ids=tuple(s.span_id for s in on_page),
         text="\n".join(s.text for s in on_page),
+    )
+
+
+def _link_lesson(a_key: str, b_key: str) -> tuple[Lesson, SpanStore]:
+    """Bài của phiên NỐI HAI TRANG: nguồn là ô của cả hai trang.
+
+    Hai trang có thể thuộc hai bộ slide khác nhau — đó chính là chỗ đáng nối
+    nhất — nên kho ô gom cả hai bộ, không chỉ bộ của trang đầu.
+    """
+    a, b = _page_by_key(a_key), _page_by_key(b_key)
+    if a is None or b is None or a.key == b.key:
+        raise ValueError("Không mở được phiên nối — bạn chọn lại hai trang trên bản đồ nhé.")
+    decks = {p.deck: _find_deck(p.deck) for p in (a, b)}
+    ids = (*a.span_ids, *b.span_ids)
+    lesson = Lesson(
+        concept=f"mối nối giữa «{short_label(a.title)}» và «{short_label(b.title)}»",
+        source_span_ids=ids,
+        vocabulary=session_vocabulary(
+            [a.text, b.text], [t for d in decks.values() for t in d.terms]
+        ),
+        kind="slide",
+    )
+    return lesson, InMemorySpanStore([s for d in decks.values() for s in d.spans])
+
+
+def _link_opening(a: PageRef, b: PageRef) -> str:
+    """Câu mở phiên nối: cố định, không gọi model.
+
+    Model mở bài thì hay hỏi về MỘT trang (nó được huấn luyện để hỏi vào nguồn),
+    và có khi gợi luôn chỗ hai trang chạm nhau — tức là nối hộ. Một câu hỏi mở
+    viết sẵn thì không lộ được gì.
+    """
+    return (
+        f"Bạn đã dạy mình «{short_label(a.title)}» và «{short_label(b.title)}» rồi. "
+        "Hai trang đó liên quan gì với nhau vậy bạn?"
     )
 
 
@@ -476,9 +526,14 @@ async def teach_back_session(ws: WebSocket):
             return
     # Vùng học viên đã chọn trên slide, gửi kèm lúc mở kết nối.
     selection = [sid for sid in (ws.query_params.get("spans") or "").split(",") if sid]
+    link = (
+        (ws.query_params.get("a") or "", ws.query_params.get("b") or "")
+        if ws.query_params.get("mode") == "link"
+        else None
+    )
     try:
         lesson, spans, llm, stt, tts, session_log, profiles, graphs = _build_deps(
-            selection, ws.query_params.get("deck")
+            selection, ws.query_params.get("deck"), link
         )
     except ValueError as exc:
         # Nói đúng chuyện gì đã xảy ra: "chọn lại đi" mà không nói vì sao thì
@@ -521,7 +576,16 @@ async def teach_back_session(ws: WebSocket):
     # KHÔNG đặt tên `graph`: biến đó đã là LangGraph đã compile ở ngay trên,
     # và đè lên nó thì mọi lượt chấm chết với 'KnowledgeGraph has no astream'.
     knowledge = await graphs.load(student_id)
-    page_ref = _page_ref(ws.query_params.get("deck"), lesson)
+    page_ref = None if link else _page_ref(ws.query_params.get("deck"), lesson)
+    # Phiên nối chỉ mở được giữa hai trang ĐÃ sáng: nối một trang học viên chưa
+    # giảng nổi là bắt họ nối hai thứ mà học trò còn chưa biết.
+    link_pages = (_page_by_key(link[0]), _page_by_key(link[1])) if link else None
+    if link_pages and not all(p and p.key in knowledge.claims for p in link_pages):
+        await ws.send_json(
+            {"type": "error", "message": "Hai trang phải giảng được rồi thì mới nối được."}
+        )
+        await ws.close()
+        return
     # Mọi lượt nói của buổi này: trang sáng lên với CẢ phần giảng chính lẫn câu
     # trả lời cho câu hỏi ngược, không chỉ lượt cuối cùng.
     session_texts: list[str] = []
@@ -583,9 +647,13 @@ async def teach_back_session(ws: WebSocket):
     # cả phiên vì một lượt gọi LLM trục trặc.
     opening = ""
     try:
-        opening = await open_session(
-            llm, spans, list(lesson.source_span_ids), profile.recurring_gaps,
-            lesson.concept, lesson.code,
+        opening = (
+            _link_opening(*link_pages)
+            if link_pages
+            else await open_session(
+                llm, spans, list(lesson.source_span_ids), profile.recurring_gaps,
+                lesson.concept, lesson.code,
+            )
         )
         # Câu mở bài không đi qua run_turn nên phải tự lọc; đo được thật: lọt
         # "REWARD MODEL" viết hoa y như slide.
@@ -704,6 +772,7 @@ async def teach_back_session(ws: WebSocket):
                     "recurring_gaps": dict(profile.recurring_gaps),
                     "known_claims": known_claims(knowledge, list(lesson.source_span_ids)),
                     "code": live_code,
+                    "link": bool(link_pages),
                     # Câu mở bài sinh ngoài graph nên graph không tự biết nó.
                     # Không đưa vào thì lượt đầu bị chấm như một lời giảng tự
                     # phát, trong khi nó là câu TRẢ LỜI cho một câu hỏi hẹp —
@@ -745,13 +814,24 @@ async def teach_back_session(ws: WebSocket):
                         # tab giữa chừng là chuyện thường — mất thứ họ vừa dạy
                         # được thì đúng cái tính năng này sinh ra để tránh.
                         session_texts.append(student_text)
-                        absorb_turn(
-                            knowledge,
-                            page=page_ref,
-                            student_texts=session_texts,
-                            verdict=event.payload["result"].get("verdict"),
-                            session_id=session_id,
-                        )
+                        verdict = event.payload["result"].get("verdict")
+                        if link_pages:
+                            absorb_link(
+                                knowledge,
+                                a=link_pages[0],
+                                b=link_pages[1],
+                                student_texts=session_texts,
+                                verdict=verdict,
+                                session_id=session_id,
+                            )
+                        else:
+                            absorb_turn(
+                                knowledge,
+                                page=page_ref,
+                                student_texts=session_texts,
+                                verdict=verdict,
+                                session_id=session_id,
+                            )
                         await graphs.save(knowledge)
                         turn_index += 1
                     else:
@@ -796,7 +876,7 @@ async def teach_back_session(ws: WebSocket):
                 # Buổi đã đóng: giờ mới cộng vào hồ sơ, theo kết quả lượt cuối.
                 # Bỏ dở giữa chừng thì không ghi gì — chưa học xong thì chưa có
                 # gì để nhớ, và đó cũng là cách duy nhất để "số buổi" đúng nghĩa.
-                if last_grade is not None:
+                if last_grade is not None and not link_pages:
                     profile.absorb(lesson.concept, last_grade)
                     await profiles.save(profile)
                 await tell(
@@ -850,7 +930,13 @@ async def _log_turn(
                 # Bài code chạy bộ chấm khác; ghi cứng GRADER_VERSION là log trỏ
                 # về một prompt chưa từng chạy, và lượt đó replay lại sẽ ra kết
                 # quả không so được với thứ đã thật sự xảy ra.
-                "grader": GRADER_CODE_VERSION if result.get("code") else GRADER_VERSION,
+                "grader": (
+                    GRADER_CODE_VERSION
+                    if result.get("code")
+                    else GRADER_LINK_VERSION
+                    if result.get("link")
+                    else GRADER_VERSION
+                ),
                 "student_persona": PERSONA_VERSION,
                 "talker": TALKER_VERSION,
             },
