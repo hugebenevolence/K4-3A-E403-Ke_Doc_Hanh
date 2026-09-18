@@ -5,14 +5,34 @@ import { motion } from "motion/react";
 import { Link } from "react-router";
 import { EASE } from "./motion";
 
-/** Chữ lồng thay cho logo: đơn sắc, không phải một icon trang trí. */
+/** Dấu của V_KDH: chữ V và một vạch ngắn ở chân, đọc thành "V_".
+ *
+ *  CÙNG MỘT HÌNH với public/favicon.svg, vẽ bằng path chứ không bằng font —
+ *  logo trên trang và icon trên tab trình duyệt phải là một, và chữ theo font
+ *  thì mỗi máy render một kiểu. Sửa hình ở đây thì sửa cả favicon. */
+export function BrandMark({ className = "size-7" }) {
+  return (
+    <svg viewBox="0 0 32 32" className={`shrink-0 ${className}`} aria-hidden="true">
+      <rect width="32" height="32" rx="7" fill="#171717" />
+      <path
+        d="M6.5 9.5 12 22l5.5-12.5"
+        fill="none"
+        stroke="#fff"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <rect x="19.5" y="21" width="7" height="2.6" rx="1.3" fill="#fff" />
+    </svg>
+  );
+}
+
+/** Logo: dấu V_ và tên. Đơn sắc, không phải một icon trang trí. */
 export function Brand({ to = "/" }) {
   return (
-    <Link to={to} className="flex items-center gap-2.5">
-      <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-neutral-900 text-[13px] font-semibold text-white">
-        G
-      </span>
-      <span className="text-[14px] font-semibold tracking-tight text-neutral-900">Giảng lại</span>
+    <Link to={to} className="flex items-center gap-2.5" aria-label="V_KDH — về trang chủ">
+      <BrandMark />
+      <span className="text-[14px] font-semibold tracking-tight text-neutral-900">V_KDH</span>
     </Link>
   );
 }

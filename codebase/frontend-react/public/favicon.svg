@@ -1,10 +1,9 @@
-<!-- Đơn sắc như phần còn lại của giao diện. Hai vạch dài là lời học viên
-     giảng, vạch ngắn là câu hỏi ngược của học trò AI. -->
+<!-- V_KDH. Đơn sắc như phần còn lại của giao diện: chữ V và một vạch ngắn ở chân,
+     đọc lên đúng "V_". Vạch ngắn giữ lại ý của icon cũ — câu hỏi ngược ngắn của
+     học trò AI. Chữ vẽ bằng path chứ không bằng font: ở cỡ 16px, font nào cũng
+     render mỗi máy một kiểu. Hình phải khớp BrandMark trong src/site.jsx. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <rect width="32" height="32" rx="7" fill="#171717"/>
-  <g fill="#fff">
-    <rect x="7" y="9" width="18" height="2.5" rx="1.25"/>
-    <rect x="7" y="14.75" width="18" height="2.5" rx="1.25"/>
-    <rect x="7" y="20.5" width="8" height="2.5" rx="1.25"/>
-  </g>
+  <path d="M6.5 9.5 12 22l5.5-12.5" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="19.5" y="21" width="7" height="2.6" rx="1.3" fill="#fff"/>
 </svg>
