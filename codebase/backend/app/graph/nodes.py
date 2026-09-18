@@ -37,9 +37,9 @@ log = logging.getLogger(__name__)
 GRADER_VERSION = "v4"
 GRADER_CODE_VERSION = "v2"
 GRADER_LINK_VERSION = "v4"
-PERSONA_VERSION = "v2"
-OPENER_VERSION = "v2"
-LINK_OPENER_VERSION = "v1"
+PERSONA_VERSION = "v3"
+OPENER_VERSION = "v3"
+LINK_OPENER_VERSION = "v2"
 
 
 async def open_session(

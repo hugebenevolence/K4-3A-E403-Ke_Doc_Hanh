@@ -47,18 +47,25 @@ def lesson_from_selection(deck: Deck, span_ids: Sequence[str]) -> tuple[Lesson, 
     title = deck.titles.get(page) or ""
 
     def thin(spans: list) -> bool:
+        return teachable_words(spans, title) < MIN_SOURCE_WORDS
+
+    def has_figure(spans: list) -> bool:
         # Sơ đồ gần như không có chữ trong PDF nhưng vẫn là nguyên một ý để
         # giảng — ngưỡng chữ không áp cho nó. Phải xét lại SAU KHI NỚI nữa:
         # chọn mỗi dòng chú thích dưới một sơ đồ thì lúc đầu vùng chọn không có
         # hình, nới ra cả trang mới có — xét một lần ở đầu là từ chối oan đúng
         # những trang hình mà chỗ khác trong hệ vẫn cho giảng.
-        if any(s.kind == "figure" for s in spans):
-            return False
-        return teachable_words(spans, title) < MIN_SOURCE_WORDS
+        return any(s.kind == "figure" for s in spans)
 
+    # Chọn đúng một cái hình thì VẪN nới ra cả trang. Bản trước coi "có hình" là
+    # đủ dày rồi dừng luôn ở đó, nên nguồn của cả buổi chỉ còn một ô ghi "Hình
+    # minh hoạ" — quan sát thật trên trang "Sự ra đời của Deep Learning": câu mở
+    # bài thành "trong hình minh hoạ đó, chỗ nào đang diễn tả ý chính của
+    # slide?", tức là hỏi vu vơ vì không có gì để hỏi vào. Chữ quanh hình trên
+    # cùng trang là thứ nói hình đó đang minh hoạ CHO ĐIỀU GÌ.
     if thin(chosen):
         chosen = [s for s in deck.spans if s.page == page]
-    if thin(chosen):
+    if thin(chosen) and not has_figure(chosen):
         # Cả trang cũng chỉ có tiêu đề: trang bìa, trang phân mục. Chạy tiếp là
         # dựng ra một phiên mà "ý cốt lõi" của nguồn chính là dòng tiêu đề, và
         # câu nào nhắc đúng chủ đề cũng chạm được nó — phiên thật 2e6d52f3 đóng

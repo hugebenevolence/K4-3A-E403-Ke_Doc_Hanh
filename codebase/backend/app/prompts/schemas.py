@@ -84,7 +84,12 @@ class FollowupOutput(BaseModel):
             "nguồn mà học viên chưa nói. Rỗng nếu học viên chưa nói được ý nào."
         ),
     )
-    question: str = Field(description="Một câu hỏi ngược, dưới 40 từ, không lộ đáp án")
+    question: str = Field(
+        description=(
+            "Câu hỏi ngược, dưới 40 từ, không lộ đáp án. Một hoặc hai câu trọn "
+            "vẹn — đừng ghép hai ý bằng dấu hai chấm hay gạch dài."
+        )
+    )
     cites_span_id: str | None = Field(
         default=None, description="Span được trích trong câu hỏi, nếu có — để frontend highlight"
     )
@@ -108,9 +113,10 @@ class LinkOpenerOutput(BaseModel):
     )
     question: str = Field(
         description=(
-            "Một câu hỏi, dưới 45 từ: đặt hai điều học viên đã giảng cạnh nhau "
-            "BẰNG LỜI CỦA HỌ, rồi hỏi theo `angle`. Không tự nói ra điểm chung, "
-            "chỗ khác hay tác động đó."
+            "Dưới 45 từ, một hoặc hai câu trọn vẹn: đặt hai điều học viên đã "
+            "giảng cạnh nhau BẰNG LỜI CỦA HỌ, rồi hỏi theo `angle`. Không tự nói "
+            "ra điểm chung, chỗ khác hay tác động đó, và đừng ghép hai ý bằng "
+            "dấu hai chấm hay gạch dài."
         )
     )
 

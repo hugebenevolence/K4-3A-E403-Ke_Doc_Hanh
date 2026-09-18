@@ -24,7 +24,7 @@ from time import perf_counter
 from typing import Any, Literal
 
 from app.config import settings
-from app.domain.sanitize import sanitize_spoken, tame_shouting
+from app.domain.sanitize import speakable
 from app.ports.llm import LLMClient, ModelTier
 from app.ports.tts import TextToSpeech
 from app.prompts import registry
@@ -134,7 +134,7 @@ async def run_turn(
                 tier=ModelTier.FAST,
             )
             async for raw in sentence_chunks(talker_tokens):
-                if not (sentence := sanitize_spoken(raw)):
+                if not (sentence := speakable(raw)):
                     continue
                 yield Event(
                     "transcript", {"role": "agent", "text": sentence, "filler": True}
@@ -160,8 +160,8 @@ async def run_turn(
         # Không có timeout thì provider treo là học viên ngồi im vô hạn, không
         # có cách nào thoát ngoài tự tải lại trang. Thà mất một lượt.
         result = await asyncio.wait_for(reasoner, timeout=reasoner_timeout_s)
-        said = tame_shouting(sanitize_spoken(result["agent_says"]))
-        understood = [tame_shouting(sanitize_spoken(p)) for p in result.get("agent_understood") or []]
+        said = speakable(result["agent_says"])
+        understood = [speakable(p) for p in result.get("agent_understood") or []]
         yield Event(
             "transcript",
             {

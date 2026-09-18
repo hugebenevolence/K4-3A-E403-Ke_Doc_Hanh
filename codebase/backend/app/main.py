@@ -67,7 +67,7 @@ from app.domain.graph import (
 from app.domain.lesson import Lesson
 from app.domain.log import TurnLog
 from app.domain.progress import LEVELS
-from app.domain.sanitize import sanitize_spoken, tame_shouting
+from app.domain.sanitize import speakable
 from app.domain.session import TurnState
 from app.domain.substance import MIN_SOURCE_WORDS, teachable_words
 from app.domain.terms import session_vocabulary
@@ -756,7 +756,7 @@ async def teach_back_session(ws: WebSocket):
         )
         # Câu mở bài không đi qua run_turn nên phải tự lọc; đo được thật: lọt
         # "REWARD MODEL" viết hoa y như slide.
-        opening = tame_shouting(sanitize_spoken(opening))
+        opening = speakable(opening)
         await ws.send_json(
             {"type": "transcript", "role": "agent", "text": opening, "filler": False}
         )

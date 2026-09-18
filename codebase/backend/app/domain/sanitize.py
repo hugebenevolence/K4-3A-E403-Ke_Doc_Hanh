@@ -66,3 +66,39 @@ def tame_shouting(text: str) -> str:
     có 2 ký tự); giờ xét từng chữ.
     """
     return _CAPS_WORD.sub(lambda m: m.group(0).lower() if _readable(m.group(0)) else m.group(0), text)
+
+
+# Dấu dùng để GHÉP hai ý vào một dòng, và dấu chỉ có nghĩa khi nhìn bằng mắt.
+# Đọc thành tiếng thì chúng thành một quãng lặng không ai hiểu vì sao.
+_NOI_BANG_DAU = re.compile(r"\s*[—–―]\s*|\s*;\s*|\s*→\s*")
+_DAU_TRANG_TRI = re.compile(r"[*`#_~•·»«]")
+
+
+def soften_punctuation(text: str) -> str:
+    """Đổi dấu ghép ý thành dấu phẩy, bỏ dấu trang trí. Không đụng dấu hai chấm.
+
+    Đo được trên người dùng thật: "Mình chưa rõ: nguồn tách Generative AI và
+    LLM — bạn giải giúp chỗ khác biệt chức năng giữa chúng được không?" Câu đó
+    đọc lên nghe như một dòng ghi chú chứ không phải một người đang hỏi. Luật
+    văn phong nằm ở prompt persona; đây là sàn tất định cho những lần prompt
+    không giữ được.
+
+    Dấu hai chấm để nguyên: tiêu đề slide có sẵn dấu đó ("RLHF: ba bước…"), và
+    đổi nó đi thì tên trang gãy làm đôi.
+    """
+    text = _NOI_BANG_DAU.sub(", ", text)
+    text = _DAU_TRANG_TRI.sub("", text)
+    # Ghép dấu sinh ra dấu phẩy thừa: "…nói, , còn…", " ,", ", ."
+    text = re.sub(r"(,\s*)+,", ", ", text)
+    text = re.sub(r"\s+([,.?!])", r"\1", text)
+    text = re.sub(r",\s*([.?!])", r"\1", text)
+    return re.sub(r"\s{2,}", " ", text).strip(" ,")
+
+
+def speakable(text: str) -> str:
+    """Toàn bộ khâu lọc cho một câu agent sắp nói ra.
+
+    Gộp thành một hàm vì ba bước này luôn phải đi cùng nhau: bỏ sót một bước ở
+    một chỗ gọi là chỗ đó đọc rác ra tiếng, và đã suýt xảy ra với câu mở bài.
+    """
+    return soften_punctuation(tame_shouting(sanitize_spoken(text)))

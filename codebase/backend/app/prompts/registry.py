@@ -28,10 +28,10 @@ BASE_LAYERS: dict[str, tuple[str, ...]] = {
     "grader": ("guardrails_v1",),  # chấm, không nói với ai → không cần lớp persona
     "grader_code": ("guardrails_v1",),
     "grader_link": ("guardrails_v1",),  # chấm mối nối hai trang, không nói với ai
-    "talker": ("guardrails_v1", "persona_v2"),
-    "student_persona": ("guardrails_v1", "persona_v2"),
-    "opener": ("guardrails_v1", "persona_v2"),
-    "link_opener": ("guardrails_v1", "persona_v2"),  # mở phiên nối, nói với học viên
+    "talker": ("guardrails_v1", "persona_v3"),
+    "student_persona": ("guardrails_v1", "persona_v3"),
+    "opener": ("guardrails_v1", "persona_v3"),
+    "link_opener": ("guardrails_v1", "persona_v3"),  # mở phiên nối, nói với học viên
     # Việc kỹ thuật cho bộ nhận dạng giọng nói, không nói với học viên — nhưng
     # vẫn giữ sàn an toàn: thuật ngữ lấy từ nội dung slide, không kiểm soát được.
     "pronunciation": ("guardrails_v1",),
