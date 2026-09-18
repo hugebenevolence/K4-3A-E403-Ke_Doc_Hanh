@@ -32,7 +32,10 @@ _STOPWORDS = frozenset(
      # đúng những chữ này — "nói", "thể", "vậy", "rồi" — chứ không lộ gì cả.
      "nói", "thể", "vậy", "rồi", "thấy", "chưa", "giúp", "hiểu", "biết", "nghĩ",
      "kiểu", "chỗ", "cách", "thế", "lại", "đâu", "nào", "cùng", "còn", "như",
-     "thôi", "luôn", "đây", "kia", "nhé", "nhỉ"]
+     "thôi", "luôn", "đây", "kia", "nhé", "nhỉ",
+     # Lượng từ: "mỗi lần", "mọi thứ". Đo được ở câu mở phiên nối — nhắc lại
+     # lời học viên thành "mỗi lần trả lời" bị tính là lộ vì slide có "mỗi".
+     "mỗi", "mọi", "thứ"]
 )
 
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import re
 
-from app.domain.graph import denies_relation
+from app.domain.graph import PageRef, denies_relation, short_label, spoken_label
 from app.domain.leak import (
     about_source,
     confirms_answer,
@@ -30,15 +30,16 @@ from app.graph.state import TeachBackState
 from app.ports.knowledge import SpanStore
 from app.ports.llm import LLMClient, ModelTier
 from app.prompts import registry
-from app.prompts.schemas import FollowupOutput, GradeOutput
+from app.prompts.schemas import FollowupOutput, GradeOutput, LinkOpenerOutput
 
 log = logging.getLogger(__name__)
 
 GRADER_VERSION = "v4"
 GRADER_CODE_VERSION = "v2"
-GRADER_LINK_VERSION = "v3"
+GRADER_LINK_VERSION = "v4"
 PERSONA_VERSION = "v2"
 OPENER_VERSION = "v2"
+LINK_OPENER_VERSION = "v1"
 
 
 async def open_session(
@@ -118,6 +119,134 @@ async def open_session(
     # Viết lại vẫn trích thì thà mở bài nhạt còn hơn đọc hộ bài.
     log.warning("Mở bài vẫn trích nguồn sau khi viết lại, dùng câu an toàn")
     return f"Bạn giảng cho mình nghe về {concept} đi, mình chưa nắm được chỗ này."
+
+
+_LINK_FRAME = (
+    "giống khác nhau điểm chung tác động ảnh hưởng thay đổi "
+    "hai trang theo gọi phần trên lúc dùng làm"
+)
+"""Chữ của chính ba hướng hỏi và của việc "đặt hai trang cạnh nhau".
+
+Đo được bằng model thật: "hai kiểu Context ở hai trang đó khác nhau ở chỗ
+nào?" — một câu mở rất tốt, vì học viên đã dùng chữ Context theo hai nghĩa —
+bị chặn là lộ vì trùng "hai", "trang", "trên" với chữ trên slide. Cặp nào
+trượt vì những chữ này là rơi về câu viết sẵn."""
+
+_KY_HIEU_TRANG = re.compile(
+    r"\b(?:trang|slide)\s*(?:[ab]\b|\d|kia\b|thứ\b|đầu\b|sau\b|trước\b|một\b|hai\b)",
+    re.IGNORECASE,
+)
+"""Gọi trang theo ký hiệu thay vì theo tên.
+
+Prompt cấm rồi mà model thật vẫn viết "còn trang kia nói…", "slide thứ nhất
+gọi Context là…": thứ tự A/B là chuyện nội bộ của prompt, học viên chỉ thấy
+hai ô trên bản đồ và không biết ô nào là A."""
+
+MAX_LINK_OPENER_WORDS = 60
+"""Câu mở phiên nối được đọc thành tiếng; prompt đòi dưới 45 từ, quá 60 là
+model đang kể lại cả hai trang chứ không còn là một câu hỏi."""
+
+
+def link_fallback(a: PageRef, b: PageRef) -> str:
+    """Câu mở phiên nối viết sẵn, dùng khi model viết lại vẫn trượt.
+
+    Không hỏi "hai trang liên quan gì": câu đó mời đúng câu trả lời rỗng "đều
+    nói về AI". Nêu sẵn ba hướng để học viên có chỗ bám mà vẫn không lộ gì.
+    """
+    return (
+        f"Bạn đã dạy mình «{short_label(a.title)}» và «{short_label(b.title)}» rồi. "
+        "Theo bạn, hai thứ đó giống nhau ở đâu, khác nhau ở đâu, "
+        "hay cái này làm cái kia thay đổi?"
+    )
+
+
+def _link_opener_flaw(
+    question: str, source: str, learner: str, visible: str, sides: list[set[str]]
+) -> str:
+    """Lỗi của câu mở phiên nối, viết thành lời nhắc cho lần viết lại. Rỗng là đạt."""
+    if confirms_answer(question):
+        return (
+            "ĐÃ HỎI KIỂU 'có phải… không', tức là đưa sẵn một mối nối để học viên "
+            "gật đầu. Hỏi mở, để học viên tự tìm."
+        )
+    if takes_teacher_role(question):
+        return "ĐÃ NHẬN VAI NGƯỜI GIẢNG. Bạn là học trò, bạn chỉ hỏi."
+    if leaks_answer(question, source, learner, visible):
+        leaked = ", ".join(sorted(leaked_terms(question, source, learner, visible)))
+        return (
+            f"ĐÃ NÓI RA ĐIỀU HỌC VIÊN CHƯA HỀ NÓI ({leaked}). Chỉ dùng những gì "
+            "học viên đã nói ở hai trang."
+        )
+    if _KY_HIEU_TRANG.search(question):
+        return (
+            "GỌI TRANG BẰNG KÝ HIỆU ('trang A', 'trang kia', 'slide thứ nhất'). "
+            "Học viên không biết bạn đánh số thế nào — gọi mỗi trang bằng tên của nó."
+        )
+    terms = content_terms(question)
+    if not all(terms & side for side in sides):
+        return (
+            "CHƯA NHẮC TỚI CẢ HAI TRANG. Gói lại một ý học viên đã nói ở mỗi "
+            "trang, bằng chính lời họ, và gọi trang bằng tên của nó."
+        )
+    if len(question.split()) > MAX_LINK_OPENER_WORDS:
+        return "QUÁ DÀI. Một câu hỏi dưới 45 từ, mỗi trang chỉ một ý."
+    return ""
+
+
+async def open_link_session(
+    llm: LLMClient, a: PageRef, b: PageRef, a_said: list[str], b_said: list[str]
+) -> str:
+    """Câu mở phiên nối hai trang, dựng từ chính lời học viên đã giảng ở mỗi trang.
+
+    Bản trước là một câu cố định "Hai trang đó liên quan gì với nhau?" — không
+    lộ được gì, nhưng cũng không cho học viên chỗ nào để bám: họ phải tự nhớ
+    lại mình đã nói gì ở hai buổi khác nhau, và câu trả lời dễ nhất là "đều nói
+    về AI". Nhắc lại lời của chính họ ở hai trang rồi hỏi theo MỘT hướng (giống
+    ở đâu, khác ở đâu, cái này làm cái kia đổi ra sao) thì họ biết ngay phải
+    nghĩ từ đâu — và nhiều cặp trang đáng PHÂN BIỆT hơn là đáng nối.
+
+    Model chỉ được thấy lời học viên, không thấy nguồn: không có nguồn thì
+    không có mối nối nào để lỡ miệng đọc hộ. Kiến thức chung của model vẫn có
+    thể lọt ra, nên câu hỏi vẫn qua bộ lọc lộ đáp án với nguồn của cả hai trang.
+    """
+    a_said = [s for s in a_said if s.strip()]
+    b_said = [s for s in b_said if s.strip()]
+    source = f"{a.text}\n{b.text}"
+    learner = " ".join([*a_said, *b_said])
+    # Tên hai trang đang hiện trên bản đồ, và khung câu hỏi ("khác nhau ở
+    # đâu") là chính thứ được dặn phải hỏi — trùng chữ nguồn cũng không lộ gì.
+    visible = f"{a.title} {b.title} {_LINK_FRAME}"
+    # "Chạm tới một trang" tính bằng từ RIÊNG của trang đó. Hai trang hay có
+    # chung chữ ("câu trả lời" ở cả RLHF lẫn context), và tính cả chữ chung thì
+    # một câu chỉ hỏi về một trang vẫn lọt qua như đã hỏi cả hai. Tên trang cũng
+    # tính: học viên không còn câu nào rõ ở một trang thì chỉ còn tên để gọi.
+    ta = content_terms(" ".join([*a_said, a.title]))
+    tb = content_terms(" ".join([*b_said, b.title]))
+    sides = [(ta - tb) or ta, (tb - ta) or tb]
+
+    def trang(p: PageRef, said: list[str]) -> str:
+        lines = "\n".join(f"> {s}" for s in said) or "> (không còn câu nào rõ)"
+        # Tên để NÓI, không phải tiêu đề slide: model gọi trang bằng đúng cái
+        # tên mình đưa, nên đưa tiêu đề đầy đủ là nó đọc cả "— nằm ở đâu trong
+        # cùng một hệ?" ra miệng, còn đưa nhãn bản đồ là nó đọc cả dấu ba chấm.
+        return f"Trang «{spoken_label(p.title)}»\nHọc viên đã nói:\n{lines}"
+
+    user = f"{trang(a, a_said)}\n\n{trang(b, b_said)}"
+    system = registry.compose_system("link_opener", LINK_OPENER_VERSION)
+    hint = ""
+    for attempt in range(2):
+        out = await llm.structured(
+            system=system, user=user + hint, schema=LinkOpenerOutput, tier=ModelTier.STANDARD
+        )
+        flaw = _link_opener_flaw(out.question, source, learner, visible, sides)
+        if not flaw:
+            log.info("Mở phiên nối kiểu %s: %s", out.angle, out.question)
+            return out.question
+        log.warning("Câu mở phiên nối hỏng (lần %d): %s — %s", attempt + 1, flaw, out.question)
+        hint += f"\n\nCÂU BẠN VỪA VIẾT {flaw}"
+
+    log.warning("Mở phiên nối vẫn hỏng sau khi viết lại, dùng câu viết sẵn")
+    return link_fallback(a, b)
 
 
 _SAID_PREFIX = "> "

@@ -192,14 +192,26 @@ def short_label(title: str) -> str:
     gia", và đo trên bản đồ thật, năm trơ trọi thành năm đỉnh tên "1980",
     "2009", "2017"… không nói được trang đó dạy gì.
     """
-    phan = _NGAT_TIEU_DE.split((title or "").strip(), maxsplit=1)
-    dau = phan[0].strip() or (title or "").strip()
-    if len(phan) > 1 and not any(ch.isalpha() for ch in dau):
-        dau = f"{dau} {_NGAT_TIEU_DE.split(phan[1].strip(), maxsplit=1)[0].strip()}"
+    dau = spoken_label(title)
     if len(dau) <= LABEL_CHARS:
         return dau
     cat = dau[:LABEL_CHARS].rsplit(" ", 1)[0].rstrip(",;")
     return f"{cat}…"
+
+
+def spoken_label(title: str) -> str:
+    """Tên trang để NÓI THÀNH TIẾNG: phần đầu tiêu đề, không cắt ngắn.
+
+    `short_label` cắt theo số ký tự cho vừa ô trên bản đồ, nên sinh ra "AI, ML,
+    Deep…" — học trò đọc nguyên cái dấu ba chấm đó ra miệng. Còn tiêu đề đầy đủ
+    thì ngược lại: "AI, ML, Deep Learning, GenAI, LLM — nằm ở đâu trong cùng
+    một hệ?" nghe như máy đọc mục lục. Phần trước dấu ngắt là vừa đủ để gọi tên.
+    """
+    phan = _NGAT_TIEU_DE.split((title or "").strip(), maxsplit=1)
+    dau = phan[0].strip() or (title or "").strip()
+    if len(phan) > 1 and not any(ch.isalpha() for ch in dau):
+        dau = f"{dau} {_NGAT_TIEU_DE.split(phan[1].strip(), maxsplit=1)[0].strip()}"
+    return dau
 
 
 _SENTENCE = re.compile(r"[^.!?…\n]+")

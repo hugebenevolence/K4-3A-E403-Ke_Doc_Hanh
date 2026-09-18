@@ -14,7 +14,7 @@ import re
 from collections.abc import AsyncIterator
 
 from app.ports.llm import LLMClient, ModelTier, T
-from app.prompts.schemas import FollowupOutput, GradeOutput
+from app.prompts.schemas import FollowupOutput, GradeOutput, LinkOpenerOutput
 
 _ENOUGH_WORDS = 40
 _SPAN_IN_PROMPT = re.compile(r"^\[([^\]]+)\]", re.MULTILINE)
@@ -34,6 +34,12 @@ def _student_words(user: str) -> int:
     """
     seen = dict.fromkeys(_SAID_LINE.findall(user))
     return sum(len(line.split()) for line in seen)
+
+
+def _first_said_per_page(user: str) -> list[str]:
+    """Câu đầu tiên học viên đã nói ở mỗi trang của prompt mở phiên nối."""
+    pages = user.split("Trang ")[1:]
+    return [next(iter(_SAID_LINE.findall(page)), "") for page in pages]
 
 
 def _spans_from(system: str) -> list[str]:
@@ -63,6 +69,14 @@ class MockLLM(LLMClient):
             )
         if schema is FollowupOutput:
             return schema(question="Chỗ đó thì vì sao lại xảy ra vậy bạn?", cites_span_id=None)
+        if schema is LinkOpenerOutput:
+            # Nhắc lại lời học viên ở cả hai trang, như model thật được dặn,
+            # để đường chạy mock đi qua đúng các chốt chặn của câu mở thật.
+            a, b = (" ".join(s.split()[:8]) for s in [*_first_said_per_page(user), "", ""][:2])
+            return schema(
+                angle="contrast",
+                question=f"Bạn nói «{a}», còn «{b}» — hai điều đó khác nhau ở chỗ nào vậy bạn?",
+            )
         raise NotImplementedError(f"MockLLM chưa hỗ trợ schema {schema.__name__}")
 
     async def stream(

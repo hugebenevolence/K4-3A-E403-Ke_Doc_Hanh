@@ -19,6 +19,8 @@ THỨ TỰ FIELD LÀ CỐ Ý: liệt kê căn cứ trước, nhận định sau.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -85,6 +87,31 @@ class FollowupOutput(BaseModel):
     question: str = Field(description="Một câu hỏi ngược, dưới 40 từ, không lộ đáp án")
     cites_span_id: str | None = Field(
         default=None, description="Span được trích trong câu hỏi, nếu có — để frontend highlight"
+    )
+
+
+class LinkOpenerOutput(BaseModel):
+    """Câu mở phiên nối hai trang.
+
+    `angle` đứng TRƯỚC `question` vì cùng lý do `verdict` đứng cuối GradeOutput:
+    model chọn kiểu câu hỏi xong rồi mới viết, thay vì viết một câu "liên quan
+    gì" chung chung rồi gán kiểu sau.
+    """
+
+    angle: Literal["common", "contrast", "effect"] = Field(
+        description=(
+            "Kiểu câu hỏi hợp nhất với hai điều học viên đã nói: `common` — hỏi "
+            "hai thứ giống nhau ở đâu; `contrast` — hỏi hai thứ khác nhau ở đâu "
+            "(hợp khi hai khái niệm dễ bị nhầm với nhau); `effect` — hỏi cái này "
+            "làm cái kia thay đổi ra sao."
+        )
+    )
+    question: str = Field(
+        description=(
+            "Một câu hỏi, dưới 45 từ: đặt hai điều học viên đã giảng cạnh nhau "
+            "BẰNG LỜI CỦA HỌ, rồi hỏi theo `angle`. Không tự nói ra điểm chung, "
+            "chỗ khác hay tác động đó."
+        )
     )
 
 

@@ -56,7 +56,14 @@ from app.api.live_turn import LiveTurn
 from app.api.pronunciations import PronunciationCache
 from app.api.session import TALKER_VERSION, run_turn
 from app.config import settings
-from app.domain.graph import LINK_LABEL, PageRef, page_key, short_label, split_key
+from app.domain.graph import (
+    LINK_LABEL,
+    KnowledgeGraph,
+    PageRef,
+    page_key,
+    short_label,
+    split_key,
+)
 from app.domain.lesson import Lesson
 from app.domain.log import TurnLog
 from app.domain.progress import LEVELS
@@ -71,6 +78,7 @@ from app.graph.nodes import (
     GRADER_LINK_VERSION,
     GRADER_VERSION,
     PERSONA_VERSION,
+    open_link_session,
     open_session,
 )
 from app.ports.knowledge import SpanStore
@@ -188,17 +196,10 @@ def _link_lesson(a_key: str, b_key: str) -> tuple[Lesson, SpanStore]:
     return lesson, InMemorySpanStore([s for d in decks.values() for s in d.spans])
 
 
-def _link_opening(a: PageRef, b: PageRef) -> str:
-    """Câu mở phiên nối: cố định, không gọi model.
-
-    Model mở bài thì hay hỏi về MỘT trang (nó được huấn luyện để hỏi vào nguồn),
-    và có khi gợi luôn chỗ hai trang chạm nhau — tức là nối hộ. Một câu hỏi mở
-    viết sẵn thì không lộ được gì.
-    """
-    return (
-        f"Bạn đã dạy mình «{short_label(a.title)}» và «{short_label(b.title)}» rồi. "
-        "Hai trang đó liên quan gì với nhau vậy bạn?"
-    )
+def _taught(knowledge: KnowledgeGraph, page: PageRef) -> list[str]:
+    """Những câu học viên đã nói về một trang — nguyên liệu cho câu mở phiên nối."""
+    claim = knowledge.claims[page.key]
+    return list(claim.sentences) or [claim.said]
 
 
 def _lesson(selection: list[str] | None, deck: str | None = None):
@@ -744,7 +745,9 @@ async def teach_back_session(ws: WebSocket):
     opening = ""
     try:
         opening = (
-            _link_opening(*link_pages)
+            await open_link_session(
+                llm, *link_pages, *(_taught(knowledge, p) for p in link_pages)
+            )
             if link_pages
             else await open_session(
                 llm, spans, list(lesson.source_span_ids), profile.recurring_gaps,
