@@ -97,3 +97,52 @@ def test_vung_chon_mang_ma_bo_slide_la_thi_bao_loi_chu_khong_cham_bai_khac(monke
     monkeypatch.setattr(main, "_find_deck", lambda slug: None)
     with pytest.raises(ValueError, match="thư viện"):
         main._lesson(["[d1-slide-hackathon-p12-01]"], "d1")
+
+
+# Trang có hình: ô hình gần như không có chữ, chữ nói hình đó minh hoạ CHO GÌ
+# nằm ở các ô bên cạnh trên cùng trang.
+DECK_HINH = Deck(
+    spans=(
+        Span("[d-p16-01]", "Sự ra đời của Deep Learning", page=16, bbox=(38, 20, 519, 48)),
+        Span(
+            "[d-p16-f01]",
+            "Hình minh hoạ. Nhãn trong hình: Dartmouth Workshop 1956, Perceptrons 1969, "
+            "AlexNet 2012, Transformer 2017.",
+            page=16,
+            bbox=(100, 90, 860, 420),
+            kind="figure",
+        ),
+        Span(
+            "[d-p16-04]",
+            "Sau mùa đông lần hai, câu hỏi của cả ngành đổi hẳn: nếu không thể viết hết "
+            "tri thức thế giới vào máy, thì có thể để máy tự học nó từ dữ liệu không?",
+            page=16,
+            bbox=(120, 430, 843, 470),
+        ),
+    ),
+    titles={16: "Sự ra đời của Deep Learning"},
+    terms=("deep learning",),
+    pages=29,
+)
+
+
+def test_chon_moi_cai_hinh_thi_van_lay_chu_cua_ca_trang():
+    """Nguồn chỉ có mỗi ô "Hình minh hoạ" thì không có gì để hỏi vào.
+
+    Đo được thật trên trang "Sự ra đời của Deep Learning": câu mở bài thành
+    "trong hình minh hoạ đó, chỗ nào đang diễn tả ý chính của slide?".
+    """
+    lesson, _ = lesson_from_selection(DECK_HINH, ["[d-p16-f01]"])
+    assert "[d-p16-04]" in lesson.source_span_ids, "thiếu chữ quanh hình trên cùng trang"
+
+
+def test_trang_chi_co_hinh_va_tieu_de_thi_van_giang_duoc():
+    """Nới ra cả trang vẫn ít chữ thì KHÔNG từ chối, vì hình vẫn là một ý trọn vẹn."""
+    chi_hinh = Deck(
+        spans=tuple(s for s in DECK_HINH.spans if s.span_id != "[d-p16-04]"),
+        titles=DECK_HINH.titles,
+        terms=DECK_HINH.terms,
+        pages=DECK_HINH.pages,
+    )
+    lesson, _ = lesson_from_selection(chi_hinh, ["[d-p16-f01]"])
+    assert "[d-p16-f01]" in lesson.source_span_ids
