@@ -28,17 +28,17 @@ D1, D2 = "d1-slide-hackathon", "d2-slide-hackathon"
 SEED = [
     (D1, 19, [
         "RLHF là bước người ta cho model viết ra nhiều câu trả lời cho cùng một câu hỏi.",
-        "Sau đó người chấm xếp hạng các câu trả lời đó, rồi model được huấn luyện để tăng xác suất những câu được "
-        "điểm cao. Nhờ vậy cỗ máy đoán token dần biết nghe lời.",
+        ("Sau đó người chấm xếp hạng các câu trả lời đó, rồi model được huấn luyện để tăng xác suất những câu được "
+        "điểm cao. Nhờ vậy cỗ máy đoán token dần biết nghe lời."),
     ]),
     (D1, 14, [
-        "Context là lượng chữ model nhìn thấy được trong một lần trả lời, giống như bộ nhớ tạm có giới hạn. "
-        "Context càng dài thì càng tốn tiền và càng chậm, và model hay quên mất phần nằm ở giữa.",
+        ("Context là lượng chữ model nhìn thấy được trong một lần trả lời, giống như bộ nhớ tạm có giới hạn. "
+        "Context càng dài thì càng tốn tiền và càng chậm, và model hay quên mất phần nằm ở giữa."),
     ]),
     (D2, 16, [
-        "Một hệ thống AI thật không chỉ có model. Context ở đây là tri thức riêng như tài liệu nghiệp vụ và hồ sơ "
+        ("Một hệ thống AI thật không chỉ có model. Context ở đây là tri thức riêng như tài liệu nghiệp vụ và hồ sơ "
         "khách hàng, nhờ vậy AI trả lời đúng với doanh nghiệp. Ngoài ra còn planning để chia nhỏ việc và tools để "
-        "gọi API hay database.",
+        "gọi API hay database."),
     ]),
     (D1, 13, ["Mỗi token là đúng một từ trọn vẹn. Tiếng Việt tốn ít token hơn tiếng Anh vì từ tiếng Việt ngắn hơn."]),
 ]
