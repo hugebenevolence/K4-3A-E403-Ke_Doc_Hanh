@@ -8,7 +8,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { api } from "../api";
 import Conversation from "../Conversation";
-import { markTaught, rememberPage, taughtPages } from "../decks";
+import { rememberPage } from "../decks";
+import { useProgress } from "../progress";
 import Sidebar from "../Sidebar";
 import SourcePanel from "../SourcePanel";
 import { useSession } from "../useSession";
@@ -48,7 +49,8 @@ export default function Learn() {
   // nhau: đang giảng dở mà lật sang trang khác xem thì không được mất vùng cũ.
   const [selection, setSelection] = useState({ page: null, ids: [] });
   const [active, setActive] = useState([]);
-  const [taught, setTaught] = useState(() => taughtPages(slug));
+  // Mức hiểu từng trang, lưu trên server theo tài khoản — đổi máy vẫn còn.
+  const [progress, reloadProgress] = useProgress();
   // Những ô đang giảng mà học viên đã bấm mở ra xem; còn lại vẫn bị che.
   const [revealedIds, setRevealedIds] = useState(NONE);
   const spaceHeld = useRef(false);
@@ -159,13 +161,12 @@ export default function Learn() {
     session.start(active);
   }, [session, active, sessionPage]);
 
-  // Giảng được thì ghi lại, để thanh bên và thư viện hiện tiến độ.
-  const outcome = session.ended?.outcome;
+  // Server ghi mức hiểu sau MỖI lượt chấm; tải lại khi phiên đóng để dàn ý
+  // đổi chấm ngay — kể cả khi chưa hiểu hết, vì "đang học" cũng là tiến độ.
+  const ended = session.ended;
   useEffect(() => {
-    if (outcome !== "TAUGHT") return;
-    markTaught(slug, sessionPage);
-    setTaught(taughtPages(slug));
-  }, [outcome, slug, sessionPage]);
+    if (ended) reloadProgress();
+  }, [ended, reloadProgress]);
 
   const open = useCallback(
     (span) => {
@@ -266,7 +267,7 @@ export default function Learn() {
         pages={pages}
         page={page}
         teachingPages={teachingPages}
-        taught={taught}
+        progress={progress?.decks?.[slug]}
         onPage={setPage}
       />
       <Conversation

@@ -14,7 +14,8 @@ from pathlib import Path
 
 from app.domain.graph import Claim, KnowledgeGraph, Link
 from app.domain.log import StudentProfile, TurnLog
-from app.ports.store import GraphStore, ProfileStore, SessionLog
+from app.domain.progress import PageProgress, Progress
+from app.ports.store import GraphStore, ProfileStore, ProgressStore, SessionLog
 
 log = logging.getLogger(__name__)
 
@@ -147,4 +148,27 @@ class JsonGraphStore(_JsonMap, GraphStore):
             "claims": [asdict(c) for c in graph.claims.values()],
             "links": [asdict(l) for l in graph.links.values()],
         }
+        self._write(data)
+
+
+class JsonProgressStore(_JsonMap, ProgressStore):
+    """Tiến độ học, một bản ghi cho mỗi học viên: trang -> các buổi đã giảng."""
+
+    async def load(self, student_id: str) -> Progress:
+        raw = self._all().get(student_id) or {}
+        pages = {
+            key: PageProgress(
+                sessions=tuple(v.get("sessions", ())),
+                taught_sessions=tuple(v.get("taught_sessions", ())),
+                last_verdict=v.get("last_verdict", ""),
+                first_at=v.get("first_at", ""),
+                last_at=v.get("last_at", ""),
+            )
+            for key, v in raw.get("pages", {}).items()
+        }
+        return Progress(student_id=student_id, pages=pages)
+
+    async def save(self, progress: Progress) -> None:
+        data = self._all()
+        data[progress.student_id] = {"pages": {k: asdict(v) for k, v in progress.pages.items()}}
         self._write(data)

@@ -98,12 +98,19 @@ def find_figures(
         and any(_inside(c, s.bbox) for c in centers)
     ]
 
+    # Ảnh phủ gần kín trang là NỀN, không phải hình — cùng luật với nét vẽ ở
+    # dưới. Có bộ slide xuất mỗi trang thành đúng một ảnh (hoặc đặt ảnh nền tràn
+    # trang rồi viết chữ lên): coi nó là hình thì mọi dòng chữ trên trang thành
+    # "nhãn trong hình", và trang không còn ô chữ nào để chọn giảng. Đo trên 28
+    # bộ slide: 91 ảnh phủ ≥ 97% trang, còn ảnh lớn nhất của d1 (timeline, trang
+    # 5–9) chỉ phủ 0,66 — ngưỡng này không chạm tới nó.
     rasters = [
         s.bbox
         for s in shapes
         if s.kind == "image"
         and s.bbox[2] - s.bbox[0] >= MIN_RASTER_SIDE
         and s.bbox[3] - s.bbox[1] >= MIN_RASTER_SIDE
+        and _area(s.bbox) < BACKGROUND_RATIO * page_area
     ]
 
     strokes = [

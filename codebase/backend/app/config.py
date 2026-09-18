@@ -94,6 +94,8 @@ class Settings(BaseSettings):
     # Đồ thị tri thức của từng học viên (spec §4c). Tách khỏi hồ sơ vì nó là
     # thứ khác hẳn: hồ sơ ghi chỗ hay vấp, đồ thị ghi thứ đã dạy được.
     graph_file: Path = BACKEND_DIR / "var" / "graphs.json"
+    # Mức hiểu từng trang slide của từng học viên (domain/progress.py).
+    progress_file: Path = BACKEND_DIR / "var" / "progress.json"
 
     # CHƯA ĐƯỢC LẮP, cố ý để lại đường: checkpointer hiện là InMemorySaver tạo
     # theo từng kết nối, nên rớt mạng hay restart là mất mạch buổi đang dở. Đổi

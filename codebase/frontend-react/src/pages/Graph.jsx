@@ -12,7 +12,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { layout, ringLayout } from "../graph-layout";
@@ -21,6 +21,7 @@ import { blurIn, EASE } from "../motion";
 import { Brand, LinkButton } from "../site";
 import { Button, Kbd } from "../ui";
 import { studentId } from "../useSession";
+import WorkspaceTabs from "../WorkspaceTabs";
 
 const W = 900;
 const H = 620;
@@ -62,6 +63,12 @@ export default function GraphPage() {
   const [phien, setPhien] = useState(null); // { a, b } — phiên nối đang mở
   const [canhMoi, setCanhMoi] = useState(null);
   const daCo = useRef(null);
+  // Mở từ trang học (tab Bản đồ): trang vừa học được đánh dấu "bạn đang ở đây",
+  // và tab Slide đưa về đúng trang đó.
+  const [params] = useSearchParams();
+  const hereDeck = params.get("deck") || "";
+  const herePage = Number(params.get("page")) || 0;
+  const here = hereDeck && herePage ? `${hereDeck}:${herePage}` : null;
 
   // Tải lại sau mỗi phiên nối, và nhớ những cạnh đã có để biết cạnh nào VỪA
   // sinh ra — cạnh đó được vẽ dần ra thay vì hiện bụp một cái.
@@ -70,7 +77,9 @@ export default function GraphPage() {
       // Gửi kèm mã học viên của trình duyệt này: khi server KHÔNG bật đăng
       // nhập, phiên giảng ghi đồ thị dưới mã đó, còn API mặc định lại đọc
       // "demo" — lệch khoá là bản đồ hiện rỗng dù vừa dạy xong.
-      const d = await api(`/graph?student_id=${encodeURIComponent(studentId())}`);
+      const d = await api(
+        `/graph?student_id=${encodeURIComponent(studentId())}&deck=${encodeURIComponent(hereDeck)}`,
+      );
       const moi = daCo.current && d.links.map(khoaCanh).find((k) => !daCo.current.has(k));
       daCo.current = new Set(d.links.map(khoaCanh));
       if (moi) setCanhMoi(moi);
@@ -78,7 +87,7 @@ export default function GraphPage() {
     } catch (e) {
       setError(e.message || "Không tải được bản đồ");
     }
-  }, []);
+  }, [hereDeck]);
 
   useEffect(() => {
     tai();
@@ -90,10 +99,13 @@ export default function GraphPage() {
     // Vành tối ưu tiên trang của những bộ slide học viên ĐANG học: người mới
     // giảng vài trang Day 1 cần thấy phần còn lại của Day 1, chưa cần Day 2.
     const dangHoc = new Set(sang.map((n) => n.deck));
-    const toi = [...data.dim]
+    const tatCa = [...data.dim]
       .sort((a, b) => Number(dangHoc.has(b.deck)) - Number(dangHoc.has(a.deck)))
-      .map((d) => ({ ...d, id: d.concept, sang: false, weight: 0 }))
-      .slice(0, MAX_TOI);
+      .map((d) => ({ ...d, id: d.concept, sang: false, weight: 0 }));
+    const toi = tatCa.slice(0, MAX_TOI);
+    // Trang đang học mà còn tối thì luôn có mặt trên vành, dù không lọt top 16.
+    const dayDo = tatCa.find((n) => n.id === here);
+    if (dayDo && !toi.includes(dayDo)) toi[toi.length - 1] = dayDo;
 
     // Hai phép xếp khác nhau cho hai loại đỉnh, cố ý: cụm sáng thả lò xo để
     // những trang bạn đã nối nằm cạnh nhau, còn vùng tối xếp thành vành ngoài
@@ -107,7 +119,7 @@ export default function GraphPage() {
 
     const all = [...sang, ...toi];
     return { nodes: all, byId: new Map(all.map((n) => [n.id, n])), pos, links: data.links };
-  }, [data]);
+  }, [data, here]);
 
   const soSang = nodes.filter((n) => n.sang).length;
   const nodeChon = chon?.kind === "node" ? byId.get(chon.id) : null;
@@ -171,7 +183,7 @@ export default function GraphPage() {
       <header className="sticky top-0 z-40 border-b border-neutral-200 bg-white/85 backdrop-blur-md">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6">
           <Brand />
-          <span className="ml-1 hidden text-[13px] text-neutral-400 sm:inline">Bản đồ hiểu biết</span>
+          <WorkspaceTabs active="graph" deck={hereDeck || undefined} page={herePage || undefined} className="ml-2" />
           <div className="ml-auto flex items-center gap-1">
             <LinkButton to="/library" variant="quiet">
               Thư viện
@@ -367,6 +379,22 @@ export default function GraphPage() {
                       }}
                     >
                       <title>{n.title}</title>
+                      {n.id === here && (
+                        <g pointerEvents="none">
+                          <circle r={r + 12} fill="none" stroke="#171717" strokeWidth="1" strokeDasharray="2 3" />
+                          <text
+                            y={-(r + 18)}
+                            textAnchor="middle"
+                            stroke="#fff"
+                            strokeWidth="4"
+                            strokeLinejoin="round"
+                            paintOrder="stroke"
+                            className="fill-neutral-900 text-[11px] font-semibold"
+                          >
+                            Bạn đang ở đây
+                          </text>
+                        </g>
+                      )}
                       {/* Vòng hít thở ở đỉnh gốc trong lúc chọn đích để nối. */}
                       {laGoc && (
                         <motion.circle

@@ -9,7 +9,10 @@ import asyncio
 import json
 import logging
 import mimetypes
+import threading
 import uuid
+from contextlib import asynccontextmanager
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
@@ -33,7 +36,12 @@ from app.adapters.knowledge.local import InMemorySpanStore, load_lesson
 from app.adapters.knowledge.pdf import Deck, attach_descriptions, deck_slug, load_deck
 from app.adapters.knowledge.selection import lesson_from_selection
 from app.adapters.llm.mock import MockLLM
-from app.adapters.store.jsonl import JsonGraphStore, JsonlSessionLog, JsonProfileStore
+from app.adapters.store.jsonl import (
+    JsonGraphStore,
+    JsonlSessionLog,
+    JsonProfileStore,
+    JsonProgressStore,
+)
 from app.adapters.stt.mock import MockSTT
 from app.adapters.tts.mock import MockTTS
 from app.api.auth import (
@@ -51,6 +59,7 @@ from app.config import settings
 from app.domain.graph import LINK_LABEL, PageRef, page_key, short_label, split_key
 from app.domain.lesson import Lesson
 from app.domain.log import TurnLog
+from app.domain.progress import LEVELS
 from app.domain.sanitize import sanitize_spoken, tame_shouting
 from app.domain.session import TurnState
 from app.domain.substance import MIN_SOURCE_WORDS, teachable_words
@@ -80,7 +89,16 @@ logging.basicConfig(
 
 log = logging.getLogger(__name__)
 
-app = FastAPI(title="Ke Doc Hanh — Track D3 teach-back")
+@asynccontextmanager
+async def _lifespan(_app: FastAPI):
+    # Thread riêng để server nhận kết nối ngay. DAEMON: thread của executor mặc
+    # định giữ tiến trình lại tới khi đọc xong 28 file PDF — đo được, bộ test
+    # (mỗi TestClient khởi động app một lần) từ 6 giây thành 38 giây.
+    threading.Thread(target=_warm_decks, name="warm-decks", daemon=True).start()
+    yield
+
+
+app = FastAPI(title="Ke Doc Hanh — Track D3 teach-back", lifespan=_lifespan)
 
 # Frontend chạy ở cổng khác (http.server 5500) nên fetch /lesson là cross-origin.
 # WebSocket không cần CORS nhưng fetch thì có. Chỉ mở cho localhost — đây là
@@ -221,7 +239,14 @@ def _find_deck(slug: str | None) -> Deck | None:
     return _deck(str(path), path.stat().st_mtime) if path else None
 
 
-@lru_cache(maxsize=8)
+DECK_CACHE = 64
+"""Số bộ slide giữ trong bộ nhớ. Phải lớn hơn số bộ đang cấu hình: thư viện và
+bản đồ duyệt QUA MỌI BỘ mỗi lần tải, nên cache nhỏ hơn số bộ là mỗi lần tải lại
+đọc lại PDF từ đầu. Đo 18/9: 28 bộ, đọc hết mất ~40 giây — với cache 8 cũ thì
+lần nào mở thư viện cũng chờ chừng đó."""
+
+
+@lru_cache(maxsize=DECK_CACHE)
 def _deck(path: str, mtime: float) -> Deck:
     # Đọc cả bộ slide mất vài giây; cache theo thời điểm sửa file để thay slide
     # là tự đọc lại, không phải khởi động lại server.
@@ -373,6 +398,35 @@ async def lesson_info(member: str = Depends(require_member)):
     }
 
 
+def _teachable_pages(slug: str) -> list[tuple[int, str]]:
+    """Các trang của một bộ slide mà học viên CÓ THỂ giảng: (số trang, tiêu đề).
+
+    Cùng luật với lúc mở phiên (`teachable_words`), cộng thêm bỏ tiêu đề lặp ở
+    nhiều trang ("AI IN ACTION - Day 1" ở cả bìa lẫn trang sau là tên của bộ,
+    không phải của trang). Bản đồ và tiến độ dùng CHUNG danh sách này, để "12/40
+    trang đã hiểu" và vành tối trên bản đồ đếm cùng một mẫu số.
+    """
+    path = _deck_paths().get(slug)
+    return list(_teachable_cached(str(path), path.stat().st_mtime)) if path else []
+
+
+@lru_cache(maxsize=DECK_CACHE)
+def _teachable_cached(path: str, mtime: float) -> tuple[tuple[int, str], ...]:
+    deck = _deck(path, mtime)
+    theo_trang: dict[int, list] = {}
+    for s in deck.spans:
+        if s.page:
+            theo_trang.setdefault(s.page, []).append(s)
+    tieu_de = list(deck.titles.values())
+    lap = {t for t in tieu_de if tieu_de.count(t) > 1}
+    return tuple(
+        (page, deck.titles.get(page) or "")
+        for page in sorted(theo_trang)
+        if (deck.titles.get(page) or "") not in lap
+        and teachable_words(theo_trang[page], deck.titles.get(page) or "") >= MIN_SOURCE_WORDS
+    )
+
+
 def _deck_or_404(slug: str) -> Deck:
     deck = _find_deck(slug)
     if deck is None:
@@ -382,7 +436,7 @@ def _deck_or_404(slug: str) -> Deck:
 
 @api.get("/graph")
 async def knowledge_graph(
-    student_id: str = "demo", member: str = Depends(require_member)
+    student_id: str = "demo", deck: str = "", member: str = Depends(require_member)
 ):
     """Đồ thị tri thức của học viên đang đăng nhập (spec §4c).
 
@@ -413,27 +467,26 @@ async def knowledge_graph(
     # không có gì để giảng thì cũng không được hiện ra như một chỗ "còn tối".
     # Bản đầu lấy vành tối từ danh sách thuật ngữ mớm cho nhận dạng giọng nói,
     # nên bản đồ bảo học viên còn tối ở "arxiv" và "kimi".
+    # Chỉ các bộ học viên ĐANG học (có trang sáng hoặc đã thử giảng): với 28
+    # bộ slide, gửi hết là cả nghìn trang tối trong khi bản đồ chỉ vẽ 16.
+    progress = await JsonProgressStore(settings.progress_file).load(who)
+    dang_hoc = {split_key(k)[0] for k in [*graph.claims, *progress.pages]}
+    # Mở bản đồ từ một trang đang học: bộ đó luôn có mặt, để đánh dấu được
+    # "bạn đang ở đây" kể cả khi chưa giảng được trang nào của bộ.
+    if deck in _deck_paths():
+        dang_hoc.add(deck)
     dim = []
     for slug in _deck_paths():
-        deck = _find_deck(slug)
-        if deck is None:
+        if dang_hoc and slug not in dang_hoc:
             continue
-        # Tiêu đề lặp ở nhiều trang ("AI IN ACTION - Day 1" ở cả bìa lẫn trang
-        # sau) là tên của cả bộ slide, không phải của một trang để giảng.
-        lap = {t for t in deck.titles.values() if list(deck.titles.values()).count(t) > 1}
-        for page in sorted({s.page for s in deck.spans if s.page}):
+        for page, title in _teachable_pages(slug):
             key = page_key(slug, page)
-            if key in graph.claims:
-                continue
-            title = deck.titles.get(page) or ""
-            if title in lap:
-                continue
-            on_page = [s for s in deck.spans if s.page == page]
-            if teachable_words(on_page, title) < MIN_SOURCE_WORDS:
-                continue
-            dim.append(
-                {"concept": key, "title": title, "label": short_label(title), "deck": slug, "page": page}
-            )
+            if key not in graph.claims:
+                dim.append(
+                    {"concept": key, "title": title, "label": short_label(title), "deck": slug, "page": page}
+                )
+        if not dang_hoc:
+            break  # chưa học gì: một bộ là đủ để bản đồ có vành ngoài
 
     return {
         "student_id": who,
@@ -450,6 +503,47 @@ async def knowledge_graph(
         ],
         "dim": dim,
     }
+
+
+@api.get("/progress")
+async def progress_api(student_id: str = "demo", member: str = Depends(require_member)):
+    """Mức hiểu từng trang của học viên đang đăng nhập, gom theo bộ slide.
+
+    Mẫu số là số trang GIẢNG ĐƯỢC của bộ (`_teachable_pages`), không phải tổng
+    số trang: trang bìa và trang agenda không có gì để hiểu.
+    """
+    who = member if _members() else student_id
+    progress = await JsonProgressStore(settings.progress_file).load(who)
+    decks: dict[str, dict] = {}
+    recent = []
+    for key, pp in progress.pages.items():
+        slug, page = split_key(key)
+        if slug not in _deck_paths():
+            continue
+        entry = decks.setdefault(slug, {"pages": {}})
+        entry["pages"][page] = {
+            "level": pp.level,
+            "attempts": len(pp.sessions),
+            "taught": len(pp.taught_sessions),
+            "last_at": pp.last_at,
+        }
+        titles = dict(_teachable_pages(slug))
+        recent.append(
+            {"deck": slug, "page": page, "title": titles.get(page, f"Trang {page}"), "level": pp.level, "at": pp.last_at}
+        )
+    summary = dict.fromkeys(LEVELS, 0)
+    for slug, entry in decks.items():
+        tong = len(_teachable_pages(slug))
+        levels = dict.fromkeys(LEVELS, 0)
+        for v in entry["pages"].values():
+            levels[v["level"]] += 1
+        levels["moi"] = max(0, tong - sum(levels.values()))
+        entry |= {"teachable": tong, "levels": levels}
+        for k, n in levels.items():
+            if k != "moi":
+                summary[k] += n
+    recent.sort(key=lambda r: r["at"], reverse=True)
+    return {"student_id": who, "summary": summary, "decks": decks, "recent": recent[:8]}
 
 
 @api.get("/decks")
@@ -576,6 +670,8 @@ async def teach_back_session(ws: WebSocket):
     # KHÔNG đặt tên `graph`: biến đó đã là LangGraph đã compile ở ngay trên,
     # và đè lên nó thì mọi lượt chấm chết với 'KnowledgeGraph has no astream'.
     knowledge = await graphs.load(student_id)
+    progress_store = JsonProgressStore(settings.progress_file)
+    progress = await progress_store.load(student_id)
     page_ref = None if link else _page_ref(ws.query_params.get("deck"), lesson)
     # Phiên nối chỉ mở được giữa hai trang ĐÃ sáng: nối một trang học viên chưa
     # giảng nổi là bắt họ nối hai thứ mà học trò còn chưa biết.
@@ -832,6 +928,16 @@ async def teach_back_session(ws: WebSocket):
                                 verdict=verdict,
                                 session_id=session_id,
                             )
+                            if page_ref is not None and verdict:
+                                # Ghi theo LƯỢT, như đồ thị: học viên đóng tab
+                                # giữa buổi vẫn giữ được lần thử vừa rồi.
+                                progress.record(
+                                    page_ref.key,
+                                    session_id,
+                                    verdict,
+                                    datetime.now().astimezone().isoformat(timespec="seconds"),
+                                )
+                                await progress_store.save(progress)
                         await graphs.save(knowledge)
                         turn_index += 1
                     else:
@@ -976,3 +1082,18 @@ def mount_frontend(target_app: FastAPI, dist: Path) -> None:
 
 app.include_router(api)
 mount_frontend(app, settings.frontend_dist)
+
+
+def _warm_decks() -> None:
+    """Đọc sẵn mọi bộ slide (chạy ở thread nền lúc server lên, xem `_lifespan`).
+
+    Không đọc sẵn thì người đầu tiên mở thư viện chờ ~40 giây trong lúc server
+    đọc 28 file PDF.
+    """
+    for slug in _deck_paths():
+        try:
+            _find_deck(slug)
+            _teachable_pages(slug)
+        except Exception:
+            log.exception("Không đọc được bộ slide %s", slug)
+    log.info("Đã nạp sẵn %d bộ slide", len(_deck_paths()))
