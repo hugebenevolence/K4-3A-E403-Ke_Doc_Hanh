@@ -27,9 +27,10 @@ COPY knowledge/ /app/knowledge/
 COPY slides/ /app/slides/
 COPY --from=web /web/dist /app/codebase/frontend-react/dist
 
-# Tiến độ, bản đồ tri thức, hồ sơ và log phiên ghi vào đây. Gắn volume của nền
-# tảng vào đúng đường này, không thì mỗi lần deploy lại là mất sạch dữ liệu học.
-VOLUME ["/app/codebase/backend/var"]
+# Tiến độ, bản đồ tri thức, hồ sơ và log phiên ghi vào var/. Gắn volume của nền
+# tảng vào đó (hoặc trỏ các biến *_FILE vào volume), không thì mỗi lần deploy lại
+# là mất sạch dữ liệu học. KHÔNG khai bằng lệnh VOLUME ở đây: Railway từ chối
+# build cả Dockerfile ("docker VOLUME is not supported, use Railway Volumes").
 
 EXPOSE 8000
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
