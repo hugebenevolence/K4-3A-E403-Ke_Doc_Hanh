@@ -83,9 +83,22 @@ cd deploy
 npx @railway/cli link                                        # chọn project + service
 npx @railway/cli up
 npx @railway/cli volume add --mount-path /data
-npx @railway/cli volume files upload ../knowledge /data/knowledge
-npx @railway/cli volume files upload ../brief/data/course-slides /data/slides
+npx @railway/cli ssh keys add --key C:\Users\<bạn>\.ssh\id_ed25519_work.pub
+npx @railway/cli volume files --volume v-kdh-volume upload ../knowledge /data/knowledge
+npx @railway/cli volume files --volume v-kdh-volume upload ../brief/data/course-slides /data/slides --concurrency 8
+npx @railway/cli restart
 ```
+
+Ba chỗ đã vấp thật khi chạy:
+
+- **Đọc/ghi volume đi qua SSH**, nên tài khoản Railway phải có SSH key đăng ký
+  trước, không thì mọi lệnh `volume files` báo `SSH authentication failed` — kể
+  cả lệnh upload, và server lên với 0 bộ slide. `--key` phải là đường dẫn kiểu
+  Windows; dạng `~/.ssh/...` hay `C:/Users/...` đều báo "Key not found".
+- **`--volume` đứng trước lệnh con** (`volume files --volume X upload`), đặt sau
+  `upload` là CLI không nhận.
+- **Chạy trong Git Bash thì thêm `MSYS_NO_PATHCONV=1`**: Git Bash tự đổi `/data`
+  thành `C:/Program Files/Git/data` trước khi đưa cho CLI. PowerShell không bị.
 
 Rồi trỏ cấu hình vào volume (không phải khoá, đặt thẳng trên dòng lệnh được):
 
