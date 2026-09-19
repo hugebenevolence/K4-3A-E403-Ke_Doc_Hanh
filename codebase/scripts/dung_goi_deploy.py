@@ -55,9 +55,15 @@ def chep_cay(nguon: Path, dich: Path) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--ra", type=Path, default=GOC / "deploy")
+    ap.add_argument(
+        "--khong-du-lieu",
+        action="store_true",
+        help="gói chỉ có code (~10 MB); slide và knowledge/ đưa vào volume bằng "
+        "`railway volume files upload`. Dùng khi đẩy cả 179 MB bị timeout.",
+    )
     args = ap.parse_args()
 
-    if not SLIDE.is_dir():
+    if not args.khong_du_lieu and not SLIDE.is_dir():
         print(f"Không thấy slide ở {SLIDE} — cần data pack của khoá.")
         return 1
 
@@ -67,11 +73,18 @@ def main() -> int:
     (ra / "slides").mkdir(parents=True)
 
     n_code = chep_cay(GOC / "codebase", ra / "codebase")
-    n_kho = chep_cay(GOC / "knowledge", ra / "knowledge")
-    n_slide = 0
-    for pdf in sorted(SLIDE.glob("*.pdf")):
-        shutil.copy2(pdf, ra / "slides" / pdf.name)
-        n_slide += 1
+    n_kho = n_slide = 0
+    if args.khong_du_lieu:
+        # Dockerfile vẫn COPY hai thư mục này, nên để rỗng chứ không bỏ hẳn —
+        # một Dockerfile cho cả hai kiểu gói, không có nhánh nào để lệch nhau.
+        (ra / "knowledge").mkdir()
+        (ra / "knowledge" / ".keep").touch()
+        (ra / "slides" / ".keep").touch()
+    else:
+        n_kho = chep_cay(GOC / "knowledge", ra / "knowledge")
+        for pdf in sorted(SLIDE.glob("*.pdf")):
+            shutil.copy2(pdf, ra / "slides" / pdf.name)
+            n_slide += 1
 
     shutil.copy2(Path(__file__).with_name("Dockerfile.deploy"), ra / "Dockerfile")
     (ra / ".dockerignore").write_text(
@@ -83,10 +96,18 @@ def main() -> int:
     print(f"  code {n_code} file · knowledge {n_kho} file · slide {n_slide} bộ · tổng {mb:.0f} MB")
     print("\nTiếp theo:")
     print("  cd", ra)
-    print("  npx @railway/cli login")
-    print("  npx @railway/cli init      # đặt tên project")
-    print("  npx @railway/cli up        # đẩy lên, Railway tự build Dockerfile")
-    print("\nRồi đặt biến môi trường trên Railway (xem codebase/README.md).")
+    if args.khong_du_lieu:
+        print("  npx @railway/cli link                 # chọn project và service")
+        print("  npx @railway/cli up                   # chỉ vài MB")
+        print("  npx @railway/cli volume add --mount-path /data")
+        print(f"  npx @railway/cli volume files upload {GOC / 'knowledge'} /data/knowledge")
+        print(f"  npx @railway/cli volume files upload {SLIDE} /data/slides")
+        print("\nRồi trỏ cấu hình vào volume (README có sẵn danh sách biến).")
+    else:
+        print("  npx @railway/cli login")
+        print("  npx @railway/cli init      # đặt tên project")
+        print("  npx @railway/cli up        # đẩy lên, Railway tự build Dockerfile")
+        print("\nRồi đặt biến môi trường trên Railway (xem codebase/README.md).")
     return 0
 
 

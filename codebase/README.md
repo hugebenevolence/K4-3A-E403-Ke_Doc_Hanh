@@ -73,6 +73,37 @@ loại `.env` ra — khoá API đặt bằng biến môi trường trên Railway
 học viên và log phiên nằm ở đó; không gắn thì mỗi lần deploy lại là mọi người
 mất sạch những gì đã giảng được.
 
+**Nếu đẩy 179 MB bị timeout** (đo được thật: upload chết giữa chừng, `operation
+timed out`), đổi sang gói chỉ-code và đưa dữ liệu vào volume. Cách này còn tiện
+hơn: đổi mô tả hình hay thêm bộ slide không phải build lại image.
+
+```bash
+python codebase/scripts/dung_goi_deploy.py --khong-du-lieu   # gói còn ~1 MB
+cd deploy
+npx @railway/cli link                                        # chọn project + service
+npx @railway/cli up
+npx @railway/cli volume add --mount-path /data
+npx @railway/cli volume files upload ../knowledge /data/knowledge
+npx @railway/cli volume files upload ../brief/data/course-slides /data/slides
+```
+
+Rồi trỏ cấu hình vào volume (không phải khoá, đặt thẳng trên dòng lệnh được):
+
+```bash
+npx @railway/cli variables set \
+  SLIDES_DIR=/data/slides \
+  FIGURES_FILE=/data/knowledge/figures.json \
+  DECKS_FILE=/data/knowledge/decks.json \
+  LESSON_FILE=/data/knowledge/lesson.json \
+  SESSION_LOG_FILE=/data/var/sessions.jsonl \
+  PROFILE_FILE=/data/var/profiles.json \
+  GRAPH_FILE=/data/var/graphs.json \
+  PROGRESS_FILE=/data/var/progress.json
+```
+
+Mọi đường dẫn trong `config.py` đều đọc được từ biến môi trường, nên không cần
+sửa code. Thư mục `/data/var` tự tạo ở lần ghi đầu.
+
 Vẫn phải đăng nhập mới xem được slide, nên đặt `MEMBERS` trước khi gửi link.
 
 **Docker — máy chủ của nhóm.** Image không chứa slide; mount lúc chạy, và đừng
