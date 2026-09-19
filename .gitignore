@@ -5,6 +5,10 @@
 # BTC data pack — never commit (phòng khi ai đó copy data/ ra ngoài brief/)
 /data/
 
+# Gói đẩy lên host, dựng bằng codebase/scripts/dung_goi_deploy.py — mang theo
+# cả 28 bộ slide của khoá, nên tuyệt đối không commit
+/deploy/
+
 # Nguồn grounding nạp về máy từ data pack — chỉ commit README hướng dẫn
 /knowledge/*
 !/knowledge/README.md
