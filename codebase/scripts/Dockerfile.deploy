@@ -1,0 +1,35 @@
+# Image có sẵn slide và mô tả hình, dùng cho host build từ thư mục đẩy lên
+# (Railway `up`, Fly `deploy`). Dựng gói bằng codebase/scripts/dung_goi_deploy.py.
+#
+# Khác codebase/Dockerfile ở đúng một chỗ: bản kia cố ý KHÔNG chứa dữ liệu khoá
+# học và đòi mount lúc chạy, hợp khi máy chủ có ổ đĩa gắn được. Host kiểu
+# Railway thì không mount được từ máy mình, nên dữ liệu phải nằm trong image.
+
+FROM node:22-alpine AS web
+WORKDIR /web
+COPY codebase/frontend-react/package.json codebase/frontend-react/package-lock.json ./
+RUN npm ci
+COPY codebase/frontend-react/ ./
+RUN npm run build
+
+FROM python:3.14-slim
+# Giữ đúng cây thư mục của repo: config.py tính knowledge/ và bản build giao
+# diện theo vị trí tương đối từ backend/ (REPO_ROOT = /app).
+WORKDIR /app/codebase/backend
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONIOENCODING=utf-8 \
+    SLIDES_DIR=/app/slides \
+    USE_MOCKS=false
+COPY codebase/backend/requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+COPY codebase/backend/ ./
+COPY knowledge/ /app/knowledge/
+COPY slides/ /app/slides/
+COPY --from=web /web/dist /app/codebase/frontend-react/dist
+
+# Tiến độ, bản đồ tri thức, hồ sơ và log phiên ghi vào đây. Gắn volume của nền
+# tảng vào đúng đường này, không thì mỗi lần deploy lại là mất sạch dữ liệu học.
+VOLUME ["/app/codebase/backend/var"]
+
+EXPOSE 8000
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
