@@ -47,6 +47,34 @@ Cần biết trước khi gửi link:
 - Speechmatics giới hạn số phiên nhận dạng giọng nói **đồng thời** — nhiều người cùng nói một lúc sẽ gặp lỗi "Concurrent Quota Exceeded". Hẹn nhau thử lệch giờ, hoặc bật chế độ im lặng và gõ chữ.
 - Tên hiển thị của từng bộ slide: `knowledge/decks.json` (gitignore), dạng `{"d1-slide-hackathon": {"title": "...", "subtitle": "..."}}`.
 
+**Railway — chạy liên tục, không cần máy ai bật.** Railway build từ THƯ MỤC được
+đẩy lên chứ không phải từ repo, nên slide và mô tả hình đi kèm gói mà không phải
+commit chúng vào git. Máy không cần cài Docker: Railway tự build.
+
+```bash
+python codebase/scripts/dung_goi_deploy.py      # dựng deploy/ (~179 MB: code + knowledge + 28 bộ slide)
+cd deploy
+npx @railway/cli login
+npx @railway/cli init
+npx @railway/cli up
+```
+
+Gói CHỈ mang slide, không mang chatlog hay các pack khác trong `brief/data`, và
+loại `.env` ra — khoá API đặt bằng biến môi trường trên Railway:
+
+| Biến | Giá trị |
+|---|---|
+| `OPENAI_API_KEY`, `SPEECHMATICS_API_KEY` | khoá thật |
+| `MEMBERS` | `an:matkhau-an,binh:matkhau-binh` |
+| `AUTH_SECRET` | chuỗi ngẫu nhiên (lệnh tạo có trong `.env.example`) |
+| `USE_MOCKS`, `SLIDES_DIR` | đã đặt sẵn trong image, không cần khai lại |
+
+**Gắn volume vào `/app/codebase/backend/var`.** Tiến độ, bản đồ tri thức, hồ sơ
+học viên và log phiên nằm ở đó; không gắn thì mỗi lần deploy lại là mọi người
+mất sạch những gì đã giảng được.
+
+Vẫn phải đăng nhập mới xem được slide, nên đặt `MEMBERS` trước khi gửi link.
+
 **Docker — máy chủ của nhóm.** Image không chứa slide; mount lúc chạy, và đừng
 push image kèm dữ liệu lên registry công khai.
 
